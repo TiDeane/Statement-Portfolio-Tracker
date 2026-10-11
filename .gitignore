@@ -1,0 +1,33 @@
+# Real statements: never commit. Only samples/revolut_sample.csv is tracked.
+data/
+
+# Generated spreadsheets (anywhere in the repo) and Excel lock files
+*.xlsx
+*.xlsm
+~$*
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build outputs
+build/
+dist/
+packaging/Output/
+*.spec.bak
+*.dmg
+*.AppImage
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

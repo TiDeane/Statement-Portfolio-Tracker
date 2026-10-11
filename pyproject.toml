@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "statement-tracker"
+dynamic = ["version"]
+description = "Unofficial portfolio tracker for Revolut stock/ETF statement exports."
+requires-python = ">=3.12"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+dependencies = [
+    # GUI. Essentials only: the Addons wheel (WebEngine, 3D, ...) is not needed.
+    "PySide6-Essentials>=6.8,<7",
+    # Default price provider. Brings pandas and numpy with it; our code does not import them.
+    "yfinance>=1.0,<2",
+    # Excel export (Phase 2); imported by the Phase 0 spike to prove it packages.
+    "openpyxl>=3.1,<4",
+    # Finds the per-user settings folder on each operating system.
+    "platformdirs>=4,<5",
+    # Time zone database for mapping trade times to exchange dates; Windows has none built in.
+    "tzdata; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+build = ["pyinstaller>=6.15,<7"]
+
+[project.scripts]
+statement-tracker-cli = "statement_tracker.cli:main"
+
+[project.gui-scripts]
+statement-tracker = "statement_tracker.__main__:main"
+
+[tool.hatch.version]
+path = "src/statement_tracker/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/statement_tracker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

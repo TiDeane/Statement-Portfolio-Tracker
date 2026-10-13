@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QWidget
 
 
@@ -146,6 +147,55 @@ def stylesheet(colours: Palette) -> str:
     }}
     QLineEdit:focus {{ border-color: {c.accent}; }}
     QRadioButton {{ spacing: 8px; padding: 3px 0; }}
+
+    /* The rest styles Qt's own file chooser, which Linux shows when the desktop offers none. */
+    QTreeView, QListView {{
+        background: {c.card};
+        alternate-background-color: {c.background};
+        border: 1px solid {c.border};
+        border-radius: 6px;
+        selection-background-color: {c.table_header};
+        selection-color: {c.text};
+        outline: 0;
+    }}
+    QTreeView::item, QListView::item {{ padding: 4px 2px; }}
+    QTreeView::item:hover, QListView::item:hover {{ background: {c.table_header}; }}
+    QTreeView::item:selected, QListView::item:selected {{ background: {c.table_header}; color: {c.text}; }}
+    QComboBox {{
+        background: {c.card};
+        border: 1px solid {c.border};
+        border-radius: 6px;
+        padding: 5px 8px;
+    }}
+    QComboBox:focus {{ border-color: {c.accent}; }}
+    QComboBox::drop-down {{ border: none; width: 24px; }}
+    QComboBox QAbstractItemView {{
+        background: {c.card};
+        border: 1px solid {c.border};
+        selection-background-color: {c.table_header};
+        selection-color: {c.text};
+    }}
+    QToolButton {{
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        padding: 4px;
+    }}
+    QToolButton:hover {{ border-color: {c.accent}; }}
+    QToolButton:checked, QToolButton:pressed {{ background: {c.table_header}; }}
+    QSplitter::handle {{ background: transparent; }}
+    QMenu {{ background: {c.card}; border: 1px solid {c.border}; padding: 4px; }}
+    QMenu::item {{ padding: 5px 18px; border-radius: 4px; }}
+    QMenu::item:selected {{ background: {c.table_header}; color: {c.text}; }}
+
+    QScrollBar:vertical {{ background: transparent; width: 12px; margin: 2px; }}
+    QScrollBar:horizontal {{ background: transparent; height: 12px; margin: 2px; }}
+    QScrollBar::handle {{ background: {c.border}; border-radius: 4px; }}
+    QScrollBar::handle:vertical {{ min-height: 28px; }}
+    QScrollBar::handle:horizontal {{ min-width: 28px; }}
+    QScrollBar::handle:hover {{ background: {c.muted}; }}
+    QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
+    QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
     QToolTip {{ background: {c.card}; color: {c.text}; border: 1px solid {c.border}; padding: 4px; }}
     """
 
@@ -156,8 +206,35 @@ def apply(app: QApplication, dark: bool | None = None) -> Palette:
     if dark is None:
         dark = app.styleHints().colorScheme() == Qt.ColorScheme.Dark
     _current = DARK if dark else LIGHT
+    app.setPalette(_palette(_current))
     app.setStyleSheet(stylesheet(_current))
     return _current
+
+
+def _palette(colours: Palette) -> QPalette:
+    """The same colours as a Qt palette, for the parts a stylesheet does not reach (icons, arrows)."""
+    c = colours
+    palette = QPalette()
+    roles = {
+        QPalette.ColorRole.Window: c.background,
+        QPalette.ColorRole.WindowText: c.text,
+        QPalette.ColorRole.Base: c.card,
+        QPalette.ColorRole.AlternateBase: c.background,
+        QPalette.ColorRole.Text: c.text,
+        QPalette.ColorRole.Button: c.card,
+        QPalette.ColorRole.ButtonText: c.text,
+        QPalette.ColorRole.ToolTipBase: c.card,
+        QPalette.ColorRole.ToolTipText: c.text,
+        QPalette.ColorRole.PlaceholderText: c.muted,
+        QPalette.ColorRole.Highlight: c.accent,
+        QPalette.ColorRole.HighlightedText: c.on_accent,
+        QPalette.ColorRole.Link: c.accent,
+    }
+    for role, colour in roles.items():
+        palette.setColor(role, QColor(colour))
+    for role in (QPalette.ColorRole.Text, QPalette.ColorRole.ButtonText, QPalette.ColorRole.WindowText):
+        palette.setColor(QPalette.ColorGroup.Disabled, role, QColor(c.muted))
+    return palette
 
 
 def follow_system(app: QApplication) -> None:

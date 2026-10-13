@@ -48,19 +48,34 @@ WHERE_IS_THE_FILE_TEXT = (
 )
 
 
-def show_error(parent: QWidget | None, error: UserFacingError) -> None:
-    """Explain a problem in plain language, with the technical details one click away."""
+def show_error(parent: QWidget | None, error: UserFacingError, can_retry: bool = False) -> bool:
+    """Explain a problem in plain language, with the technical details one click away.
+
+    With ``can_retry`` the box also offers "Try again"; returns True if the user chose it.
+    """
     box = QMessageBox(parent)
     box.setIcon(QMessageBox.Icon.Warning)
     box.setWindowTitle(APP_NAME)
     box.setText(error.what_happened)
     box.setInformativeText(error.what_to_do)
+    retry = None
+    if can_retry:
+        retry = box.addButton("Try again", QMessageBox.ButtonRole.AcceptRole)
+        retry.setObjectName("primary")  # the coloured main action, styled in ui/theme.py
+        retry.style().unpolish(retry)
+        retry.style().polish(retry)
+        box.setDefaultButton(retry)
     copy = box.addButton("Copy details", QMessageBox.ButtonRole.ActionRole)
-    box.addButton(QMessageBox.StandardButton.Ok)
-    box.exec()
-    if box.clickedButton() is copy:
+    box.addButton("Not now" if can_retry else "OK", QMessageBox.ButtonRole.RejectRole)
+    while True:
+        box.exec()
+        if box.clickedButton() is not copy:
+            break
         details = f"{APP_NAME} {__version__}\n{error.what_happened}\n{error.what_to_do}\n\n{error.details}"
         QGuiApplication.clipboard().setText(details)
+        if not can_retry:
+            break  # copying is the last thing to do here; with "Try again" on offer, ask again
+    return retry is not None and box.clickedButton() is retry
 
 
 def show_text(parent: QWidget | None, title: str, text: str) -> None:

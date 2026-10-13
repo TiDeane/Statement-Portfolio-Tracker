@@ -41,6 +41,7 @@ def make_window(tmp_path: Path, provider: FakeProvider) -> tuple[MainWindow, lis
     window = MainWindow(Settings.load(tmp_path / "settings.json"), lambda: provider, lambda: TODAY)
     errors: list[UserFacingError] = []
     window.show_error = errors.append
+    window.ask_retry = lambda error: bool(errors.append(error))  # record it and answer "not now"
     return window, errors
 
 
@@ -287,6 +288,42 @@ def test_help_page_gives_the_revolut_steps_and_asks_for_the_whole_history() -> N
         assert step in WHERE_IS_THE_FILE_TEXT
     assert "whole history" in WHERE_IS_THE_FILE_TEXT
     assert "PLACEHOLDER" not in WHERE_IS_THE_FILE_TEXT
+
+
+def test_try_again_saves_the_spreadsheet_without_fetching_prices_again(
+    app, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    provider = provider_with("EQQB.DE")
+    window, _ = make_window(tmp_path, provider)
+    window.set_statement(SAMPLE)
+    run(app, window)  # settles the ticker choice
+    spreadsheet = tmp_path / "mine.xlsx"
+    window.set_spreadsheet(spreadsheet)
+
+    real_replace, attempts, asked = os.replace, [], []
+
+    def locked_twice(source, target) -> None:
+        attempts.append(target)
+        if len(attempts) <= 2:
+            raise PermissionError(13, "being used by another process")
+        real_replace(source, target)
+
+    def try_again(error: UserFacingError) -> bool:
+        asked.append(error.what_happened)
+        return True
+
+    monkeypatch.setattr("os.replace", locked_twice)
+    window.ask_retry = try_again
+    provider.calls.clear()
+    run(app, window)
+
+    assert len(asked) == 2 and all("open in another program" in text for text in asked)
+    assert provider.calls == [("quote", "EQQB.DE")]  # prices fetched once, not once per attempt
+    assert spreadsheet.exists()
+    assert "Your spreadsheet was created" in window.status_label.text()
+    assert window.status_label.property("state") == "ok"
 
 
 def test_progress_bar_counts_each_investment_and_the_spreadsheet(app, tmp_path: Path) -> None:

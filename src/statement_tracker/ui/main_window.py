@@ -104,6 +104,9 @@ class MainWindow(QMainWindow):
         self._locale = QLocale()
         self.ask_listing: Callable[[Resolution], str | None] = lambda resolution: dialogs.ask_listing(self, resolution)
         self.show_error: Callable[[UserFacingError], object] = lambda error: dialogs.show_error(self, error)
+        self.ask_retry: Callable[[UserFacingError], bool] = lambda error: dialogs.show_error(
+            self, error, can_retry=True
+        )
         self._last_run: tuple[Path | None, date] = (None, today())
         self.progressed.connect(self._show_progress)
         self._bridge = QuestionBridge(lambda resolution: self.ask_listing(resolution), self)
@@ -408,6 +411,18 @@ class MainWindow(QMainWindow):
         self._done()
         self._show_report(report)
 
+        # The spreadsheet could not be saved (usually: still open in Excel). Offer to try just
+        # that part again, as often as needed, without reading the statement or fetching prices again.
+        spreadsheet, today = self._last_run
+        while export_error is not None and spreadsheet is not None:
+            self._status("Your investments are shown below, but the spreadsheet was not updated.", "error")
+            if not self.ask_retry(export_error):
+                break
+            try:
+                exported, export_error = update_spreadsheet(report, self._settings, spreadsheet, today), None
+            except UserFacingError as error:
+                export_error = error
+
         notes = list(report.notes)
         if exported is not None:
             done = "created" if exported.created else "updated"
@@ -420,8 +435,6 @@ class MainWindow(QMainWindow):
         if not report.valuation.holdings:
             self._status("Done. The statement has no investments that you still hold.", "ok")
         self.notes_label.setText("\n".join(f"Note: {note}" for note in notes))
-        if export_error is not None:
-            self.show_error(export_error)
 
     # -- showing the result ------------------------------------------------------
 

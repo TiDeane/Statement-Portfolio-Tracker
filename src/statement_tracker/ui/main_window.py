@@ -48,7 +48,7 @@ NO_SPREADSHEET = "No spreadsheet. The results will only be shown here."
 STEP_TO_DO = ("To do: choose your statement file.", "todo")
 STEP_DONE = ("✓ Done", "ok")
 STEP_OPTIONAL = ("Optional. You can skip this step.", "optional")
-STEP_REMEMBERED = ("✓ Already done: remembered from last time. Nothing to do here.", "ok")
+STEP_REMEMBERED = ("✓ Already done: remembered from last time.", "ok")
 
 Outcome = tuple[Report, ExportResult | None, UserFacingError | None]
 

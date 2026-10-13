@@ -111,7 +111,7 @@ def test_each_step_says_whether_it_is_done_optional_or_remembered(app, tmp_path:
 
     # Next time the app starts, step 2 is already taken care of and says so.
     reopened, _ = make_window(tmp_path, provider_with("EQQB.DE"))
-    assert "remembered from last time" in reopened.spreadsheet_badge.text()
+    assert reopened.spreadsheet_badge.text() == "✓ Already done: remembered from last time."
     assert reopened.spreadsheet_badge.property("state") == "ok"
 
     reopened.set_spreadsheet(None)

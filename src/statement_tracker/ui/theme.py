@@ -147,6 +147,15 @@ def stylesheet(colours: Palette) -> str:
     }}
     QLineEdit:focus {{ border-color: {c.accent}; }}
     QRadioButton {{ spacing: 8px; padding: 3px 0; }}
+    QProgressBar {{
+        background: {c.card};
+        border: 1px solid {c.border};
+        border-radius: 8px;
+        min-height: 22px;
+        text-align: center;
+        font-weight: 600;
+    }}
+    QProgressBar::chunk {{ background: {c.accent}; border-radius: 7px; }}
 
     /* The rest styles Qt's own file chooser, which Linux shows when the desktop offers none. */
     QTreeView, QListView {{

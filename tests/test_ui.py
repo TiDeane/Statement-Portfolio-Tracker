@@ -289,6 +289,25 @@ def test_help_page_gives_the_revolut_steps_and_asks_for_the_whole_history() -> N
     assert "PLACEHOLDER" not in WHERE_IS_THE_FILE_TEXT
 
 
+def test_progress_bar_counts_each_investment_and_the_spreadsheet(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    seen: list[tuple[int, int, str]] = []
+    window.progressed.connect(lambda done, total, text: seen.append((done, total, text)))
+    window.set_statement(SAMPLE)
+    window.set_spreadsheet(tmp_path / "mine.xlsx")
+    assert window.progress_bar.isHidden()
+
+    run(app, window)
+
+    assert seen[0] == (0, 0, "Reading your statement...")  # total not known yet: a moving bar
+    # One investment plus the spreadsheet: two steps in total.
+    assert (0, 2, "Getting the current price of EQQB (1 of 1)...") in seen
+    assert seen[-1] == (1, 2, "Updating your spreadsheet...")
+    assert [done for done, total, _ in seen if total] == sorted(done for done, total, _ in seen if total)
+    assert window.progress_bar.isHidden()  # hidden again once finished
+    assert window.progress_bar.format() == "%p%"
+
+
 def test_listing_dialog_returns_the_selection_or_the_typed_symbol(app) -> None:
     from statement_tracker.core.ticker_resolver import resolve_ticker
 

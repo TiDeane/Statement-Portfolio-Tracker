@@ -23,6 +23,9 @@ from statement_tracker.settings import Settings, TickerChoice
 STALE_PRICE_AGE = timedelta(days=5)
 """A latest price older than this (longer than a holiday weekend) is pointed out to the user."""
 
+Progress = Callable[[int, int, str], None]
+"""Told how far the work is: steps done, steps in total (0 while unknown), and a short description."""
+
 Chooser = Callable[[Resolution], str | None]
 """Asks the user which listing a ticker is. Returns a Yahoo symbol, or None to leave it open."""
 
@@ -78,6 +81,7 @@ def build_report(
     symbol_overrides: Mapping[str, str] | None = None,
     ignore_unknown_types: bool = False,
     now: datetime | None = None,
+    progress: Progress | None = None,
 ) -> Report:
     """Load a statement and value its open positions at current prices.
 
@@ -85,7 +89,12 @@ def build_report(
     so explicitly), the saved settings, automatic matching, and ``chooser``.
     New choices are saved. A ticker without a symbol or a price is reported as
     unavailable with the reason; it is never estimated.
+
+    ``progress`` is called as work advances with (steps done, steps in total,
+    what is happening now). The total is 0 until the statement has been read.
     """
+    report_progress = progress or (lambda done, total, text: None)
+    report_progress(0, 0, "Reading your statement...")
     statement = load_statement(statement_path)
     portfolio = compute_portfolio(statement, ignore_unknown_types=ignore_unknown_types)
     buys = buys_by_ticker(statement)
@@ -97,8 +106,12 @@ def build_report(
     unavailable: dict[str, str] = {}
     settings_changed = False
 
-    for position in portfolio.open_positions:
+    positions = portfolio.open_positions
+    for number, position in enumerate(positions):
         ticker = position.ticker
+        report_progress(
+            number, len(positions), f"Getting the current price of {ticker} ({number + 1} of {len(positions)})..."
+        )
         saved = settings.ticker_choices.get(ticker)
         symbol: str | None = overrides.get(ticker) or (saved.symbol if saved else None)
         user_chose = ticker in overrides
@@ -141,6 +154,7 @@ def build_report(
             )
             settings_changed |= settings.remember(ticker, choice)
 
+    report_progress(len(positions), len(positions), "Adding everything up...")
     if settings_changed:
         settings.save()
     for ticker, reason in unavailable.items():

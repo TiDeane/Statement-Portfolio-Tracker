@@ -13,7 +13,7 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from PySide6.QtCore import QLocale, QStandardPaths, Qt, QThreadPool
+from PySide6.QtCore import QLocale, QStandardPaths, Qt, QThreadPool, Signal
 from PySide6.QtGui import QBrush, QCloseEvent, QColor, QDragEnterEvent, QDropEvent, QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QMainWindow,
+    QProgressBar,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -83,6 +84,9 @@ def _default_provider() -> PriceProvider:
 class MainWindow(QMainWindow):
     """Three steps and a result table."""
 
+    progressed = Signal(int, int, str)
+    """Steps done, steps in total (0 = not known yet), what is happening. Safe to emit from any thread."""
+
     def __init__(
         self,
         settings: Settings,
@@ -99,7 +103,9 @@ class MainWindow(QMainWindow):
         self._tasks: list[Task] = []
         self._locale = QLocale()
         self.ask_listing: Callable[[Resolution], str | None] = lambda resolution: dialogs.ask_listing(self, resolution)
-        self.show_error: Callable[[UserFacingError], None] = lambda error: dialogs.show_error(self, error)
+        self.show_error: Callable[[UserFacingError], object] = lambda error: dialogs.show_error(self, error)
+        self._last_run: tuple[Path | None, date] = (None, today())
+        self.progressed.connect(self._show_progress)
         self._bridge = QuestionBridge(lambda resolution: self.ask_listing(resolution), self)
 
         self.setWindowTitle(APP_NAME)
@@ -165,6 +171,10 @@ class MainWindow(QMainWindow):
         self.status_label = QLabel("")
         self.status_label.setObjectName("status")
         self.status_label.setWordWrap(True)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setFormat("%p%")
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setVisible(False)
 
         # Result
         self.table = QTableWidget(0, 5)
@@ -190,6 +200,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(statement_box)
         layout.addWidget(spreadsheet_box)
         layout.addWidget(self.go_button)
+        layout.addWidget(self.progress_bar)
         layout.addWidget(self.status_label)
         layout.addWidget(self.table, stretch=1)
         self._filler = QWidget()  # takes the table's place until there is a result, so the steps stay at the top
@@ -327,11 +338,21 @@ class MainWindow(QMainWindow):
         if self._statement is None or self._busy():
             return
         statement, spreadsheet, today = self._statement, self._spreadsheet, self._today()
+        self._last_run = (spreadsheet, today)
+        extra_steps = 1 if spreadsheet else 0  # updating the spreadsheet comes after the prices
+
+        def progress(done: int, total: int, text: str) -> None:
+            # Called on the background thread; the signal carries it to the window's thread.
+            self.progressed.emit(done, total + extra_steps if total else 0, text)
 
         def work() -> Outcome:
-            report = build_report(statement, self._provider_factory(), self._settings, chooser=self._bridge)
+            report = build_report(
+                statement, self._provider_factory(), self._settings, chooser=self._bridge, progress=progress
+            )
             if spreadsheet is None:
                 return report, None, None
+            steps = len(report.valuation.holdings)
+            self.progressed.emit(steps, steps + 1, "Updating your spreadsheet...")
             try:
                 return report, update_spreadsheet(report, self._settings, spreadsheet, today), None
             except UserFacingError as error:
@@ -341,12 +362,22 @@ class MainWindow(QMainWindow):
         task.signals.finished.connect(self._finished)
         task.signals.failed.connect(self._failed)
         self._tasks.append(task)
-        self._status("Working... reading your statement and fetching current prices.", "busy")
+        self._show_progress(0, 0, "Starting...")
         self._refresh()
         QThreadPool.globalInstance().start(task)
 
+    def _show_progress(self, done: int, total: int, text: str) -> None:
+        """Move the progress bar and say what is happening. A total of 0 means "not known yet"."""
+        if not self._busy():
+            return  # a late message from a run that has already finished
+        self.progress_bar.setRange(0, total)
+        self.progress_bar.setValue(done)
+        self.progress_bar.setVisible(True)
+        self._status(text, "busy")
+
     def _done(self) -> None:
         self._tasks.clear()
+        self.progress_bar.setVisible(False)
         self._refresh()
 
     @staticmethod

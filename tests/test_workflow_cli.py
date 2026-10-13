@@ -234,6 +234,28 @@ def test_price_in_another_currency_is_converted_and_labelled(tmp_path: Path) -> 
     assert "quoted in USD and was converted to EUR" in errors
 
 
+def test_progress_is_reported_for_each_investment(tmp_path: Path) -> None:
+    provider = FakeProvider()
+    provider.add("ABCD.DE", "EUR", price="120")
+    provider.add("WXYZ.DE", "EUR", price="100")
+    seen: list[tuple[int, int, str]] = []
+
+    build_report(
+        write_statement(tmp_path, *TWO_HOLDINGS),
+        provider,
+        Settings.load(tmp_path / "settings.json"),
+        symbol_overrides={"ABCD": "ABCD.DE", "WXYZ": "WXYZ.DE"},
+        progress=lambda done, total, text: seen.append((done, total, text)),
+    )
+
+    assert seen == [
+        (0, 0, "Reading your statement..."),
+        (0, 2, "Getting the current price of ABCD (1 of 2)..."),
+        (1, 2, "Getting the current price of WXYZ (2 of 2)..."),
+        (2, 2, "Adding everything up..."),
+    ]
+
+
 def test_old_latest_price_is_pointed_out(tmp_path: Path) -> None:
     now = datetime(2026, 10, 12, 9, 0, tzinfo=UTC)
     settings = Settings.load(tmp_path / "settings.json")

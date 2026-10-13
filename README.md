@@ -21,11 +21,11 @@ There are two ways to get the app. Most people want the first.
 Nothing else needs to be installed first.
 
 1. Open the [Releases page](https://github.com/TiDeane/revolut-investment-tracker/releases) and download the file ending in `-windows-x64-setup.exe` from the latest release.
-2. Double-click it. Windows will probably show a blue box saying **"Windows protected your PC"**. This appears because the app is not signed with a paid certificate, not because something was found in it. Click **More info**, then **Run anyway**.
+2. Double-click it. Windows may show a blue box saying **"Windows protected your PC"**. If it does, this is because the app is not signed with a paid certificate, not because something was found in it. Click **More info**, then **Run anyway**.
 3. Follow the installer. It installs only for you and does not ask for an administrator password.
 4. Start **Statement Portfolio Tracker** from the Start menu or the desktop shortcut.
 
-You only see the warning for the installer, not each time you start the app. Do not turn off Windows security features to install this, "Run anyway" applies to this one file only.
+If the warning appears, it is only for the installer, not each time you start the app. Do not turn off Windows security features to install this, "Run anyway" applies to this one file only.
 
 If Windows says the app was blocked by **Smart App Control** and offers no "Run anyway", the app cannot be installed on that computer for now. Smart App Control only allows signed apps, and this one is not signed yet. Option 2 still works there.
 
@@ -33,7 +33,7 @@ To remove the app, use **Settings > Apps > Installed apps** like any other progr
 
 #### macOS
 
-Releases also include `.dmg` files for Apple Silicon and Intel Macs. They are built automatically and have not yet been tried on a real Mac, so treat them as experimental. Open the `.dmg` and drag the app to Applications. The first time you open it, macOS will refuse because the app is not signed. Open **System Settings > Privacy & Security**, scroll down, and click **Open Anyway** next to the app's name. This allows this one app only; do not turn Gatekeeper off.
+Releases also include `.dmg` files for Apple Silicon and Intel Macs. They need **macOS 14.4 or newer**. They are built automatically and have not yet been tried on a real Mac, so treat them as experimental. Open the `.dmg` and drag the app to Applications. The first time you open it, macOS will refuse because the app is not signed. Open **System Settings > Privacy & Security**, scroll down, and click **Open Anyway** next to the app's name. This allows this one app only; do not turn Gatekeeper off.
 
 ### Option 2: run from a zip of the project
 

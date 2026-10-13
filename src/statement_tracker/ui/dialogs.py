@@ -42,7 +42,8 @@ WHERE_IS_THE_FILE_TEXT = (
     "6. Choose CSV as the format.\n"
     "7. Choose the date range All time.\n\n"
     "The date range matters: the app needs your whole history, from your first trade until today. "
-    "A statement for only a month or a tax year will give wrong results or be rejected as incomplete.\n\n"
+    "The other choices, a range of months or a tax year, list only the buys and sells inside that "
+    "period, so they give wrong results or are rejected as incomplete.\n\n"
     "Revolut may move these menus in a newer version of its app. Once you have the file on this "
     "computer, choose it in step 1 or drag it onto the window."
 )

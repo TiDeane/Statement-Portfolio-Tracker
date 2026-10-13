@@ -118,8 +118,10 @@ class ChooseListingDialog(QDialog):
         self._typed.setPlaceholderText("Or type the Yahoo Finance symbol here (optional)")
         layout.addWidget(self._typed)
 
+        self.setMinimumWidth(520)
         buttons = QDialogButtonBox()
-        buttons.addButton("Use this one", QDialogButtonBox.ButtonRole.AcceptRole)
+        use = buttons.addButton("Use this one", QDialogButtonBox.ButtonRole.AcceptRole)
+        use.setObjectName("primary")  # the coloured main action, styled in ui/theme.py
         buttons.addButton("Skip this investment", QDialogButtonBox.ButtonRole.RejectRole)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)

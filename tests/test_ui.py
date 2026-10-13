@@ -17,6 +17,7 @@ from statement_tracker.core.calculator import buys_by_ticker  # noqa: E402
 from statement_tracker.core.errors import UserFacingError  # noqa: E402
 from statement_tracker.core.parser import load_statement  # noqa: E402
 from statement_tracker.settings import Settings  # noqa: E402
+from statement_tracker.ui import theme  # noqa: E402
 from statement_tracker.ui.dialogs import ChooseListingDialog  # noqa: E402
 from statement_tracker.ui.main_window import NO_SPREADSHEET, MainWindow, default_start_folder  # noqa: E402
 
@@ -53,6 +54,31 @@ def run(app, window: MainWindow) -> None:
     assert not window._busy()
 
 
+def shows(label, path: Path) -> bool:
+    """True if the label shows the file's name and its folder, with the full path as tooltip."""
+    return path.name in label.text() and str(path.parent) in label.text() and label.toolTip() == str(path)
+
+
+def test_theme_styles_the_app_in_light_and_dark_and_marks_gains_with_arrow_and_colour(app, tmp_path: Path) -> None:
+    try:
+        assert theme.apply(app, dark=False) is theme.LIGHT
+        assert theme.LIGHT.accent in app.styleSheet()
+        assert theme.apply(app, dark=True) is theme.DARK
+        assert theme.DARK.accent in app.styleSheet() and theme.LIGHT.background not in app.styleSheet()
+
+        window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+        window.set_statement(SAMPLE)
+        run(app, window)
+
+        worth_now = window.table.item(0, 2)  # 589 now against 541 invested
+        assert worth_now.text().startswith("▲ ")
+        assert worth_now.foreground().color().name().upper() == theme.DARK.good.upper()
+        assert window.status_label.property("state") == "ok"
+        assert window.go_button.objectName() == "primary"
+    finally:
+        app.setStyleSheet("")
+
+
 def cells(window: MainWindow) -> list[list[str]]:
     table = window.table
     return [[table.item(row, column).text() for column in range(4)] for row in range(table.rowCount())]
@@ -68,7 +94,7 @@ def test_button_is_disabled_until_a_statement_is_chosen(app, tmp_path: Path) -> 
     window.set_statement(SAMPLE)
 
     assert window.go_button.isEnabled()
-    assert str(SAMPLE) in window.statement_label.text()
+    assert shows(window.statement_label, SAMPLE)
 
 
 def test_statement_alone_shows_the_investments(app, tmp_path: Path) -> None:
@@ -105,7 +131,7 @@ def test_with_a_spreadsheet_it_is_created_and_remembered(app, tmp_path: Path) ->
     assert load_workbook(spreadsheet)["Current Holdings"]["A2"].value == "(EQQB) Nasdaq fund"
 
     reopened, _ = make_window(tmp_path, provider_with("EQQB.DE"))
-    assert str(spreadsheet) in reopened.spreadsheet_label.text()
+    assert shows(reopened.spreadsheet_label, spreadsheet)
     reopened.set_spreadsheet(None)
     assert Settings.load(tmp_path / "settings.json").spreadsheet_path is None
 
@@ -116,8 +142,8 @@ def test_dropped_files_go_to_the_right_step(app, tmp_path: Path) -> None:
     window.drop_file(tmp_path / "book.xlsx")
     window.drop_file(SAMPLE)
 
-    assert str(tmp_path / "book.xlsx") in window.spreadsheet_label.text()
-    assert str(SAMPLE) in window.statement_label.text()
+    assert shows(window.spreadsheet_label, tmp_path / "book.xlsx")
+    assert shows(window.statement_label, SAMPLE)
     assert Settings.load(tmp_path / "settings.json").last_folder == SAMPLE.parent
 
 

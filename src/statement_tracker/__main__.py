@@ -22,12 +22,13 @@ def _run_gui() -> int:
 
     from statement_tracker.core.errors import UserFacingError
     from statement_tracker.settings import Settings, default_settings_path
-    from statement_tracker.ui import dialogs
+    from statement_tracker.ui import dialogs, theme
     from statement_tracker.ui.main_window import MainWindow
 
     app = QApplication(sys.argv[:1])
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(__version__)
+    theme.follow_system(app)
     try:
         settings = Settings.load()
     except UserFacingError as error:

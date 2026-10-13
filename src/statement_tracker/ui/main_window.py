@@ -5,6 +5,7 @@ No calculations happen here. The window calls ``workflow`` and shows what comes 
 
 from __future__ import annotations
 
+import html
 import sys
 import traceback
 from collections.abc import Callable
@@ -13,7 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from PySide6.QtCore import QLocale, QStandardPaths, Qt, QThreadPool
-from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent, QFont
+from PySide6.QtGui import QBrush, QCloseEvent, QColor, QDragEnterEvent, QDropEvent, QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -35,7 +36,7 @@ from statement_tracker.core.exporters.base import ExportResult
 from statement_tracker.core.market_data.provider import PriceProvider
 from statement_tracker.core.ticker_resolver import Resolution
 from statement_tracker.settings import Settings
-from statement_tracker.ui import dialogs
+from statement_tracker.ui import dialogs, theme
 from statement_tracker.ui.workers import QuestionBridge, Task
 from statement_tracker.workflow import Report, build_report, display_name, update_spreadsheet
 
@@ -57,6 +58,14 @@ def default_start_folder() -> Path:
         return Path.cwd()
     downloads = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DownloadLocation)
     return Path(downloads) if downloads and Path(downloads).exists() else Path.home()
+
+
+def _file_text(path: Path, remark: str = "") -> str:
+    """Show a chosen file as its name in bold with the folder underneath, instead of one long path."""
+    lines = [f"<b>{html.escape(path.name)}</b>", f"in {html.escape(str(path.parent))}"]
+    if remark:
+        lines.append(html.escape(remark))
+    return "<br>".join(lines)
 
 
 def _default_provider() -> PriceProvider:
@@ -88,12 +97,10 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(APP_NAME)
         self.setAcceptDrops(True)
-        self.resize(760, 720)
+        self.resize(780, 760)
 
         intro = QLabel("See how your investments are doing in three steps.")
-        intro_font = QFont(intro.font())
-        intro_font.setPointSize(intro_font.pointSize() + 3)
-        intro.setFont(intro_font)
+        intro.setObjectName("intro")  # object names are what ui/theme.py styles
 
         # Step 1
         self.statement_label = QLabel(NO_STATEMENT)
@@ -135,14 +142,15 @@ class MainWindow(QMainWindow):
 
         # Step 3
         self.go_button = QPushButton()
+        self.go_button.setObjectName("primary")
         go_font = QFont(self.go_button.font())
         go_font.setPointSize(go_font.pointSize() + 2)
-        go_font.setBold(True)
         self.go_button.setFont(go_font)
-        self.go_button.setMinimumHeight(44)
+        self.go_button.setMinimumHeight(48)
         self.go_button.setEnabled(False)
         self.go_button.clicked.connect(self.start)
         self.status_label = QLabel("")
+        self.status_label.setObjectName("status")
         self.status_label.setWordWrap(True)
 
         # Result
@@ -150,9 +158,11 @@ class MainWindow(QMainWindow):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(36)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setAlternatingRowColors(True)
         self.notes_label = QLabel("")
+        self.notes_label.setObjectName("notes")
         self.notes_label.setWordWrap(True)
         self.notes_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
@@ -258,13 +268,19 @@ class MainWindow(QMainWindow):
             self.set_statement(path)
 
     def _refresh(self) -> None:
-        self.statement_label.setText(str(self._statement) if self._statement else NO_STATEMENT)
+        self.statement_label.setText(_file_text(self._statement) if self._statement else NO_STATEMENT)
+        self.statement_label.setToolTip(str(self._statement) if self._statement else "")
         if self._spreadsheet is None:
             self.spreadsheet_label.setText(NO_SPREADSHEET)
         elif self._spreadsheet.exists():
-            self.spreadsheet_label.setText(f"{self._spreadsheet}\nIt will be updated. Close it in Excel first.")
+            self.spreadsheet_label.setText(
+                _file_text(self._spreadsheet, "It will be updated. Close it in Excel first.")
+            )
         else:
-            self.spreadsheet_label.setText(f"{self._spreadsheet}\nIt does not exist yet and will be created.")
+            self.spreadsheet_label.setText(
+                _file_text(self._spreadsheet, "It does not exist yet and will be created.")
+            )
+        self.spreadsheet_label.setToolTip(str(self._spreadsheet) if self._spreadsheet else "")
         self.no_spreadsheet_button.setEnabled(self._spreadsheet is not None)
         self.go_button.setText(
             "Step 3: show my investments and update my spreadsheet"
@@ -297,7 +313,7 @@ class MainWindow(QMainWindow):
         task.signals.finished.connect(self._finished)
         task.signals.failed.connect(self._failed)
         self._tasks.append(task)
-        self.status_label.setText("Working... reading your statement and fetching current prices.")
+        self._status("Working... reading your statement and fetching current prices.", "busy")
         self._refresh()
         QThreadPool.globalInstance().start(task)
 
@@ -305,9 +321,14 @@ class MainWindow(QMainWindow):
         self._tasks.clear()
         self._refresh()
 
+    def _status(self, text: str, state: str) -> None:
+        """Show the status line; ``state`` (busy, ok, error) picks its colour in the theme."""
+        self.status_label.setText(text)
+        theme.set_state(self.status_label, state)
+
     def _failed(self, error: object) -> None:
         self._done()
-        self.status_label.setText("That did not work. Nothing was changed.")
+        self._status("That did not work. Nothing was changed.", "error")
         if not isinstance(error, UserFacingError):
             details = "".join(traceback.format_exception(error)) if isinstance(error, BaseException) else repr(error)
             error = UserFacingError(
@@ -325,14 +346,14 @@ class MainWindow(QMainWindow):
         notes = list(report.notes)
         if exported is not None:
             done = "created" if exported.created else "updated"
-            self.status_label.setText(f"Done. Your spreadsheet was {done}: {exported.destination}")
+            self._status(f"Done. Your spreadsheet was {done}: {exported.destination}", "ok")
             notes.extend(exported.notes)
         elif export_error is not None:
-            self.status_label.setText("Your investments are shown below, but the spreadsheet was not updated.")
+            self._status("Your investments are shown below, but the spreadsheet was not updated.", "error")
         else:
-            self.status_label.setText("Done. Your investments are shown below.")
+            self._status("Done. Your investments are shown below.", "ok")
         if not report.valuation.holdings:
-            self.status_label.setText("Done. The statement has no investments that you still hold.")
+            self._status("Done. The statement has no investments that you still hold.", "ok")
         self.notes_label.setText("\n".join(f"Note: {note}" for note in notes))
         if export_error is not None:
             self.show_error(export_error)
@@ -370,12 +391,15 @@ class MainWindow(QMainWindow):
         by_value = all(holding.allocation_percent is not None for holding in valuation.holdings)
         self._set_headers(currency, by_value)
 
-        rows: list[tuple[str, str, str, str]] = [
+        # Each row: the four texts, then what was invested and what it is worth, for the up/down mark.
+        rows: list[tuple[str, str, str, str, Decimal, Decimal | None]] = [
             (
                 display_name(self._settings, holding.position.ticker),
                 self._money(holding.position.cost_basis, currency),
                 self._money(holding.market_value, currency),
                 self._percent(holding.allocation_percent if by_value else holding.invested_percent),
+                holding.position.cost_basis,
+                holding.market_value,
             )
             for holding in valuation.holdings
         ]
@@ -386,16 +410,27 @@ class MainWindow(QMainWindow):
                     self._money(valuation.portfolio.total_cost_basis, currency),
                     self._money(valuation.total_market_value, currency),
                     self._percent(Decimal(100)),
+                    valuation.portfolio.total_cost_basis,
+                    valuation.total_market_value,
                 )
             )
 
+        colours = theme.current()
         self.table.setRowCount(len(rows))
-        for row_number, row in enumerate(rows):
+        for row_number, (*texts, invested, worth) in enumerate(rows):
             is_total = bool(valuation.holdings) and row_number == len(rows) - 1
-            for column, text in enumerate(row):
+            for column, text in enumerate(texts):
                 item = QTableWidgetItem(text)
                 if column:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                if column == 2 and worth is not None and worth != invested:
+                    # Up or down since buying: an arrow as well as a colour, never colour alone.
+                    gained = worth > invested
+                    item.setText(f"{'▲' if gained else '▼'} {text}")
+                    item.setForeground(QBrush(QColor(colours.good if gained else colours.bad)))
+                    item.setToolTip("Worth more than you paid." if gained else "Worth less than you paid.")
+                elif text == UNAVAILABLE:
+                    item.setForeground(QBrush(QColor(colours.muted)))
                 if is_total:
                     font = QFont(item.font())
                     font.setBold(True)

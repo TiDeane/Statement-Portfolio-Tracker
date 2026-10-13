@@ -5,13 +5,14 @@ No calculations happen here. The window calls ``workflow`` and shows what comes 
 
 from __future__ import annotations
 
+import sys
 import traceback
 from collections.abc import Callable
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from PySide6.QtCore import QLocale, Qt, QThreadPool
+from PySide6.QtCore import QLocale, QStandardPaths, Qt, QThreadPool
 from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent, QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -43,6 +44,19 @@ NO_STATEMENT = "No file chosen yet. You can also drag the file onto this window.
 NO_SPREADSHEET = "No spreadsheet. The results will only be shown here."
 
 Outcome = tuple[Report, ExportResult | None, UserFacingError | None]
+
+
+def default_start_folder() -> Path:
+    """Return the folder file dialogs open in before the user has picked anything.
+
+    Run from source, that is the folder the app was started from (the project
+    folder during development). The installed app has no such folder, so it
+    opens in Downloads, where an exported statement usually lands.
+    """
+    if not getattr(sys, "frozen", False):
+        return Path.cwd()
+    downloads = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DownloadLocation)
+    return Path(downloads) if downloads and Path(downloads).exists() else Path.home()
 
 
 def _default_provider() -> PriceProvider:
@@ -192,8 +206,11 @@ class MainWindow(QMainWindow):
             pass  # not being able to remember a choice must never stop the user
 
     def _start_folder(self) -> str:
+        """Where file dialogs open: the last folder used, else a sensible first guess."""
         folder = self._settings.last_folder
-        return str(folder) if folder and folder.exists() else str(Path.home())
+        if folder and folder.exists():
+            return str(folder)
+        return str(default_start_folder())
 
     def _choose_statement(self) -> None:
         chosen, _ = QFileDialog.getOpenFileName(

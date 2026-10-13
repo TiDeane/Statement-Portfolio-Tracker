@@ -18,7 +18,7 @@ from statement_tracker.core.errors import UserFacingError  # noqa: E402
 from statement_tracker.core.parser import load_statement  # noqa: E402
 from statement_tracker.settings import Settings  # noqa: E402
 from statement_tracker.ui.dialogs import ChooseListingDialog  # noqa: E402
-from statement_tracker.ui.main_window import NO_SPREADSHEET, MainWindow  # noqa: E402
+from statement_tracker.ui.main_window import NO_SPREADSHEET, MainWindow, default_start_folder  # noqa: E402
 
 EQQB_BUYS = buys_by_ticker(load_statement(SAMPLE))["EQQB"]
 TODAY = date(2026, 10, 12)
@@ -119,6 +119,24 @@ def test_dropped_files_go_to_the_right_step(app, tmp_path: Path) -> None:
     assert str(tmp_path / "book.xlsx") in window.spreadsheet_label.text()
     assert str(SAMPLE) in window.statement_label.text()
     assert Settings.load(tmp_path / "settings.json").last_folder == SAMPLE.parent
+
+
+def test_file_dialogs_open_in_the_start_folder_until_a_folder_is_remembered(
+    app, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.chdir(project)
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+
+    assert window._start_folder() == str(project)  # run from source: where the app was started
+
+    window.set_statement(SAMPLE)
+    assert window._start_folder() == str(SAMPLE.parent)  # afterwards: the last folder used
+
+    monkeypatch.setattr("sys.frozen", True, raising=False)  # the installed app
+    assert default_start_folder() != project
+    assert default_start_folder().exists()
 
 
 def test_wrong_file_is_explained_in_plain_words(app, tmp_path: Path) -> None:

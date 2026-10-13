@@ -97,6 +97,40 @@ def test_button_is_disabled_until_a_statement_is_chosen(app, tmp_path: Path) -> 
     assert shows(window.statement_label, SAMPLE)
 
 
+def test_each_step_says_whether_it_is_done_optional_or_remembered(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+
+    assert window.statement_badge.text().startswith("To do")
+    assert window.spreadsheet_badge.text() == "Optional. You can skip this step."
+    assert window.spreadsheet_badge.property("state") == "optional"
+
+    window.set_statement(SAMPLE)
+    window.set_spreadsheet(tmp_path / "mine.xlsx")
+    assert window.statement_badge.text() == "✓ Done"
+    assert (window.spreadsheet_badge.text(), window.spreadsheet_badge.property("state")) == ("✓ Done", "ok")
+
+    # Next time the app starts, step 2 is already taken care of and says so.
+    reopened, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    assert "remembered from last time" in reopened.spreadsheet_badge.text()
+    assert reopened.spreadsheet_badge.property("state") == "ok"
+
+    reopened.set_spreadsheet(None)
+    assert reopened.spreadsheet_badge.text() == "Optional. You can skip this step."
+
+
+def test_buttons_are_only_highlighted_when_reached_with_the_keyboard(app, tmp_path: Path) -> None:
+    from PySide6.QtCore import Qt
+
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.show()
+    app.processEvents()
+
+    buttons = window.findChildren(QtWidgets.QPushButton)
+    assert buttons and all(button.focusPolicy() == Qt.FocusPolicy.TabFocus for button in buttons)
+    assert not any(button.hasFocus() for button in buttons)
+    window.close()
+
+
 def test_statement_alone_shows_the_investments(app, tmp_path: Path) -> None:
     window, errors = make_window(tmp_path, provider_with("EQQB.DE"))
     window.set_statement(SAMPLE)

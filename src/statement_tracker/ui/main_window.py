@@ -44,6 +44,12 @@ UNAVAILABLE = "unavailable"
 NO_STATEMENT = "No file chosen yet. You can also drag the file onto this window."
 NO_SPREADSHEET = "No spreadsheet. The results will only be shown here."
 
+# The line at the top of each step: its text and the state the theme colours it by.
+STEP_TO_DO = ("To do: choose your statement file.", "todo")
+STEP_DONE = ("✓ Done", "ok")
+STEP_OPTIONAL = ("Optional. You can skip this step.", "optional")
+STEP_REMEMBERED = ("✓ Already done: remembered from last time. Nothing to do here.", "ok")
+
 Outcome = tuple[Report, ExportResult | None, UserFacingError | None]
 
 
@@ -89,6 +95,7 @@ class MainWindow(QMainWindow):
         self._today = today
         self._statement: Path | None = None
         self._spreadsheet: Path | None = settings.spreadsheet_path
+        self._spreadsheet_from_last_time = settings.spreadsheet_path is not None
         self._tasks: list[Task] = []
         self._locale = QLocale()
         self.ask_listing: Callable[[Resolution], str | None] = lambda resolution: dialogs.ask_listing(self, resolution)
@@ -116,7 +123,10 @@ class MainWindow(QMainWindow):
         statement_buttons.addWidget(help_button)
         statement_buttons.addStretch(1)
         statement_box = QGroupBox("Step 1: your Revolut statement")
+        self.statement_badge = QLabel()
+        self.statement_badge.setObjectName("badge")
         statement_layout = QVBoxLayout(statement_box)
+        statement_layout.addWidget(self.statement_badge)
         statement_layout.addWidget(self.statement_label)
         statement_layout.addLayout(statement_buttons)
 
@@ -136,7 +146,10 @@ class MainWindow(QMainWindow):
             spreadsheet_buttons.addWidget(button)
         spreadsheet_buttons.addStretch(1)
         spreadsheet_box = QGroupBox("Step 2 (optional): your Excel spreadsheet")
+        self.spreadsheet_badge = QLabel()
+        self.spreadsheet_badge.setObjectName("badge")
         spreadsheet_layout = QVBoxLayout(spreadsheet_box)
+        spreadsheet_layout.addWidget(self.spreadsheet_badge)
         spreadsheet_layout.addWidget(self.spreadsheet_label)
         spreadsheet_layout.addLayout(spreadsheet_buttons)
 
@@ -187,6 +200,13 @@ class MainWindow(QMainWindow):
         central.setLayout(layout)
         self.setCentralWidget(central)
 
+        # Buttons are highlighted only when reached with the Tab key, never just for
+        # having been clicked or for being first in the window.
+        for button in self.findChildren(QPushButton):
+            button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        central.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        central.setFocus()
+
         self._set_headers("EUR", by_value=True)
         self.table.setVisible(False)
         self._refresh()
@@ -204,6 +224,7 @@ class MainWindow(QMainWindow):
     def set_spreadsheet(self, path: Path | None) -> None:
         """Use ``path`` as the spreadsheet to update, or None for no spreadsheet. Remembered."""
         self._spreadsheet = path
+        self._spreadsheet_from_last_time = False
         if self._settings.spreadsheet_path != path:
             self._settings.spreadsheet_path = path
             self._save_settings()
@@ -270,6 +291,13 @@ class MainWindow(QMainWindow):
     def _refresh(self) -> None:
         self.statement_label.setText(_file_text(self._statement) if self._statement else NO_STATEMENT)
         self.statement_label.setToolTip(str(self._statement) if self._statement else "")
+        self._badge(self.statement_badge, *(STEP_DONE if self._statement else STEP_TO_DO))
+        if self._spreadsheet is None:
+            self._badge(self.spreadsheet_badge, *STEP_OPTIONAL)
+        elif self._spreadsheet_from_last_time:
+            self._badge(self.spreadsheet_badge, *STEP_REMEMBERED)
+        else:
+            self._badge(self.spreadsheet_badge, *STEP_DONE)
         if self._spreadsheet is None:
             self.spreadsheet_label.setText(NO_SPREADSHEET)
         elif self._spreadsheet.exists():
@@ -320,6 +348,12 @@ class MainWindow(QMainWindow):
     def _done(self) -> None:
         self._tasks.clear()
         self._refresh()
+
+    @staticmethod
+    def _badge(label: QLabel, text: str, state: str) -> None:
+        """Show whether a step is done, still to do, or can be skipped."""
+        label.setText(text)
+        theme.set_state(label, state)
 
     def _status(self, text: str, state: str) -> None:
         """Show the status line; ``state`` (busy, ok, error) picks its colour in the theme."""

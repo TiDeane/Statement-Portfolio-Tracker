@@ -19,7 +19,12 @@ from statement_tracker.core.parser import load_statement  # noqa: E402
 from statement_tracker.settings import Settings  # noqa: E402
 from statement_tracker.ui import theme  # noqa: E402
 from statement_tracker.ui.dialogs import ChooseListingDialog  # noqa: E402
-from statement_tracker.ui.main_window import NO_SPREADSHEET, MainWindow, default_start_folder  # noqa: E402
+from statement_tracker.ui.main_window import (  # noqa: E402
+    MAX_SCREEN_SHARE,
+    NO_SPREADSHEET,
+    MainWindow,
+    default_start_folder,
+)
 
 EQQB_BUYS = buys_by_ticker(load_statement(SAMPLE))["EQQB"]
 TODAY = date(2026, 10, 12)
@@ -129,6 +134,56 @@ def test_buttons_are_only_highlighted_when_reached_with_the_keyboard(app, tmp_pa
     buttons = window.findChildren(QtWidgets.QPushButton)
     assert buttons and all(button.focusPolicy() == Qt.FocusPolicy.TabFocus for button in buttons)
     assert not any(button.hasFocus() for button in buttons)
+    window.close()
+
+
+def test_window_starts_compact_and_grows_to_show_the_result(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.show()
+    app.processEvents()
+    start_height = window.height()
+    assert start_height < 600  # just the three steps, no reserved empty space
+    assert window.table.isHidden()
+
+    window.set_statement(SAMPLE)
+    run(app, window)
+
+    assert window.height() > start_height
+    assert not window.table.isHidden()
+
+    # A size the user chose by hand is never reduced by a later run.
+    window.resize(window.width(), window.height() + 150)
+    chosen = window.height()
+    run(app, window)
+    assert window.height() == chosen
+    window.close()
+
+
+def test_window_stops_growing_at_a_share_of_the_screen_and_the_table_scrolls(app, tmp_path: Path) -> None:
+    tickers = [f"T{number:02d}" for number in range(20)]
+    provider = FakeProvider()
+    for ticker in tickers:
+        provider.add(f"{ticker}.DE", "EUR", price="12")
+    lines = ["2025-01-06T09:00:00.000Z,,CASH TOP-UP,,,EUR 5000,EUR,1"] + [
+        f"2025-01-06T10:00:{number:02d}.000Z,{ticker},BUY - MARKET,1,EUR 10.00,EUR 10,EUR,1"
+        for number, ticker in enumerate(tickers)
+    ]
+    window, _ = make_window(tmp_path, provider)
+    window.ask_listing = lambda resolution: f"{resolution.ticker}.DE"
+    window.show()
+    app.processEvents()
+
+    window.set_statement(write_statement(tmp_path, *lines))
+    run(app, window)
+
+    table = window.table
+    assert table.rowCount() == 21  # twenty investments and the total
+    row, header = table.rowHeight(0), table.horizontalHeader().height()
+    limit = int(window.screen().availableGeometry().height() * MAX_SCREEN_SHARE)
+    assert MAX_SCREEN_SHARE == 0.8
+    # Never taller than 80% of the screen, unless the screen is too small for even two rows.
+    assert window.height() <= max(limit, window.minimumSizeHint().height())
+    assert table.height() < header + table.rowCount() * row  # the rest is reached by scrolling
     window.close()
 
 

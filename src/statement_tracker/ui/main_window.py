@@ -45,6 +45,12 @@ UNAVAILABLE = "unavailable"
 NO_STATEMENT = "No file chosen yet. You can also drag the file onto this window."
 NO_SPREADSHEET = "No spreadsheet. The results will only be shown here."
 
+WINDOW_WIDTH = 920
+MAX_SCREEN_SHARE = 0.8
+"""When the result table appears, the window grows to at most this share of the screen's usable height."""
+MIN_TABLE_HEIGHT = 115
+"""Room for the header and two rows, kept even on a screen too small for the limit above."""
+
 # The line at the top of each step: its text and the state the theme colours it by.
 STEP_TO_DO = ("To do: choose your statement file.", "todo")
 STEP_DONE = ("✓ Done", "ok")
@@ -113,7 +119,6 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(APP_NAME)
         self.setAcceptDrops(True)
-        self.resize(920, 820)
 
         intro = QLabel("See how your investments are doing in three steps.")
         intro.setObjectName("intro")  # object names are what ui/theme.py styles
@@ -224,6 +229,8 @@ class MainWindow(QMainWindow):
         self._set_headers("EUR", by_value=True)
         self.table.setVisible(False)
         self._refresh()
+        # Start only as tall as the three steps need; the window grows when there is a result to show.
+        self.resize(WINDOW_WIDTH, self.sizeHint().height())
 
     # -- choosing files ----------------------------------------------------------
 
@@ -527,6 +534,34 @@ class MainWindow(QMainWindow):
                 self.table.setItem(row_number, column, item)
         self.table.setVisible(bool(valuation.holdings))
         self._filler.setVisible(not valuation.holdings)
+        if valuation.holdings:
+            self._grow_to_fit_table()
+
+    def _grow_to_fit_table(self) -> None:
+        """Make the window tall enough to show every row, up to a share of the screen's height.
+
+        The limit adapts to the screen (MAX_SCREEN_SHARE of its usable height); rows that
+        do not fit are reached by scrolling the table. The window only ever grows here: a
+        size the user chose by hand is never reduced.
+        """
+        table = self.table
+        wanted = table.horizontalHeader().height() + 2 * table.frameWidth() + 2
+        wanted += sum(table.rowHeight(row) for row in range(table.rowCount()))
+        table.setMinimumHeight(wanted)
+        self.centralWidget().layout().activate()
+        target = self.sizeHint().height()
+
+        screen = self.screen()
+        available = int(screen.availableGeometry().height() * MAX_SCREEN_SHARE) if screen else target
+        if target > available:
+            # Too many rows for this screen: stop at the limit and let the table scroll. On a
+            # very small screen the table still keeps a couple of rows, even if that goes
+            # slightly past the limit.
+            table.setMinimumHeight(max(MIN_TABLE_HEIGHT, wanted - (target - available)))
+            self.centralWidget().layout().activate()
+            target = max(available, self.minimumSizeHint().height())
+        if target > self.height():
+            self.resize(self.width(), target)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         QThreadPool.globalInstance().waitForDone(3000)

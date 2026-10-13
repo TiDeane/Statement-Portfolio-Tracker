@@ -1,4 +1,5 @@
 name: Release build
+run-name: Release build (${{ github.ref_name }})
 
 # Builds the app for each OS, smoke tests the packaged result, and on a version
 # tag attaches the downloads to a GitHub Release. "Run workflow" builds without

@@ -194,8 +194,8 @@ def test_existing_workbook_keeps_its_own_sheet_and_gets_a_backup(tmp_path: Path)
     assert load_workbook(path).sheetnames == ["investimentos", "Current Holdings", "Portfolio History"]
     assert rows(path, "investimentos") == before
     assert before[1][3] == "=C2/SUM(C2:C3)"  # formulas survive as formulas
-    backup = tmp_path / "mine (backup before first update).xlsx"
-    assert "mine (backup before first update).xlsx" in " ".join(result.notes)
+    backup = tmp_path / "mine_backup_before_first_update.xlsx"
+    assert "mine_backup_before_first_update.xlsx" in " ".join(result.notes)
     assert load_workbook(backup).sheetnames == ["investimentos"]
 
 

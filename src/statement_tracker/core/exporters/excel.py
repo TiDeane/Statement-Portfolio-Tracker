@@ -269,7 +269,7 @@ class ExcelExporter:
         return sheet
 
     def _backup(self) -> Path:
-        backup = self.path.with_name(f"{self.path.stem} (backup before first update){self.path.suffix}")
+        backup = self.path.with_name(f"{self.path.stem}_backup_before_first_update{self.path.suffix}")
         if not backup.exists():
             shutil.copy2(self.path, backup)
         return backup

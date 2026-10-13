@@ -45,7 +45,9 @@ UNAVAILABLE = "unavailable"
 NO_STATEMENT = "No file chosen yet. You can also drag the file onto this window."
 NO_SPREADSHEET = "No spreadsheet. The results will only be shown here."
 
-WINDOW_WIDTH = 920
+TABLE_HEADERS = ["Investment", "Invested", "% of invested", "Worth now", "% of worth now", "Gain or loss"]
+GAIN_COLUMN = 5
+WINDOW_WIDTH = 1000
 MAX_SCREEN_SHARE = 0.8
 """When the result table appears, the window grows to at most this share of the screen's usable height."""
 MIN_TABLE_HEIGHT = 115
@@ -185,7 +187,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
 
         # Result
-        self.table = QTableWidget(0, 5)
+        self.table = QTableWidget(0, len(TABLE_HEADERS))
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.verticalHeader().setVisible(False)
@@ -226,7 +228,7 @@ class MainWindow(QMainWindow):
         central.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         central.setFocus()
 
-        self._set_headers("EUR", by_value=True)
+        self._set_headers()
         self.table.setVisible(False)
         self._refresh()
         # Start only as tall as the three steps need; the window grows when there is a result to show.
@@ -467,18 +469,16 @@ class MainWindow(QMainWindow):
             text += f" ({sign}{self._percent(abs(percent))})"
         return text
 
-    def _set_headers(self, currency: str, by_value: bool) -> None:
-        share = "Share of total" if by_value else "Share of total invested"
-        self.table.setHorizontalHeaderLabels(["Investment", "Invested", "Worth now", "Gain or loss", share])
+    def _set_headers(self) -> None:
+        """Column order follows the spreadsheet: each percentage sits next to the amount it is a share of."""
+        self.table.setHorizontalHeaderLabels(TABLE_HEADERS)
         tooltips = (
             "The fund or share you hold.",
             "What you paid for what you still hold, fees included.",
+            "How much of all the money you invested went into this one.",
             "What it would be worth at the latest price from Yahoo Finance. Approximate.",
+            "How much of all your investments this one is, by what they are worth now.",
             "Worth now minus what you invested, and that difference as a percentage of what you invested.",
-            "How much of all your investments this one is, by what they are worth now."
-            if by_value
-            else "How much of the money you invested went into this one. Shown because not every current "
-            "price is available.",
         )
         for column, tooltip in enumerate(tooltips):
             self.table.horizontalHeaderItem(column).setToolTip(tooltip)
@@ -486,30 +486,31 @@ class MainWindow(QMainWindow):
     def _show_report(self, report: Report) -> None:
         valuation = report.valuation
         currency = report.statement.currency
-        by_value = all(holding.allocation_percent is not None for holding in valuation.holdings)
-        self._set_headers(currency, by_value)
 
-        # Each row: the five texts, then the gain or loss itself (None if unknown) for its colour.
-        rows: list[tuple[str, str, str, str, str, Decimal | None]] = [
+        # Each row: the six texts, then the gain or loss itself (None if unknown) for its colour.
+        rows: list[tuple[str, str, str, str, str, str, Decimal | None]] = [
             (
                 display_name(self._settings, holding.position.ticker),
                 self._money(holding.position.cost_basis, currency),
+                self._percent(holding.invested_percent),
                 self._money(holding.market_value, currency),
+                self._percent(holding.allocation_percent),
                 self._gain(holding.unrealized_pnl, holding.percent_change, currency),
-                self._percent(holding.allocation_percent if by_value else holding.invested_percent),
                 holding.unrealized_pnl,
             )
             for holding in valuation.holdings
         ]
         if valuation.holdings:
             invested, gain = valuation.portfolio.total_cost_basis, valuation.unrealized_pnl
+            whole = Decimal(100)
             rows.append(
                 (
                     "Total",
                     self._money(invested, currency),
+                    self._percent(whole if invested > 0 else None),
                     self._money(valuation.total_market_value, currency),
+                    self._percent(whole if valuation.total_market_value else None),
                     self._gain(gain, gain / invested * 100 if gain is not None and invested > 0 else None, currency),
-                    self._percent(Decimal(100)),
                     gain,
                 )
             )
@@ -522,7 +523,7 @@ class MainWindow(QMainWindow):
                 item = QTableWidgetItem(text)
                 if column:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                if column == 3 and gain:
+                if column == GAIN_COLUMN and gain:
                     # The arrow and the colour belong to the gain or loss, never to the value itself.
                     item.setForeground(QBrush(QColor(colours.good if gain > 0 else colours.bad)))
                 elif text == UNAVAILABLE:

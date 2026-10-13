@@ -70,9 +70,9 @@ def test_theme_styles_the_app_in_light_and_dark_and_marks_gains_with_arrow_and_c
         window.set_statement(SAMPLE)
         run(app, window)
 
-        worth_now = window.table.item(0, 2)  # 589 now against 541 invested
-        assert worth_now.text().startswith("▲ ")
-        assert worth_now.foreground().color().name().upper() == theme.DARK.good.upper()
+        gain = window.table.item(0, 3)  # 589 now against 541 invested
+        assert gain.text().startswith("▲ +")
+        assert gain.foreground().color().name().upper() == theme.DARK.good.upper()
         assert window.status_label.property("state") == "ok"
         assert window.go_button.objectName() == "primary"
     finally:
@@ -81,7 +81,7 @@ def test_theme_styles_the_app_in_light_and_dark_and_marks_gains_with_arrow_and_c
 
 def cells(window: MainWindow) -> list[list[str]]:
     table = window.table
-    return [[table.item(row, column).text() for column in range(4)] for row in range(table.rowCount())]
+    return [[table.item(row, column).text() for column in range(5)] for row in range(table.rowCount())]
 
 
 def test_button_is_disabled_until_a_statement_is_chosen(app, tmp_path: Path) -> None:
@@ -142,7 +142,9 @@ def test_statement_alone_shows_the_investments(app, tmp_path: Path) -> None:
     assert rows[0][0] == "(EQQB) Nasdaq fund"
     assert "541" in rows[0][1] and "EUR" in rows[0][1]
     assert "589" in rows[0][2]
-    assert rows[0][3].startswith("100")
+    assert rows[0][3].startswith("▲ +47") and "(+8" in rows[0][3]  # 589.31 against 541.49
+    assert rows[0][2][0].isdigit()  # the value itself carries no arrow
+    assert rows[0][4].startswith("100")
     assert rows[1][0] == "Total"
     assert window.status_label.text() == "Done. Your investments are shown below."
     assert "EQQB was matched to EQQB.DE" in window.notes_label.text()
@@ -258,7 +260,7 @@ def test_skipped_investment_shows_as_unavailable(app, tmp_path: Path) -> None:
     run(app, window)
 
     assert cells(window)[0][2] == "unavailable"
-    assert window.table.horizontalHeaderItem(3).text() == "Share of total invested"
+    assert window.table.horizontalHeaderItem(4).text() == "Share of total invested"
 
 
 def test_locked_spreadsheet_still_shows_the_investments(app, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

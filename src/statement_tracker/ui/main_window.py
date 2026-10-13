@@ -104,7 +104,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(APP_NAME)
         self.setAcceptDrops(True)
-        self.resize(780, 820)
+        self.resize(920, 820)
 
         intro = QLabel("See how your investments are doing in three steps.")
         intro.setObjectName("intro")  # object names are what ui/theme.py styles
@@ -167,7 +167,7 @@ class MainWindow(QMainWindow):
         self.status_label.setWordWrap(True)
 
         # Result
-        self.table = QTableWidget(0, 4)
+        self.table = QTableWidget(0, 5)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.verticalHeader().setVisible(False)
@@ -404,13 +404,26 @@ class MainWindow(QMainWindow):
             return UNAVAILABLE
         return f"{self._locale.toString(float(value), 'f', 2)} %"
 
+    def _gain(self, amount: Decimal | None, percent: Decimal | None, currency: str) -> str:
+        """Format a gain or loss with an arrow and a sign, e.g. "▲ +199,00 EUR (+19,88 %)"."""
+        if amount is None:
+            return UNAVAILABLE
+        if amount == 0:
+            return self._money(amount, currency)
+        arrow, sign = ("▲", "+") if amount > 0 else ("▼", "-")
+        text = f"{arrow} {sign}{self._money(abs(amount), currency)}"
+        if percent is not None:
+            text += f" ({sign}{self._percent(abs(percent))})"
+        return text
+
     def _set_headers(self, currency: str, by_value: bool) -> None:
         share = "Share of total" if by_value else "Share of total invested"
-        self.table.setHorizontalHeaderLabels(["Investment", "Invested", "Worth now", share])
+        self.table.setHorizontalHeaderLabels(["Investment", "Invested", "Worth now", "Gain or loss", share])
         tooltips = (
             "The fund or share you hold.",
             "What you paid for what you still hold, fees included.",
             "What it would be worth at the latest price from Yahoo Finance. Approximate.",
+            "Worth now minus what you invested, and that difference as a percentage of what you invested.",
             "How much of all your investments this one is, by what they are worth now."
             if by_value
             else "How much of the money you invested went into this one. Shown because not every current "
@@ -425,44 +438,42 @@ class MainWindow(QMainWindow):
         by_value = all(holding.allocation_percent is not None for holding in valuation.holdings)
         self._set_headers(currency, by_value)
 
-        # Each row: the four texts, then what was invested and what it is worth, for the up/down mark.
-        rows: list[tuple[str, str, str, str, Decimal, Decimal | None]] = [
+        # Each row: the five texts, then the gain or loss itself (None if unknown) for its colour.
+        rows: list[tuple[str, str, str, str, str, Decimal | None]] = [
             (
                 display_name(self._settings, holding.position.ticker),
                 self._money(holding.position.cost_basis, currency),
                 self._money(holding.market_value, currency),
+                self._gain(holding.unrealized_pnl, holding.percent_change, currency),
                 self._percent(holding.allocation_percent if by_value else holding.invested_percent),
-                holding.position.cost_basis,
-                holding.market_value,
+                holding.unrealized_pnl,
             )
             for holding in valuation.holdings
         ]
         if valuation.holdings:
+            invested, gain = valuation.portfolio.total_cost_basis, valuation.unrealized_pnl
             rows.append(
                 (
                     "Total",
-                    self._money(valuation.portfolio.total_cost_basis, currency),
+                    self._money(invested, currency),
                     self._money(valuation.total_market_value, currency),
+                    self._gain(gain, gain / invested * 100 if gain is not None and invested > 0 else None, currency),
                     self._percent(Decimal(100)),
-                    valuation.portfolio.total_cost_basis,
-                    valuation.total_market_value,
+                    gain,
                 )
             )
 
         colours = theme.current()
         self.table.setRowCount(len(rows))
-        for row_number, (*texts, invested, worth) in enumerate(rows):
+        for row_number, (*texts, gain) in enumerate(rows):
             is_total = bool(valuation.holdings) and row_number == len(rows) - 1
             for column, text in enumerate(texts):
                 item = QTableWidgetItem(text)
                 if column:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                if column == 2 and worth is not None and worth != invested:
-                    # Up or down since buying: an arrow as well as a colour, never colour alone.
-                    gained = worth > invested
-                    item.setText(f"{'▲' if gained else '▼'} {text}")
-                    item.setForeground(QBrush(QColor(colours.good if gained else colours.bad)))
-                    item.setToolTip("Worth more than you paid." if gained else "Worth less than you paid.")
+                if column == 3 and gain:
+                    # The arrow and the colour belong to the gain or loss, never to the value itself.
+                    item.setForeground(QBrush(QColor(colours.good if gain > 0 else colours.bad)))
                 elif text == UNAVAILABLE:
                     item.setForeground(QBrush(QColor(colours.muted)))
                 if is_total:

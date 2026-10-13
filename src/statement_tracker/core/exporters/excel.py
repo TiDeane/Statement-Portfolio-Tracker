@@ -4,8 +4,10 @@ Only two sheets are ever written, and only if they are recognisably ours; every
 other sheet in the user's workbook is left exactly as it is. The holdings sheet
 is rewritten each run; the history sheet gets one row per date.
 
-openpyxl cannot carry charts, images or shapes through a load and save, so a
-backup copy is made before the first write to an existing workbook.
+Saving rewrites the whole file. openpyxl keeps values, formulas, styles,
+conditional formatting and charts through that, but drops pictures (without
+Pillow), shapes and text boxes, so a backup copy is made before the first write
+to an existing workbook.
 """
 
 from __future__ import annotations
@@ -31,9 +33,9 @@ TOTAL_LABEL = "Total"
 HOLDINGS_HEADER = (
     "Index",
     "Invested",
+    "% of Invested",
     "Current Value",
-    "Current %",
-    "Invested %",
+    "% of Current Value",
     "% Up/Down",
     "Dividends",
     "Currency",
@@ -41,6 +43,17 @@ HOLDINGS_HEADER = (
 # Headers this app wrote in earlier versions. A sheet with one of these is still ours,
 # so it is rewritten in the current layout instead of being refused.
 _EARLIER_HOLDINGS_HEADERS = (
+    (
+        "Index",
+        "Invested",
+        "Current Value",
+        "Share of Current Value",
+        "Share of Invested",
+        "% Up/Down",
+        "Dividends",
+        "Currency",
+    ),
+    ("Index", "Invested", "Current Value", "Current %", "Invested %", "% Up/Down", "Dividends", "Currency"),
     (
         "Index",
         "Invested",
@@ -75,8 +88,8 @@ _DATE_FORMAT = "yyyy-mm-dd"
 # Column number -> number format. Columns not listed keep Excel's general format.
 _HOLDINGS_FORMATS = {
     2: _MONEY_FORMAT,
-    3: _MONEY_FORMAT,
-    4: _PERCENT_FORMAT,
+    3: _PERCENT_FORMAT,
+    4: _MONEY_FORMAT,
     5: _PERCENT_FORMAT,
     6: _PERCENT_FORMAT,
     7: _MONEY_FORMAT,
@@ -305,9 +318,9 @@ class ExcelExporter:
                 [
                     f"({position.ticker}) {name}" if name else position.ticker,
                     position.cost_basis,
-                    _cell(holding.market_value),
-                    f"=C{row}/C${total_row}" if has_total else UNAVAILABLE,
                     _percent(holding.invested_percent),
+                    _cell(holding.market_value),
+                    f"=D{row}/D${total_row}" if has_total else UNAVAILABLE,
                     _percent(holding.percent_change),
                     position.dividends,
                     currency,
@@ -320,9 +333,9 @@ class ExcelExporter:
                 [
                     TOTAL_LABEL,
                     invested,
-                    _cell(valuation.total_market_value),
-                    f"=C{total_row}/C${total_row}" if has_total else UNAVAILABLE,
                     _percent(_HUNDRED if invested > 0 else None),
+                    _cell(valuation.total_market_value),
+                    f"=D{total_row}/D${total_row}" if has_total else UNAVAILABLE,
                     _cell(unrealized / invested if unrealized is not None and invested > 0 else None),
                     sum((holding.position.dividends for holding in valuation.holdings), Decimal(0)),
                     currency,

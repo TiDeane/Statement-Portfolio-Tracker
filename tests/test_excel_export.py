@@ -48,12 +48,12 @@ def test_missing_workbook_is_created_with_both_sheets(tmp_path: Path) -> None:
     assert holdings[0] == HOLDINGS_HEADER
     # "Current %" is a formula: the row's current value divided by the Total row's.
     # Other percentages are stored the Excel way: 83.28% is 0.8328.
-    # Columns: Index, Invested, Current Value, Current %, Invested %, % Up/Down, Dividends, Currency.
+    # Columns: Index, Invested, % of Invested, Current Value, % of Current Value, % Up/Down, Dividends, Currency.
     assert holdings[1] == (
-        "ABCD", 1001, 1200, "=C2/C$4", pytest.approx(0.832779, abs=1e-6), pytest.approx(0.198801, abs=1e-6), 0, "EUR",
+        "ABCD", 1001, pytest.approx(0.832779, abs=1e-6), 1200, "=D2/D$4", pytest.approx(0.198801, abs=1e-6), 0, "EUR",
     )  # fmt: skip
-    assert holdings[2][:4] == ("WXYZ", 201, 400, "=C3/C$4")
-    assert holdings[3] == ("Total", 1202, 1600, "=C4/C$4", 1, pytest.approx(0.331115, abs=1e-6), 0, "EUR")
+    assert (holdings[2][0], holdings[2][1], holdings[2][3], holdings[2][4]) == ("WXYZ", 201, 400, "=D3/D$4")
+    assert holdings[3] == ("Total", 1202, 1, 1600, "=D4/D$4", pytest.approx(0.331115, abs=1e-6), 0, "EUR")
     assert len(holdings) == 4
     history = rows(path, "Portfolio History")
     assert history[0] == HISTORY_HEADER
@@ -85,7 +85,7 @@ def test_sheets_are_formatted_for_reading(tmp_path: Path) -> None:
             assert width > len(title)
 
     holdings, history = workbook["Current Holdings"], workbook["Portfolio History"]
-    assert [holdings.cell(row=2, column=column).number_format for column in (4, 5, 6)] == ["0.00%"] * 3
+    assert [holdings.cell(row=2, column=column).number_format for column in (3, 5, 6)] == ["0.00%"] * 3
     # Rows are taller than Excel's default of 15 points, the header tallest.
     assert holdings.row_dimensions[1].height > holdings.row_dimensions[2].height > 15
     assert all(holdings.row_dimensions[row].height > 15 for row in range(1, 5))
@@ -94,6 +94,21 @@ def test_sheets_are_formatted_for_reading(tmp_path: Path) -> None:
     assert history["F2"].number_format == "0.00%"
     assert history["A2"].number_format == "yyyy-mm-dd"
     assert holdings["A4"].value == "Total" and holdings["A4"].font.bold and not holdings["A3"].font.bold
+
+
+def test_share_columns_say_what_they_are_a_share_of_and_older_headers_are_upgraded(tmp_path: Path) -> None:
+    assert HOLDINGS_HEADER[1:5] == ("Invested", "% of Invested", "Current Value", "% of Current Value")
+
+    path = tmp_path / "portfolio.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Current Holdings"
+    sheet.append(["Index", "Invested", "Current Value", "Current %", "Invested %", "% Up/Down", "Dividends", "Currency"])
+    workbook.save(path)
+
+    ExcelExporter(path).export(valuation(), DAY_ONE)
+
+    assert rows(path, "Current Holdings")[0] == HOLDINGS_HEADER
 
 
 def test_holdings_sheet_from_an_earlier_version_is_rewritten_in_the_shorter_layout(tmp_path: Path) -> None:
@@ -207,9 +222,9 @@ def test_missing_price_writes_unavailable_and_leaves_history_alone(tmp_path: Pat
 
     holdings = rows(path, "Current Holdings")
     assert result.history == "skipped"
-    assert holdings[1][:5] == ("ABCD", 1001, 1200, "unavailable", pytest.approx(0.832779, abs=1e-6))
-    assert holdings[2][:4] == ("WXYZ", 201, "unavailable", "unavailable")
-    assert holdings[3][:5] == ("Total", 1202, "unavailable", "unavailable", 1)
+    assert holdings[1][:5] == ("ABCD", 1001, pytest.approx(0.832779, abs=1e-6), 1200, "unavailable")
+    assert (holdings[2][0], holdings[2][1], holdings[2][3], holdings[2][4]) == ("WXYZ", 201, "unavailable", "unavailable")
+    assert holdings[3][:5] == ("Total", 1202, 1, "unavailable", "unavailable")
     assert len(rows(path, "Portfolio History")) == 2
     assert "no row was written" in " ".join(result.notes)
 

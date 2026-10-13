@@ -97,7 +97,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(APP_NAME)
         self.setAcceptDrops(True)
-        self.resize(780, 760)
+        self.resize(780, 820)
 
         intro = QLabel("See how your investments are doing in three steps.")
         intro.setObjectName("intro")  # object names are what ui/theme.py styles

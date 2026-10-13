@@ -35,10 +35,10 @@ LIGHT = Palette(
     text="#1B1F2A",
     muted="#5B6474",
     border="#D5DBE7",
-    accent="#2F6FED",
-    accent_hover="#2559C7",
+    accent="#107C41",  # the green of Excel
+    accent_hover="#0B5E31",
     on_accent="#FFFFFF",
-    table_header="#E9EFFC",
+    table_header="#E1F1E7",
     good="#1B7F4F",
     bad="#C0392B",
 )
@@ -48,10 +48,10 @@ DARK = Palette(
     text="#E8EAF0",
     muted="#A3ABBA",
     border="#373D4A",
-    accent="#6C9BF5",
-    accent_hover="#8DB2FA",
+    accent="#33C481",  # Excel's lighter green, readable on dark
+    accent_hover="#5FD49D",
     on_accent="#0E1116",
-    table_header="#283042",
+    table_header="#1D3328",
     good="#4CC38A",
     bad="#FF7B72",
 )
@@ -81,14 +81,17 @@ def stylesheet(colours: Palette) -> str:
         background: {c.card};
         border: 1px solid {c.border};
         border-radius: 10px;
-        margin-top: 12px;
-        padding: 16px 12px 12px 12px;
+        /* Room above the box for its title, so the title never sits on the border. */
+        margin-top: 30px;
+        padding: 12px;
         font-weight: 600;
     }}
     QGroupBox::title {{
         subcontrol-origin: margin;
-        left: 12px;
-        padding: 0 6px;
+        subcontrol-position: top left;
+        left: 2px;
+        top: 4px;
+        padding: 0 2px;
         color: {c.accent};
     }}
     QGroupBox QLabel, QGroupBox QPushButton {{ font-weight: normal; }}

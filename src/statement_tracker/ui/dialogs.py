@@ -32,11 +32,19 @@ PRIVACY_TEXT = (
 )
 
 WHERE_IS_THE_FILE_TEXT = (
-    "You need the statement of your stock and ETF trades from the Revolut app, saved as a CSV file "
-    "covering your whole history (from your first trade until today).\n\n"
-    "[PLACEHOLDER: the exact steps in the Revolut app will be written here by the maintainer. "
-    "They have not been verified yet.]\n\n"
-    "Once you have the file on this computer, choose it in step 1 or drag it onto the window."
+    "You need the statement of your stock and ETF trades from the Revolut app, saved as a CSV file.\n\n"
+    "In the Revolut app:\n"
+    "1. Open the Invest tab.\n"
+    "2. Tap More.\n"
+    "3. Tap Documents.\n"
+    "4. Tap Brokerage account.\n"
+    "5. Tap Account statement.\n"
+    "6. Choose CSV as the format.\n"
+    "7. Choose the date range All time.\n\n"
+    "The date range matters: the app needs your whole history, from your first trade until today. "
+    "A statement for only a month or a tax year will give wrong results or be rejected as incomplete.\n\n"
+    "Revolut may move these menus in a newer version of its app. Once you have the file on this "
+    "computer, choose it in step 1 or drag it onto the window."
 )
 
 

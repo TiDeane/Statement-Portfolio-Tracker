@@ -280,6 +280,15 @@ def test_locked_spreadsheet_still_shows_the_investments(app, tmp_path: Path, mon
     assert "spreadsheet was not updated" in window.status_label.text()
 
 
+def test_help_page_gives_the_revolut_steps_and_asks_for_the_whole_history() -> None:
+    from statement_tracker.ui.dialogs import WHERE_IS_THE_FILE_TEXT
+
+    for step in ("Invest", "More", "Documents", "Brokerage account", "Account statement", "CSV", "All time"):
+        assert step in WHERE_IS_THE_FILE_TEXT
+    assert "whole history" in WHERE_IS_THE_FILE_TEXT
+    assert "PLACEHOLDER" not in WHERE_IS_THE_FILE_TEXT
+
+
 def test_listing_dialog_returns_the_selection_or_the_typed_symbol(app) -> None:
     from statement_tracker.core.ticker_resolver import resolve_ticker
 

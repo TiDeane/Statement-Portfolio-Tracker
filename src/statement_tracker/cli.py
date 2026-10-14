@@ -2,8 +2,9 @@
 
     python -m statement_tracker.cli STATEMENT.csv
 
-prints one row per investment still held: index, amount invested, approximate
-current value, and its share of the total current value.
+prints one row per investment still held, and a Total row, with the columns of
+the window's table: amount invested, current value (approximate), the share of
+the total of each, and the gain or loss.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from statement_tracker.workflow import Chooser, Report, build_report, update_spr
 
 UNAVAILABLE = "unavailable"
 _CENT = Decimal("0.01")
+_HUNDRED = Decimal(100)
 
 
 def _money(value: Decimal | None) -> str:
@@ -44,44 +46,45 @@ def _price_time(price: MarketPrice | None) -> str:
     return f"{shown} (last known)" if price.last_known else shown
 
 
-def percent_is_by_value(report: Report) -> bool:
-    """True if every holding has a current value, so "Current %" can be its share of the total value."""
-    return all(holding.allocation_percent is not None for holding in report.valuation.holdings)
-
-
 def report_rows(report: Report, details: bool = False) -> list[list[str]]:
-    """Return the header row and one row per open holding, as text.
+    """Return the header row, one row per open holding and a Total row, as text.
 
-    "Current %" is each holding's share of the total current value. If any
-    current value is missing, the column falls back to the share of the total
-    amount invested, and its header says so.
+    The columns follow the window's table and the spreadsheet: amount invested
+    and its share of the total invested, current value and its share of the
+    total current value, then the gain or loss, split into the amount and the
+    percentage so that each column holds one number. Percentages are written
+    without a % sign (21.08 means 21.08 %).
     """
     currency = report.statement.currency
-    by_value = percent_is_by_value(report)
     header = [
         "Index",
         f"Invested ({currency})",
-        f"Current value ({currency} approx.)",
-        "Current %" if by_value else "Current % (of invested)",
+        "% of Invested",
+        f"Current Value ({currency} approx.)",
+        "% of Current Value",
+        f"Gain/Loss ({currency})",
+        "% Up/Down",
     ]
-    if details:
-        header += [
-            "Shares",
-            f"Average cost ({currency})",
-            f"Price used ({currency})",
-            "Yahoo symbol",
-            "Price time",
-            f"Realized gain ({currency})",
-            f"Dividends ({currency})",
-        ]
-    rows = [header]
+    detail_header = [
+        "Shares",
+        f"Average cost ({currency})",
+        f"Price used ({currency})",
+        "Yahoo symbol",
+        "Price time",
+        f"Realized gain ({currency})",
+        f"Dividends ({currency})",
+    ]
+    rows = [header + detail_header if details else header]
     for holding in report.valuation.holdings:
         position, price = holding.position, holding.price
         row = [
             position.ticker,
             _money(position.cost_basis),
+            _money(holding.invested_percent),
             _money(holding.market_value),
-            _money(holding.allocation_percent if by_value else holding.invested_percent),
+            _money(holding.allocation_percent),
+            _money(holding.unrealized_pnl),
+            _money(holding.percent_change),
         ]
         if details:
             row += [
@@ -94,6 +97,21 @@ def report_rows(report: Report, details: bool = False) -> list[list[str]]:
                 _money(position.dividends),
             ]
         rows.append(row)
+
+    valuation = report.valuation
+    if valuation.holdings:
+        invested, value = valuation.portfolio.total_cost_basis, valuation.total_market_value
+        gain = valuation.unrealized_pnl
+        total = [
+            "Total",
+            _money(invested),
+            _money(_HUNDRED if invested > 0 else None),
+            _money(value),
+            _money(_HUNDRED if value else None),
+            _money(gain),
+            _money(gain / invested * _HUNDRED if gain is not None and invested > 0 else None),
+        ]
+        rows.append(total + [""] * len(detail_header) if details else total)
     return rows
 
 
@@ -172,8 +190,9 @@ def main(
     errors = errors or sys.stderr
     parser = argparse.ArgumentParser(
         prog="statement-tracker-cli",
-        description="Print, for each investment in a Revolut stock statement: index, amount invested, "
-        "approximate current value, and share of the total current value.",
+        description="Print, for each investment still held in a Revolut stock statement: amount invested, "
+        "approximate current value, the share of the total of each, and the gain or loss. "
+        "Percentages are printed without a % sign.",
     )
     parser.add_argument("statement", type=Path, help="the statement CSV file exported from Revolut")
     parser.add_argument("--table", action="store_true", help="print an aligned table instead of comma-separated rows")
@@ -247,12 +266,6 @@ def main(
     write_report(report, output, table=args.table, details=args.details)
     for note in report.notes:
         print(f"Note: {note}", file=errors)
-    if not percent_is_by_value(report):
-        print(
-            "Note: not every current value is available, so this time the percentages are each "
-            "index's share of the total amount invested instead of the total current value.",
-            file=errors,
-        )
     if not report.valuation.holdings:
         print("Note: the statement has no investments that are still held.", file=errors)
 

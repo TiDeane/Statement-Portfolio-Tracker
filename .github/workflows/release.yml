@@ -218,7 +218,9 @@ jobs:
           # Shown at the top of the release page, above the generated list of changes.
           notes="**Windows:** download the file ending in \`-windows-x64-setup.exe\`. Install steps are in the README.
 
-          **macOS (\`.dmg\`) is experimental:** these files are built automatically and have not been tried on a real Mac. **Linux (\`.tar.gz\`)** is provided as is."
+          **macOS (\`.dmg\`) is experimental:** these files are built automatically and have not been tried on a real Mac.
+          
+          **Linux (\`.tar.gz\`)** is provided as is."
           gh release create "$GITHUB_REF_NAME" "${files[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \

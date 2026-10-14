@@ -44,8 +44,9 @@ def test_cli_prints_one_row_per_open_holding_for_the_sample(tmp_path: Path) -> N
 
     assert code == 0
     assert output == (
-        "Index,Invested (EUR),Current value (EUR approx.),Current %\n"
-        "EQQB,541.49,589.31,100.00\n"  # 1.47328346 shares x 400
+        "Index,Invested (EUR),% of Invested,Current Value (EUR approx.),% of Current Value,Gain/Loss (EUR),% Up/Down\n"
+        "EQQB,541.49,100.00,589.31,100.00,47.82,8.83\n"  # 1.47328346 shares x 400
+        "Total,541.49,100.00,589.31,100.00,47.82,8.83\n"
     )
     assert "EQQB was matched to EQQB.DE (Nasdaq fund, XETRA, EUR)" in errors
     assert "IUSA" not in output  # fully sold
@@ -63,11 +64,12 @@ def test_cli_shows_each_holdings_share_of_the_total_current_value(tmp_path: Path
     )  # fmt: skip
 
     assert code == 0
-    # 1200 and 400 out of a total current value of 1600.
+    # 1001 and 201 out of 1202 invested; 1200 and 400 out of a total current value of 1600.
     assert output.splitlines() == [
-        "Index,Invested (EUR),Current value (EUR approx.),Current %",
-        "ABCD,1001.00,1200.00,75.00",
-        "WXYZ,201.00,400.00,25.00",
+        "Index,Invested (EUR),% of Invested,Current Value (EUR approx.),% of Current Value,Gain/Loss (EUR),% Up/Down",
+        "ABCD,1001.00,83.28,1200.00,75.00,199.00,19.88",
+        "WXYZ,201.00,16.72,400.00,25.00,199.00,99.00",
+        "Total,1202.00,100.00,1600.00,100.00,398.00,33.11",
     ]
 
 
@@ -89,10 +91,12 @@ def test_cli_details_add_the_columns_needed_to_check_the_numbers(tmp_path: Path)
 
     assert code == 0
     assert output.splitlines() == [
-        "Index,Invested (EUR),Current value (EUR approx.),Current %,Shares,Average cost (EUR),"
-        "Price used (EUR),Yahoo symbol,Price time,Realized gain (EUR),Dividends (EUR)",
-        "ABCD,600.60,720.00,64.29,6,100.1000,120.0000,ABCD.DE,2026-10-09T15:35+00:00,78.60,3.21",
-        "WXYZ,201.00,400.00,35.71,4,50.2500,100.0000,WXYZ.DE,unavailable,0.00,0.00",
+        "Index,Invested (EUR),% of Invested,Current Value (EUR approx.),% of Current Value,Gain/Loss (EUR),"
+        "% Up/Down,Shares,Average cost (EUR),Price used (EUR),Yahoo symbol,Price time,Realized gain (EUR),"
+        "Dividends (EUR)",
+        "ABCD,600.60,74.93,720.00,64.29,119.40,19.88,6,100.1000,120.0000,ABCD.DE,2026-10-09T15:35+00:00,78.60,3.21",
+        "WXYZ,201.00,25.07,400.00,35.71,199.00,99.00,4,50.2500,100.0000,WXYZ.DE,unavailable,0.00,0.00",
+        "Total,801.60,100.00,1120.00,100.00,318.40,39.72,,,,,,,",
     ]
 
 
@@ -103,12 +107,16 @@ def test_cli_table_output_is_aligned(tmp_path: Path) -> None:
 
     lines = output.splitlines()
     assert code == 0
-    assert lines[0].split() == ["Index", "Invested", "(EUR)", "Current", "value", "(EUR", "approx.)", "Current", "%"]
-    assert lines[1].split() == ["EQQB", "541.49", "589.31", "100.00"]
-    assert len(lines[0]) == len(lines[1])
+    assert lines[0].split() == [
+        "Index", "Invested", "(EUR)", "%", "of", "Invested", "Current", "Value", "(EUR", "approx.)",
+        "%", "of", "Current", "Value", "Gain/Loss", "(EUR)", "%", "Up/Down",
+    ]  # fmt: skip
+    assert lines[1].split() == ["EQQB", "541.49", "100.00", "589.31", "100.00", "47.82", "8.83"]
+    assert lines[2].split() == ["Total", "541.49", "100.00", "589.31", "100.00", "47.82", "8.83"]
+    assert len(lines[0]) == len(lines[1]) == len(lines[2])
 
 
-def test_missing_price_switches_the_percentages_to_shares_of_the_amount_invested(tmp_path: Path) -> None:
+def test_missing_price_leaves_what_depends_on_it_unavailable(tmp_path: Path) -> None:
     provider = FakeProvider()
     provider.add("ABCD.DE", "EUR", price="120")
     provider.add("WXYZ.DE", "EUR", price=None)
@@ -120,13 +128,12 @@ def test_missing_price_switches_the_percentages_to_shares_of_the_amount_invested
     )  # fmt: skip
 
     assert code == 0
-    # No total current value without WXYZ, so: 1001 and 201 out of 1202 invested, and the header says so.
-    assert output.splitlines() == [
-        "Index,Invested (EUR),Current value (EUR approx.),Current % (of invested)",
-        "ABCD,1001.00,1200.00,83.28",
-        "WXYZ,201.00,unavailable,16.72",
+    # No total current value without WXYZ, so no shares of it either; the shares of the amount invested remain.
+    assert output.splitlines()[1:] == [
+        "ABCD,1001.00,83.28,1200.00,unavailable,199.00,19.88",
+        "WXYZ,201.00,16.72,unavailable,unavailable,unavailable,unavailable",
+        "Total,1202.00,100.00,unavailable,unavailable,unavailable,unavailable",
     ]
-    assert "share of the total amount invested instead of the total current value" in errors
     assert "WXYZ: current value unavailable. No current price for WXYZ.DE." in errors
 
 
@@ -137,7 +144,7 @@ def test_ambiguous_ticker_is_left_unavailable_without_a_chooser(tmp_path: Path) 
     code, output, errors = run_cli(str(SAMPLE), provider=provider, settings=tmp_path / "settings.json")
 
     assert code == 0
-    assert output.splitlines()[1] == "EQQB,541.49,unavailable,100.00"
+    assert output.splitlines()[1] == "EQQB,541.49,100.00,unavailable,unavailable,unavailable,unavailable"
     assert "More than one listing fits EQQB" in errors
     assert "EQQB.DE, EQQB.MI" in errors
     assert not (tmp_path / "settings.json").exists()
@@ -168,7 +175,7 @@ def test_matched_ticker_is_remembered_so_the_next_run_skips_matching(tmp_path: P
     code, output, _ = run_cli(str(SAMPLE), provider=second, settings=settings_path)
 
     assert code == 0
-    assert output.splitlines()[1] == "EQQB,541.49,589.31,100.00"
+    assert output.splitlines()[1] == "EQQB,541.49,100.00,589.31,100.00,47.82,8.83"
     assert second.calls == [("quote", "EQQB.DE")]
 
 
@@ -205,7 +212,7 @@ def test_symbol_that_yahoo_does_not_know_is_not_saved(tmp_path: Path) -> None:
     )
 
     assert code == 0
-    assert output.splitlines()[1] == "EQQB,541.49,unavailable,100.00"
+    assert output.splitlines()[1] == "EQQB,541.49,100.00,unavailable,unavailable,unavailable,unavailable"
     assert "Yahoo has no data for NOPE.XX" in errors
     assert not settings_path.exists()
 
@@ -216,7 +223,7 @@ def test_unreachable_provider_leaves_values_unavailable(tmp_path: Path) -> None:
     )
 
     assert code == 0
-    assert output.splitlines()[1] == "EQQB,541.49,unavailable,100.00"
+    assert output.splitlines()[1] == "EQQB,541.49,100.00,unavailable,unavailable,unavailable,unavailable"
     assert "offline" in errors
 
 
@@ -251,7 +258,7 @@ def test_cli_marks_the_time_of_a_last_known_price(tmp_path: Path) -> None:
     )
 
     assert code == 0
-    assert output.splitlines()[1].startswith("EQQB,541.49,589.31,100.00,")
+    assert output.splitlines()[1].startswith("EQQB,541.49,100.00,589.31,100.00,47.82,8.83,")
     assert ",2026-10-09T17:35+00:00 (last known)," in output.splitlines()[1]
     assert "is used instead" in errors
 
@@ -302,7 +309,7 @@ def test_price_in_another_currency_is_converted_and_labelled(tmp_path: Path) -> 
     )
 
     assert code == 0
-    assert output.splitlines()[1] == "EQQB,541.49,662.98,100.00"  # 1.47328346 x 500 x 0.9
+    assert output.splitlines()[1] == "EQQB,541.49,100.00,662.98,100.00,121.49,22.44"  # 1.47328346 x 500 x 0.9
     assert "quoted in USD and was converted to EUR" in errors
 
 
@@ -396,7 +403,7 @@ def test_cli_stops_on_an_unknown_type_unless_told_to_ignore_it(tmp_path: Path) -
         str(statement), *symbols, "--ignore-unknown-types", provider=provider, settings=tmp_path / "s.json"
     )
     assert code == 0
-    assert len(output.splitlines()) == 3
+    assert len(output.splitlines()) == 4  # header, two holdings, Total
     assert "RESULTS MAY BE WRONG" in errors
 
 

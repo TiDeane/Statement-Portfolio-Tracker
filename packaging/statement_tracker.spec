@@ -63,7 +63,6 @@ def _wanted(entry) -> bool:
 a = Analysis(
     [str(ROOT / "packaging" / "entry.py")],
     pathex=[str(ROOT / "src")],
-    datas=[(str(ROOT / "samples" / "revolut_sample.csv"), "samples")],
     # Heavy libraries the app does not use. Listed so that an installed copy (from another
     # package in the build environment) can never end up in the download.
     excludes=[

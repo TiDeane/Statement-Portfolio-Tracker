@@ -511,6 +511,20 @@ def test_locked_spreadsheet_still_shows_the_investments(app, tmp_path: Path, mon
     assert "spreadsheet was not updated" in window.status_label.text()
 
 
+def test_packaging_smoke_test_reads_the_sample_and_writes_a_spreadsheet(app, tmp_path: Path) -> None:
+    import json
+
+    from statement_tracker.__main__ import _run_smoke_test
+
+    out = tmp_path / "report.json"
+
+    assert _run_smoke_test(SAMPLE, out, None) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["ok"] and report["spreadsheet_written"]
+    assert report["sample_rows"] == 18
+    assert report["imports"]["openpyxl"]["version"]
+
+
 def test_help_page_gives_the_revolut_steps_and_asks_for_the_whole_history() -> None:
     from statement_tracker.ui.dialogs import WHERE_IS_THE_FILE_TEXT
 

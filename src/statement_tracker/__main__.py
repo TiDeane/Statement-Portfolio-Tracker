@@ -14,7 +14,7 @@ import tempfile  # noqa: E402
 import traceback  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-from statement_tracker import APP_NAME, __version__, spike  # noqa: E402
+from statement_tracker import APP_NAME, __version__  # noqa: E402
 
 
 def _run_gui() -> int:
@@ -41,10 +41,11 @@ def _run_gui() -> int:
 
 
 def _run_smoke_test(sample: Path, out: Path | None, quote_symbol: str | None) -> int:
-    """Open the window, load ``sample``, import the heavy libraries, write a JSON report.
+    """Open the window, read ``sample`` and write it to a spreadsheet, offline; write a JSON report.
 
-    Used by CI against the packaged app. The optional price fetch is reported
-    but never decides the result, because it depends on the network.
+    Used by CI against the packaged app, so the real parser and exporter are what gets
+    checked. The optional price fetch is reported but never decides the result, because
+    it depends on the network.
     """
     report: dict[str, object] = {
         "ok": False,
@@ -54,35 +55,47 @@ def _run_smoke_test(sample: Path, out: Path | None, quote_symbol: str | None) ->
         "frozen": bool(getattr(sys, "frozen", False)),
     }
     try:
+        from datetime import date
+
         from PySide6.QtWidgets import QApplication
 
+        from statement_tracker.core.calculator import compute_portfolio, value_portfolio
+        from statement_tracker.core.exporters.excel import ExcelExporter
+        from statement_tracker.core.parser import load_statement
         from statement_tracker.settings import Settings
         from statement_tracker.ui.main_window import MainWindow
 
-        app = QApplication(sys.argv[:1])
-        # A throwaway settings file: the smoke test must never touch the user's own settings.
-        window = MainWindow(Settings(Path(tempfile.mkdtemp()) / "settings.json"))
+        app = QApplication.instance() or QApplication(sys.argv[:1])
+        # A throwaway folder: the smoke test must never touch the user's own settings or files.
+        scratch = Path(tempfile.mkdtemp())
+        window = MainWindow(Settings(scratch / "settings.json"))
         window.show()
         app.processEvents()
         report["window_shown_s"] = round(time.perf_counter() - _STARTED, 3)
         report["qt_platform"] = app.platformName()
-        report["bundled_sample_rows"] = spike.count_statement_rows(spike.bundled_sample_path())
-        report["sample_rows"] = spike.count_statement_rows(sample)
         window.set_statement(sample)
-        imports = (spike.import_openpyxl(),)
+
+        started = time.perf_counter()
+        import openpyxl
+
         report["imports"] = {
-            item.name: {"version": item.version, "seconds": round(item.seconds, 3)} for item in imports
+            "openpyxl": {"version": openpyxl.__version__, "seconds": round(time.perf_counter() - started, 3)}
         }
-        report["openpyxl_roundtrip"] = spike.openpyxl_roundtrip()
+        statement = load_statement(sample)
+        report["sample_rows"] = len(statement.transactions)
+        valuation = value_portfolio(compute_portfolio(statement), {})  # offline: no prices
+        written = ExcelExporter(scratch / "smoke.xlsx").export(valuation, date.today()).holdings_written
+        report["spreadsheet_written"] = written == len(valuation.holdings) > 0
         if quote_symbol:
             try:
-                _, currency = spike.fetch_last_price(quote_symbol)
-                report["quote"] = {"ok": True, "currency": currency}
+                from statement_tracker.core.market_data.yahoo_provider import YahooProvider
+
+                report["quote"] = {"ok": True, "currency": YahooProvider().quote(quote_symbol).currency}
             except Exception as exc:
                 report["quote"] = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
         app.processEvents()
         window.close()
-        report["ok"] = bool(report["openpyxl_roundtrip"]) and report["sample_rows"] == report["bundled_sample_rows"]
+        report["ok"] = bool(report["spreadsheet_written"])
     except Exception:
         report["error"] = traceback.format_exc()
 

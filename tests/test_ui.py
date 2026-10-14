@@ -173,6 +173,41 @@ def test_step_2_shows_the_choice_as_options_and_the_files_as_actions(
     assert state() == (False, True, True) and files_shown()
 
 
+def test_long_notes_get_their_own_room_under_the_table(app, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import dataclasses
+
+    from statement_tracker.ui import main_window
+
+    real_build = main_window.build_report
+    long_note = "no listing could be matched to your purchases, so the first one found was used, as you asked. " * 3
+
+    def with_long_notes(*args, **kwargs):
+        report = real_build(*args, **kwargs)
+        return dataclasses.replace(report, notes=report.notes + tuple(f"TICK{n}: {long_note}" for n in range(6)))
+
+    monkeypatch.setattr(main_window, "build_report", with_long_notes)
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.show()
+    window.set_statement(SAMPLE)
+    run(app, window)
+    settle(app)
+
+    def bottom_of_table() -> int:
+        return window.table.mapTo(window, window.table.rect().bottomLeft()).y()
+
+    def top_of_notes() -> int:
+        return window.notes_label.mapTo(window, window.notes_label.rect().topLeft()).y()
+
+    notes = window.notes_label
+    assert top_of_notes() > bottom_of_table()
+    assert notes.height() >= notes.heightForWidth(notes.width())  # every line shown, none cut off
+
+    window.resize(700, window.height())  # narrower: the notes wrap onto more lines and still fit
+    settle(app)
+    assert top_of_notes() > bottom_of_table()
+    assert notes.height() >= notes.heightForWidth(notes.width())
+
+
 def test_the_window_fits_the_steps_until_there_is_a_result(app, tmp_path: Path) -> None:
     window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
     window.show()

@@ -14,7 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from PySide6.QtCore import QDate, QLocale, QStandardPaths, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QBrush, QCloseEvent, QColor, QDragEnterEvent, QDropEvent, QFont
+from PySide6.QtGui import QBrush, QCloseEvent, QColor, QDragEnterEvent, QDropEvent, QFont, QResizeEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -531,6 +531,30 @@ class MainWindow(QMainWindow):
         if not report.valuation.holdings:
             self._status("Done. The statement has no investments that you still hold.", "ok")
         self.notes_label.setText("\n".join(f"Note: {note}" for note in notes))
+        self._fit_notes()
+        # Sized last, once the notes are in: they take room under the table too.
+        if report.valuation.holdings:
+            self._grow_to_fit_table()
+
+    def _fit_notes(self, window_width: int | None = None) -> None:
+        """Reserve the height the notes need at the current width.
+
+        Qt does not keep room for word-wrapped text by itself, so without this a short window
+        squeezes the notes onto the table. The table, which can scroll, gives way instead.
+        """
+        label = self.notes_label
+        if not label.text():
+            label.setMinimumHeight(0)
+            return
+        # The width the notes get: the window's, less the margins. The label's own width is out of
+        # date while the window is being resized.
+        margins = self.centralWidget().layout().contentsMargins()
+        width = (window_width if window_width is not None else self.width()) - margins.left() - margins.right()
+        label.setMinimumHeight(label.heightForWidth(width))
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self._fit_notes(event.size().width())  # a different width wraps the notes onto a different number of lines
 
     # -- showing the result ------------------------------------------------------
 
@@ -644,8 +668,6 @@ class MainWindow(QMainWindow):
                 self.table.setItem(row_number, column, item)
         self.table.setVisible(bool(valuation.holdings))
         self._filler.setVisible(not valuation.holdings)
-        if valuation.holdings:
-            self._grow_to_fit_table()
 
     def _fit_height_to_steps(self) -> None:
         """Before there is a result, keep the window as tall as the steps, shrinking as well as growing.

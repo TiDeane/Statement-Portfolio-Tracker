@@ -27,9 +27,9 @@ PRIVACY_TEXT = (
     "use the app.\n\n"
     "The only information sent anywhere is the ticker symbols of your investments and dates, which go to "
     "Yahoo Finance to look up prices. Your amounts and your statement never leave this computer.\n\n"
-    "This app is unofficial and is not affiliated with Revolut. It is not financial advice. Prices come "
-    "from Yahoo Finance through an unofficial library, may be delayed or wrong, and are subject to "
-    "Yahoo's terms."
+    "This app is unofficial and is not affiliated with Revolut. It is not financial advice. Prices are "
+    "read from Yahoo Finance's public web pages, which is unofficial; they may be delayed or wrong, and "
+    "are subject to Yahoo's terms."
 )
 
 WHERE_IS_THE_FILE_TEXT = (

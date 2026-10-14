@@ -12,7 +12,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 QtWidgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
 
 from fakes import SAMPLE, FakeProvider, ranges_around, write_statement  # noqa: E402
-from PySide6.QtCore import QEvent  # noqa: E402
+from PySide6.QtCore import QEvent, Qt  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
 from openpyxl import load_workbook  # noqa: E402
 
 from statement_tracker.core.calculator import buys_by_ticker  # noqa: E402
@@ -21,6 +22,7 @@ from statement_tracker.core.parser import load_statement  # noqa: E402
 from statement_tracker.settings import Settings  # noqa: E402
 from statement_tracker.ui import theme  # noqa: E402
 from statement_tracker.ui.dialogs import ChooseListingDialog  # noqa: E402
+from statement_tracker.ui.settings_dialog import ASK_AGAIN_STATUS, SettingsDialog  # noqa: E402
 from statement_tracker.ui.main_window import (  # noqa: E402
     LAST_KNOWN_NOTE,
     MAX_SCREEN_SHARE,
@@ -76,6 +78,12 @@ def run(app, window: MainWindow) -> None:
         time.sleep(0.01)
     app.processEvents()
     assert not window._busy()
+
+
+def settle(app) -> None:
+    """Let work queued for "once the current event is handled" run."""
+    for _ in range(3):
+        app.processEvents()
 
 
 def shows(label, path: Path) -> bool:
@@ -415,6 +423,137 @@ def test_last_known_price_is_marked_in_the_table_and_explained(app, tmp_path: Pa
     assert total.text().endswith(" *") and "not up to date" in total.toolTip()
     assert offline.notes_label.text().startswith(f"Note: {LAST_KNOWN_NOTE}")
     assert "is used instead" in offline.notes_label.text()
+
+
+def test_settings_rename_choose_again_and_forget_an_investment(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.set_statement(SAMPLE)
+    run(app, window)
+    dialog = SettingsDialog(Settings.load(tmp_path / "settings.json"))
+
+    def row() -> list[str]:
+        return [dialog.table.item(0, column).text() for column in range(4)]
+
+    assert row() == ["EQQB", "Nasdaq fund", "EQQB.DE (XETRA, EUR)", "Matched automatically"]
+    assert "from Yahoo Finance" in dialog.table.item(0, 1).toolTip()  # Yahoo's name, not the user's
+    assert not dialog.rename_button.isEnabled()  # nothing selected yet
+
+    dialog.table.selectRow(0)
+    dialog.table.item(0, 1).setText(" Tech fund ")  # what pressing Enter in the cell's editor does
+    settle(app)  # the table is redrawn once the edit is over
+    assert row()[1] == "Tech fund"
+    assert "from Yahoo Finance" not in dialog.table.item(0, 1).toolTip()
+    assert Settings.load(tmp_path / "settings.json").index_names == {"EQQB": "Tech fund"}
+
+    dialog.choose_again_selected()
+    assert row()[3] == ASK_AGAIN_STATUS
+    assert not dialog.choose_again_button.isEnabled()
+    assert Settings.load(tmp_path / "settings.json").ask_again == {"EQQB"}
+
+    dialog.confirm = lambda question: False
+    dialog.forget_selected()
+    assert dialog.table.rowCount() == 1  # cancelled
+    dialog.confirm = lambda question: True
+    dialog.table.selectRow(0)
+    dialog.forget_selected()
+    assert dialog.table.isHidden() and not dialog.empty_label.isHidden()
+    assert Settings.load(tmp_path / "settings.json").known_tickers() == []
+
+
+def test_settings_forget_all_keeps_the_rest(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.set_statement(SAMPLE)
+    window.set_spreadsheet(tmp_path / "mine.xlsx")
+    run(app, window)
+    settings_path = tmp_path / "settings.json"
+    dialog = SettingsDialog(Settings.load(settings_path))
+    asked: list[str] = []
+
+    dialog.confirm = lambda question: bool(asked.append(question))  # cancelled
+    dialog.forget_all()
+    assert dialog.table.rowCount() == 1 and asked[0].startswith("Forget your one investment?")
+
+    dialog.confirm = lambda question: True
+    dialog.forget_all()
+    saved = Settings.load(settings_path)
+    assert saved.known_tickers() == [] and not dialog.forget_all_button.isEnabled()
+    assert saved.spreadsheet_path == tmp_path / "mine.xlsx"
+    assert (tmp_path / "last_prices.json").exists()
+
+
+def test_settings_only_the_name_is_edited_in_the_table(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.set_statement(SAMPLE)
+    run(app, window)
+    settings_path = tmp_path / "settings.json"
+    dialog = SettingsDialog(Settings.load(settings_path))
+
+    editable = [bool(dialog.table.item(0, column).flags() & Qt.ItemFlag.ItemIsEditable) for column in range(4)]
+    assert editable == [False, True, False, False]
+
+    def type_name(text: str | None) -> None:
+        """Press Rename, then type ``text`` and Enter, or Esc when ``text`` is None."""
+        dialog.table.selectRow(0)
+        dialog.rename_button.click()  # opens the same in-cell editor as a double click
+        editors = dialog.table.viewport().findChildren(QtWidgets.QLineEdit)
+        editor = next(editor for editor in editors if editor.isVisible())
+        if text is None:
+            QTest.keyClick(editor, Qt.Key.Key_Escape)
+        else:
+            editor.setText(text)
+            QTest.keyClick(editor, Qt.Key.Key_Return)
+        settle(app)
+
+    dialog.show()
+    type_name("Nasdaq fund")  # Yahoo's name, unchanged: stays Yahoo's
+    assert Settings.load(settings_path).index_names == {}
+    type_name("Mine")
+    assert Settings.load(settings_path).index_names == {"EQQB": "Mine"}
+    type_name(None)  # Esc cancels
+    assert Settings.load(settings_path).index_names == {"EQQB": "Mine"}
+    type_name("  ")  # empty: back to Yahoo's name
+    assert Settings.load(settings_path).index_names == {}
+    assert dialog.table.item(0, 1).text() == "Nasdaq fund"
+    dialog.close()
+
+
+def test_settings_highlight_the_whole_row_under_the_mouse(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.set_statement(SAMPLE)
+    run(app, window)
+    dialog = SettingsDialog(Settings.load(tmp_path / "settings.json"))
+    delegate = dialog.table.itemDelegate()
+
+    def hovered(column: int) -> bool:
+        option = QtWidgets.QStyleOptionViewItem()
+        delegate.initStyleOption(option, dialog.table.model().index(0, column))
+        return bool(option.state & QtWidgets.QStyle.StateFlag.State_MouseOver)
+
+    dialog.table.entered.emit(dialog.table.model().index(0, 1))  # the mouse is over the name
+    assert [hovered(column) for column in range(4)] == [True, True, True, True]
+    dialog.table.viewportEvent(QEvent(QEvent.Type.Leave))  # the mouse leaves the table
+    assert not any(hovered(column) for column in range(4))
+
+
+def test_settings_open_from_the_window_on_its_own_settings(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.set_statement(SAMPLE)
+    run(app, window)
+    shown: list[list[str]] = []
+    window.show_settings = lambda dialog: shown.append(dialog._settings.known_tickers())
+
+    window.open_settings()
+
+    assert shown == [["EQQB"]]
+
+
+def test_settings_button_is_disabled_while_running(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.set_statement(SAMPLE)
+    window.start()
+    assert not window.settings_button.isEnabled()
+    run(app, window)
+    assert window.settings_button.isEnabled()
 
 
 def test_progress_bar_counts_each_investment_and_the_spreadsheet(app, tmp_path: Path) -> None:

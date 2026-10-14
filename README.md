@@ -88,7 +88,20 @@ Revolut may move these menus in newer versions of its app.
 
 ### If the app asks you to confirm an investment
 
-Many funds are traded on several stock exchanges under the same code. When the app cannot tell which one is yours, it shows a short list. They are usually the same fund at almost the same price, so pick the one whose name and currency match what you see in Revolut. The app remembers your answer and does not ask again. If you are unsure, **Skip this investment** leaves it without a current value; nothing is guessed.
+Many funds are traded on several stock exchanges under the same code. When the app cannot tell which one is yours, it shows a short list. They are usually the same fund at almost the same price, so pick the one whose name and currency match what you see in Revolut. The app remembers your answer and does not ask again. If you are unsure, **Skip this investment** leaves it without a current value; nothing is guessed. If you picked the wrong one, see Settings below.
+
+### Settings
+
+The **Settings** button lists the investments the app remembers.
+
+- **Rename** one: double-click its name (or select it and press **Rename**) and type the name to show next to its code in the table and the spreadsheet. Enter saves it, Esc cancels. Leave it empty to go back to the fund's name from Yahoo Finance, which is shown in grey.
+
+Select an investment to:
+
+- **Choose the listing on the next run**: nothing changes right away. The next time you press the green button, the app shows you the list of listings for it again to pick from. Until then, the current one is kept.
+- **Forget** it: the app matches it again on the next run, as on the first day.
+
+**Forget all...** does the same for every investment at once. Your spreadsheet choice and the last known prices are kept.
 
 ## Read the result
 
@@ -132,7 +145,7 @@ Everything happens on your computer. There are no accounts, and the app does not
 
 The only information that leaves your computer are the codes of your investments and dates, sent to Yahoo Finance to look up prices. Your amounts and your statement file are never sent anywhere.
 
-The app keeps its settings (your confirmed investments and where your spreadsheet is) and the last price it fetched for each fund in your user folder: on Windows under `%LOCALAPPDATA%\StatementPortfolioTracker`. Those prices are prices per share from Yahoo Finance; none of your amounts are kept.
+The app keeps its settings (your confirmed investments and where your spreadsheet is) and the last price it fetched for each fund in your user folder: on Windows under `%LOCALAPPDATA%\StatementPortfolioTracker`. Those prices are prices per share from Yahoo Finance; none of your amounts are kept. Together they take a few kilobytes. To remove them, delete that folder.
 
 ## Known limitations
 

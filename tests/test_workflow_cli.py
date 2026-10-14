@@ -192,6 +192,63 @@ def test_confirmed_choice_is_never_replaced_by_automatic_matching(tmp_path: Path
     assert settings.ticker_choices["EQQB"].symbol == "EQQB.MI"
 
 
+def test_choosing_again_asks_even_when_matching_is_sure_and_only_once(tmp_path: Path) -> None:
+    settings = Settings.load(tmp_path / "settings.json")
+    provider = sample_provider()
+    provider.add("EQQB.MI", "EUR", price="401")  # no history, so EQQB.DE stays the only match
+    build_report(SAMPLE, provider, settings)
+    settings.ask_again.add("EQQB")
+    asked: list[str] = []
+
+    def choose(resolution) -> str:
+        asked.append(resolution.ticker)
+        return "EQQB.MI"
+
+    report = build_report(SAMPLE, provider, settings, chooser=choose)
+    build_report(SAMPLE, provider, settings, chooser=choose)
+
+    assert asked == ["EQQB"]
+    assert report.valuation.holdings[0].price.symbol == "EQQB.MI"
+    saved = Settings.load(tmp_path / "settings.json")
+    assert (saved.ticker_choices["EQQB"].symbol, saved.ticker_choices["EQQB"].confirmed) == ("EQQB.MI", True)
+    assert saved.ask_again == set()
+
+
+def test_skipping_when_asked_again_keeps_the_listing_used_before(tmp_path: Path) -> None:
+    settings = Settings.load(tmp_path / "settings.json")
+    build_report(SAMPLE, sample_provider(), settings)
+    settings.ask_again.add("EQQB")
+
+    report = build_report(SAMPLE, sample_provider(), settings, chooser=lambda resolution: None)
+
+    assert report.valuation.holdings[0].price.symbol == "EQQB.DE"
+    assert Settings.load(tmp_path / "settings.json").ask_again == set()
+
+
+def test_choosing_again_waits_for_a_run_that_can_ask(tmp_path: Path) -> None:
+    settings = Settings.load(tmp_path / "settings.json")
+    build_report(SAMPLE, sample_provider(), settings)
+    settings.ask_again.add("EQQB")
+
+    report = build_report(SAMPLE, sample_provider(), settings)  # no chooser, like the CLI with --no-prompt
+
+    assert report.valuation.holdings[0].price.symbol == "EQQB.DE"
+    assert settings.ask_again == {"EQQB"}
+
+
+def test_forgetting_drops_listings_and_names_and_keeps_the_rest(tmp_path: Path) -> None:
+    settings = Settings.load(tmp_path / "settings.json")
+    build_report(SAMPLE, sample_provider(), settings)
+    settings.index_names = {"EQQB": "Nasdaq", "OLD": "Sold long ago"}
+    settings.spreadsheet_path = tmp_path / "mine.xlsx"
+
+    settings.forget("EQQB")
+    assert settings.known_tickers() == ["OLD"]
+    settings.forget_all()
+    assert settings.known_tickers() == []
+    assert settings.spreadsheet_path == tmp_path / "mine.xlsx"
+
+
 def test_symbol_given_by_the_user_replaces_a_saved_choice(tmp_path: Path) -> None:
     settings_path = tmp_path / "settings.json"
     provider = sample_provider()

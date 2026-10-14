@@ -39,6 +39,7 @@ from statement_tracker.core.models import MarketPrice
 from statement_tracker.core.ticker_resolver import Resolution
 from statement_tracker.settings import Settings
 from statement_tracker.ui import dialogs, theme
+from statement_tracker.ui.settings_dialog import SettingsDialog
 from statement_tracker.ui.workers import QuestionBridge, Task
 from statement_tracker.workflow import Report, build_report, display_name, price_steps, update_spreadsheet
 
@@ -122,6 +123,7 @@ class MainWindow(QMainWindow):
         self.ask_retry: Callable[[UserFacingError], bool] = lambda error: dialogs.show_error(
             self, error, can_retry=True
         )
+        self.show_settings: Callable[[SettingsDialog], object] = lambda dialog: dialog.exec()
         self._last_run: tuple[Path | None, date] = (None, today())
         self.progressed.connect(self._show_progress)
         self._bridge = QuestionBridge(lambda resolution: self.ask_listing(resolution), self)
@@ -206,10 +208,14 @@ class MainWindow(QMainWindow):
         self.notes_label.setWordWrap(True)
         self.notes_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
+        self.settings_button = QPushButton("Se&ttings")
+        self.settings_button.setToolTip("Rename your investments, choose a listing again, or forget them.")
+        self.settings_button.clicked.connect(self.open_settings)
         about_button = QPushButton("&About and privacy")
         about_button.clicked.connect(lambda: dialogs.show_about(self))
         footer = QHBoxLayout()
         footer.addStretch(1)
+        footer.addWidget(self.settings_button)
         footer.addWidget(about_button)
 
         layout = QVBoxLayout()
@@ -346,6 +352,15 @@ class MainWindow(QMainWindow):
             else "Step 3: show my investments"
         )
         self.go_button.setEnabled(self._statement is not None and not self._busy())
+        self.settings_button.setEnabled(not self._busy())  # a run reads and saves the same settings
+
+    def open_settings(self) -> None:
+        """Show the settings window."""
+        dialog = SettingsDialog(self._settings, self)
+        try:
+            self.show_settings(dialog)
+        finally:
+            dialog.deleteLater()  # a new one is made each time; this one must not linger as a child of the window
 
     # -- running -----------------------------------------------------------------
 

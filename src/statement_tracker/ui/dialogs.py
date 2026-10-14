@@ -110,6 +110,11 @@ class ChooseListingDialog(QDialog):
                 f"Your investment {ticker} is traded in more than one place. They are usually the same "
                 "fund at almost the same price. Choose the one that matches yours:"
             )
+        elif resolution.confidence is Confidence.CONFIDENT:
+            intro = (
+                f"Choose which fund your investment {ticker} is. The one that fits your purchases is "
+                "selected; you can also type a Yahoo Finance symbol:"
+            )
         elif resolution.candidates:
             intro = (
                 f"The app could not tell for sure which fund {ticker} is. "

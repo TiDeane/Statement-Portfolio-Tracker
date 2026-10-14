@@ -134,6 +134,8 @@ def _prompting_chooser(errors: TextIO) -> Chooser:
         ticker = resolution.ticker
         if resolution.confidence is Confidence.AMBIGUOUS:
             print(f"\nMore than one listing fits {ticker}. Which one do you hold?", file=errors)
+        elif resolution.confidence is Confidence.CONFIDENT:
+            print(f"\nWhich listing is {ticker}? The first one fits your purchases.", file=errors)
         else:
             print(f"\n{ticker} could not be matched to a listing automatically.", file=errors)
         for number, candidate in enumerate(resolution.candidates, start=1):

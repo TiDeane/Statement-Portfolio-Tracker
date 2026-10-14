@@ -130,7 +130,9 @@ def build_report(
             number + 1, steps, f"Getting the current price of {ticker} ({number + 1} of {len(positions)})..."
         )
         saved = settings.ticker_choices.get(ticker)
-        symbol: str | None = overrides.get(ticker) or (saved.symbol if saved else None)
+        # The user asked to choose this listing again: show the choice even if matching is sure.
+        asking_again = ticker in settings.ask_again and ticker not in overrides and chooser is not None
+        symbol: str | None = overrides.get(ticker) or (saved.symbol if saved and not asking_again else None)
         user_chose = ticker in overrides
 
         try:
@@ -138,12 +140,18 @@ def build_report(
                 resolution = resolve_ticker(
                     ticker, buys.get(ticker, []), statement.currency, provider, settings.suffixes
                 )
-                if resolution.best is not None:
+                if resolution.best is not None and not asking_again:
                     symbol = resolution.best.info.symbol
                     notes.append(f"{ticker} was matched to {_describe(resolution.best.info)}.")
                 elif chooser is not None:
                     symbol = chooser(resolution)
                     user_chose = symbol is not None
+                if asking_again:
+                    # Asked once; skipping keeps the listing used before.
+                    settings.ask_again.discard(ticker)
+                    settings_changed = True
+                    if symbol is None and saved is not None:
+                        symbol = saved.symbol
                 if symbol is None:
                     unavailable[ticker] = _needs_choice_reason(resolution)
                     continue

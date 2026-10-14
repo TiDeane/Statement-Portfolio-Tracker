@@ -26,7 +26,6 @@ class SymbolInfo:
     exchange: str | None = None
     currency: str | None = None
     timezone: str | None = None
-    isin: str | None = None
 
 
 @dataclass(frozen=True)

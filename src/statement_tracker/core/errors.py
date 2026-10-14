@@ -28,7 +28,6 @@ class StatementFormatError(UserFacingError):
     """The file's columns are not a format this app knows."""
 
     def __init__(self, expected: tuple[str, ...], found: tuple[str, ...]) -> None:
-        self.expected = expected
         self.found = found
         super().__init__(
             "This file does not look like a Revolut stock statement.\n"

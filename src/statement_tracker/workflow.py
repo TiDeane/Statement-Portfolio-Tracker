@@ -5,7 +5,8 @@ The command line and the windows both call this, so no screen is ever required.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -13,8 +14,8 @@ from pathlib import Path
 from statement_tracker.core.calculator import buys_by_ticker, compute_portfolio, value_portfolio
 from statement_tracker.core.exporters.base import ExportResult
 from statement_tracker.core.exporters.excel import ExcelExporter
-from statement_tracker.core.market_data.pricing import price_in_currency
-from statement_tracker.core.market_data.provider import PriceProvider, PriceUnavailableError, SymbolInfo
+from statement_tracker.core.market_data.pricing import RateBook, exchange_pair, price_in_currency
+from statement_tracker.core.market_data.provider import PriceProvider, PriceUnavailableError, Quote, SymbolInfo
 from statement_tracker.core.models import MarketPrice, PortfolioValuation, Statement
 from statement_tracker.core.parser import load_statement
 from statement_tracker.core.ticker_resolver import Confidence, Resolution, resolve_ticker
@@ -113,7 +114,9 @@ def build_report(
     now = now or datetime.now(UTC)
     cache = price_cache if price_cache is not None else PriceCache.beside(settings.path)
 
-    notes: list[str] = list(portfolio.warnings)
+    # Notes are kept per ticker and put together in statement order at the end, so they read
+    # the same however the prices arrive.
+    ticker_notes: dict[str, list[str]] = {position.ticker: [] for position in portfolio.open_positions}
     prices: dict[str, MarketPrice] = {}
     unavailable: dict[str, str] = {}
     settings_changed = False
@@ -121,14 +124,17 @@ def build_report(
     positions = portfolio.open_positions
     steps = price_steps(len(positions))
     if positions:
-        # Loading the price library takes seconds on a cold start: its own step, so the bar does not stall.
         report_progress(0, steps, "Getting ready to look up prices...")
         provider.prepare()
-    for number, position in enumerate(positions):
+
+    # 1. Decide each ticker's listing, one by one: this may ask the user.
+    decided: dict[str, tuple[str, bool]] = {}
+    """Ticker -> (Yahoo symbol, whether the user chose it)."""
+    failed: dict[str, PriceUnavailableError] = {}
+    """Tickers whose listing could not be decided because Yahoo could not be reached."""
+    for position in positions:
         ticker = position.ticker
-        report_progress(
-            number + 1, steps, f"Getting the current price of {ticker} ({number + 1} of {len(positions)})..."
-        )
+        notes = ticker_notes[ticker]
         saved = settings.ticker_choices.get(ticker)
         # The user asked to choose this listing again: show the choice even if matching is sure.
         asking_again = ticker in settings.ask_again and ticker not in overrides and chooser is not None
@@ -137,6 +143,7 @@ def build_report(
 
         try:
             if symbol is None:
+                report_progress(0, steps, f"Finding the stock exchange listing of {ticker}...")
                 resolution = resolve_ticker(
                     ticker, buys.get(ticker, []), statement.currency, provider, settings.suffixes
                 )
@@ -170,9 +177,35 @@ def build_report(
                 if symbol is None:
                     unavailable[ticker] = _needs_choice_reason(resolution)
                     continue
+        except PriceUnavailableError as exc:
+            failed[ticker] = exc
+            continue
+        decided[ticker] = (symbol, user_chose)
 
-            quote = provider.quote(symbol)
-            price = price_in_currency(quote, statement.currency, provider)
+    # 2. Fetch every price at the same time, then each exchange rate needed, once.
+    def prices_progress(done: int, total: int) -> None:
+        # The bar goes from "getting ready" (step 0) to all prices in (the last step).
+        report_progress(1 + done * (steps - 1) // total, steps, f"Getting the current prices ({done} of {total})...")
+
+    quotes = _fetch_quotes(provider, {symbol for symbol, _ in decided.values()}, prices_progress)
+    rates = _fetch_rates(provider, quotes.values(), statement.currency)
+
+    # 3. Use them in statement order, exactly as one ticker at a time would.
+    for position in positions:
+        ticker = position.ticker
+        notes = ticker_notes[ticker]
+        if ticker in unavailable:
+            continue
+        saved = settings.ticker_choices.get(ticker)
+        symbol, user_chose = decided.get(ticker, (None, False))
+        try:
+            if ticker in failed:
+                raise failed[ticker]
+            outcome = quotes[symbol]
+            if isinstance(outcome, PriceUnavailableError):
+                raise outcome
+            quote = outcome
+            price = price_in_currency(quote, statement.currency, rates)
         except PriceUnavailableError as exc:
             last_known = cache.last_known(symbol, statement.currency) if symbol else None
             if last_known is None:
@@ -208,6 +241,47 @@ def build_report(
     if settings_changed:
         settings.save()
     cache.save()
+    notes = list(portfolio.warnings)
+    for position in positions:
+        notes.extend(ticker_notes[position.ticker])
     for ticker, reason in unavailable.items():
         notes.append(f"{ticker}: current value unavailable. {reason}")
     return Report(statement, value_portfolio(portfolio, prices, unavailable), tuple(notes))
+
+
+FETCH_WORKERS = 4
+"""Prices fetched at the same time. Enough to hide each request's wait, few enough to stay polite to Yahoo."""
+
+
+def _fetch_quotes(
+    provider: PriceProvider, symbols: set[str], progress: Callable[[int, int], None]
+) -> dict[str, Quote | PriceUnavailableError]:
+    """Fetch the latest price of every symbol at the same time. A failure is kept, not raised.
+
+    ``progress`` is called on this thread, not the workers', with (done, total) as each one arrives.
+    """
+    results: dict[str, Quote | PriceUnavailableError] = {}
+    if not symbols:
+        return results
+    progress(0, len(symbols))
+    with ThreadPoolExecutor(max_workers=FETCH_WORKERS) as pool:
+        futures = {pool.submit(provider.quote, symbol): symbol for symbol in sorted(symbols)}
+        for done, future in enumerate(as_completed(futures), start=1):
+            try:
+                results[futures[future]] = future.result()
+            except PriceUnavailableError as exc:
+                results[futures[future]] = exc
+            progress(done, len(symbols))
+    return results
+
+
+def _fetch_rates(
+    provider: PriceProvider, quotes: Iterable[Quote | PriceUnavailableError], target_currency: str
+) -> RateBook:
+    """Fetch, at the same time and once each, the exchange rates needed to express the quotes in ``target_currency``."""
+    pairs = {
+        pair
+        for quote in quotes
+        if isinstance(quote, Quote) and (pair := exchange_pair(quote, target_currency)) is not None
+    }
+    return RateBook(_fetch_quotes(provider, pairs, lambda done, total: None))

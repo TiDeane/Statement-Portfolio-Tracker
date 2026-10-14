@@ -431,15 +431,73 @@ def test_progress_is_reported_for_each_investment(tmp_path: Path) -> None:
         progress=lambda done, total, text: seen.append((done, total, text)),
     )
 
-    # Getting ready (loading the price library) is a step of its own, before the first price.
+    # Getting ready is a step of its own; then the bar moves as each price arrives (they are fetched together).
     assert seen == [
         (0, 0, "Reading your statement..."),
         (0, 3, "Getting ready to look up prices..."),
-        (1, 3, "Getting the current price of ABCD (1 of 2)..."),
-        (2, 3, "Getting the current price of WXYZ (2 of 2)..."),
+        (1, 3, "Getting the current prices (0 of 2)..."),
+        (2, 3, "Getting the current prices (1 of 2)..."),
+        (3, 3, "Getting the current prices (2 of 2)..."),
         (3, 3, "Adding everything up..."),
     ]
     assert provider.prepared == 1
+
+
+def test_prices_are_fetched_at_the_same_time(tmp_path: Path) -> None:
+    import threading
+
+    both_asking = threading.Barrier(2, timeout=5)
+
+    class WaitsForTheOther(FakeProvider):
+        """Each price request waits until the other one has started: only works if they run together."""
+
+        def quote(self, symbol: str):
+            both_asking.wait()
+            return super().quote(symbol)
+
+    provider = WaitsForTheOther()
+    provider.add("ABCD.DE", "EUR", price="120")
+    provider.add("WXYZ.DE", "EUR", price="100")
+
+    report = build_report(
+        write_statement(tmp_path, *TWO_HOLDINGS),
+        provider,
+        Settings.load(tmp_path / "settings.json"),
+        symbol_overrides={"ABCD": "ABCD.DE", "WXYZ": "WXYZ.DE"},
+    )
+
+    assert [holding.market_value for holding in report.valuation.holdings] == [Decimal("1200"), Decimal("400")]
+
+
+def test_notes_keep_the_statement_order_whatever_order_prices_arrive_in(tmp_path: Path) -> None:
+    import time
+
+    class FirstIsSlow(FakeProvider):
+        def quote(self, symbol: str):
+            if symbol == "ABCD":
+                time.sleep(0.2)  # ABCD's price arrives after WXYZ's
+            return super().quote(symbol)
+
+    provider = FirstIsSlow()
+    provider.add("ABCD", "USD", price="130")
+    provider.add("WXYZ", "USD", price="110")
+    provider.add("USDEUR=X", "EUR", price="0.9")
+
+    report = build_report(
+        write_statement(tmp_path, *TWO_HOLDINGS),
+        provider,
+        Settings.load(tmp_path / "settings.json"),
+        symbol_overrides={"ABCD": "ABCD", "WXYZ": "WXYZ"},
+    )
+
+    converted = [note for note in report.notes if "was converted" in note]
+    assert [note.split(":")[0] for note in converted] == ["ABCD", "WXYZ"]
+    # One exchange rate for both: fetched once.
+    assert [call for call in provider.calls if call == ("quote", "USDEUR=X")] == [("quote", "USDEUR=X")]
+    assert [holding.market_value for holding in report.valuation.holdings] == [
+        Decimal("1170.0"),  # 10 x 130 x 0.9
+        Decimal("396.0"),  # 4 x 110 x 0.9
+    ]
 
 
 def test_nothing_is_prepared_without_investments_to_price(tmp_path: Path) -> None:

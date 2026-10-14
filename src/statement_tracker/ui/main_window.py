@@ -63,7 +63,7 @@ GAIN_COLUMN = 5
 LAST_KNOWN_MARK = "*"
 ENTERED_MARK = "(your price)"
 """Words, not a symbol: a small sign next to an amount is easily read as a plus."""
-MISSING_PRICES = "Yahoo Finance has no current price for some of your investments."
+MISSING_PRICES = "Yahoo Finance has no current price for {}."
 DOUBLE_CLICK_TO_ENTER = "Double-click to enter a price yourself."
 LEFT_OUT_TIP = f"No current price, so it is left out of the totals, as chosen in Settings. {DOUBLE_CLICK_TO_ENTER}"
 WINDOW_WIDTH = 1000
@@ -102,6 +102,11 @@ def _file_text(path: Path, remark: str = "") -> str:
     if remark:
         lines.append(html.escape(remark))
     return "<br>".join(lines)
+
+
+def _listed(names: list[str]) -> str:
+    """Join names as a sentence does: "A", "A and B", "A, B and C"."""
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
 def _default_provider() -> PriceProvider:
@@ -247,7 +252,7 @@ class MainWindow(QMainWindow):
         self.table.cellDoubleClicked.connect(self._cell_double_clicked)
         # Shown when some price is not a current one from Yahoo: fetch again, or type one in.
         self.price_bar = QWidget()
-        self.price_bar_label = QLabel(MISSING_PRICES)
+        self.price_bar_label = QLabel()
         self.price_bar_label.setWordWrap(True)
         self.retry_button = QPushButton("T&ry again")
         self.retry_button.setToolTip("Fetch the prices from Yahoo Finance again.")
@@ -737,7 +742,10 @@ class MainWindow(QMainWindow):
                 self.table.setItem(row_number, column, item)
         self.table.setVisible(bool(valuation.holdings))
         self._filler.setVisible(not valuation.holdings)
-        self.price_bar.setVisible(any(needs_price(holding) for holding in valuation.holdings))
+        missing = [holding.position.ticker for holding in valuation.holdings if needs_price(holding)]
+        if missing:
+            self.price_bar_label.setText(MISSING_PRICES.format(_listed(missing)))
+        self.price_bar.setVisible(bool(missing))
 
     def _fit_height_to_steps(self) -> None:
         """Before there is a result, keep the window as tall as the steps, shrinking as well as growing.

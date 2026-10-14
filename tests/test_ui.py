@@ -581,6 +581,7 @@ def test_investments_without_a_price_can_be_left_out_of_the_totals_from_settings
 
     eqqb, zqxj, total = cells(window)
     assert zqxj[0] == "ZQXJ" and zqxj[2] == zqxj[4] == "not in total" and zqxj[3] == "unavailable"
+    assert window.price_bar_label.text() == "Yahoo Finance has no current price for ZQXJ."
     assert "left out of the totals" in window.table.item(1, 3).toolTip()
     assert eqqb[2] == eqqb[4] == total[2] == total[4]  # 100 %: EQQB is all the totals cover
     assert total[1] == eqqb[1] and total[3] == eqqb[3]
@@ -604,6 +605,12 @@ def test_enter_price_dialog_starts_from_the_price_known_and_returns_the_one_type
     dialog.price.setText("512,34")
     assert dialog.use_button.isEnabled()
     assert dialog.entered() == ("AAAA", Decimal("512.34"))
+
+
+def test_investments_without_a_price_are_named_as_a_sentence() -> None:
+    from statement_tracker.ui.main_window import _listed
+
+    assert [_listed(["A"]), _listed(["A", "B"]), _listed(["A", "B", "C"])] == ["A", "A and B", "A, B and C"]
 
 
 @pytest.mark.parametrize(

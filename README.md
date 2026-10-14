@@ -20,7 +20,7 @@ There are two ways to get the app. Most people want the first.
 
 Nothing else needs to be installed first.
 
-1. Open the [Releases page](https://github.com/TiDeane/revolut-investment-tracker/releases) and download the file ending in `-windows-x64-setup.exe` from the latest release.
+1. Open the [Releases page](https://github.com/TiDeane/Statement-Portfolio-Tracker/releases) and download the file ending in `-windows-x64-setup.exe` from the latest release.
 2. Double-click it. Windows may show a blue box saying **"Windows protected your PC"**. If it does, this is because the app is not signed with a paid certificate, not because something was found in it. Click **More info**, then **Run anyway**.
 3. Follow the installer. It installs only for you and does not ask for an administrator password.
 4. Start **Statement Portfolio Tracker** from the Start menu or the desktop shortcut.
@@ -162,7 +162,7 @@ The app keeps its settings (your confirmed investments and where your spreadshee
 
 ## Report a problem
 
-Open an issue at <https://github.com/TiDeane/revolut-investment-tracker/issues>. If the app showed an error box, click **Copy details** there and paste the text into the issue.
+Open an issue at <https://github.com/TiDeane/Statement-Portfolio-Tracker/issues>. If the app showed an error box, click **Copy details** there and paste the text into the issue.
 
 Do not attach your real statement. It contains your trades and amounts. Describe the problem and the row the message mentions instead.
 

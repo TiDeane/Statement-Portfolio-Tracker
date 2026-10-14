@@ -7,7 +7,7 @@
 #endif
 #define AppName "Statement Portfolio Tracker"
 #define AppExe "StatementPortfolioTracker.exe"
-#define AppUrl "https://github.com/TiDeane/revolut-investment-tracker"
+#define AppUrl "https://github.com/TiDeane/Statement-Portfolio-Tracker"
 
 [Setup]
 ; Never change AppId: Windows uses it to recognise upgrades of the same app.

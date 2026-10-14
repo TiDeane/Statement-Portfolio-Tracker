@@ -20,7 +20,7 @@ from statement_tracker import APP_NAME, __version__
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.ticker_resolver import Confidence, Resolution
 
-RELEASES_URL = "https://github.com/TiDeane/revolut-investment-tracker/releases"
+RELEASES_URL = "https://github.com/TiDeane/Statement-Portfolio-Tracker/releases"
 
 PRIVACY_TEXT = (
     "Everything happens on this computer. There are no accounts and nothing is recorded about how you "

@@ -559,7 +559,7 @@ def test_entered_price_fills_in_the_table_and_the_spreadsheet(app, tmp_path: Pat
     assert history.max_row == 2  # typed in today, so today's row is written
 
 
-def test_investments_without_a_price_can_be_left_out_of_the_totals_from_settings(app, tmp_path: Path) -> None:
+def test_investments_without_a_price_are_left_out_of_the_totals(app, tmp_path: Path) -> None:
     statement = write_statement(
         tmp_path,
         "2025-01-06T09:00:00.000Z,,CASH TOP-UP,,,EUR 2000,EUR,1",
@@ -569,10 +569,6 @@ def test_investments_without_a_price_can_be_left_out_of_the_totals_from_settings
     settings = Settings.load(tmp_path / "settings.json")
     settings.remember("EQQB", TickerChoice("EQQB.DE", "Nasdaq fund", confirmed=True))
     settings.save()
-    dialog = SettingsDialog(Settings.load(tmp_path / "settings.json"))
-    assert not dialog.leave_out.isChecked()  # off unless the user turns it on
-    dialog.leave_out.setChecked(True)
-    assert Settings.load(tmp_path / "settings.json").leave_out_unpriced
 
     window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
     window.ask_listing = lambda resolution: None  # "Skip this investment"

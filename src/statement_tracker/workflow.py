@@ -368,7 +368,8 @@ def _assemble(
             )
             settings_changed |= settings.remember(ticker, choice)
 
-    valuation = value_portfolio(portfolio, prices, unavailable, leave_out_unpriced=settings.leave_out_unpriced)
+    # An investment without a price is left out of the totals rather than making them unavailable.
+    valuation = value_portfolio(portfolio, prices, unavailable, leave_out_unpriced=True)
     left_out = {holding.position.ticker for holding in valuation.left_out}
     notes = list(lookups.general_notes)
     for position in portfolio.open_positions:
@@ -376,7 +377,7 @@ def _assemble(
     for ticker, reason in unavailable.items():
         note = f"{ticker}: current value unavailable. {reason}"
         if ticker in left_out:
-            note += " It is left out of the totals, as chosen in Settings."
+            note += " It is left out of the totals."
         notes.append(note)
     return Report(statement, valuation, tuple(notes), lookups), settings_changed
 

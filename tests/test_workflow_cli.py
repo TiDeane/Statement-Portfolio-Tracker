@@ -116,7 +116,7 @@ def test_cli_table_output_is_aligned(tmp_path: Path) -> None:
     assert len(lines[0]) == len(lines[1]) == len(lines[2])
 
 
-def test_missing_price_leaves_what_depends_on_it_unavailable(tmp_path: Path) -> None:
+def test_missing_price_is_left_out_of_the_totals(tmp_path: Path) -> None:
     provider = FakeProvider()
     provider.add("ABCD.DE", "EUR", price="120")
     provider.add("WXYZ.DE", "EUR", price=None)
@@ -128,13 +128,13 @@ def test_missing_price_leaves_what_depends_on_it_unavailable(tmp_path: Path) -> 
     )  # fmt: skip
 
     assert code == 0
-    # No total current value without WXYZ, so no shares of it either; the shares of the amount invested remain.
+    # WXYZ's value is unavailable, so the totals and shares cover ABCD alone: nothing is estimated.
     assert output.splitlines()[1:] == [
-        "ABCD,1001.00,83.28,1200.00,unavailable,199.00,19.88",
-        "WXYZ,201.00,16.72,unavailable,unavailable,unavailable,unavailable",
-        "Total,1202.00,100.00,unavailable,unavailable,unavailable,unavailable",
+        "ABCD,1001.00,100.00,1200.00,100.00,199.00,19.88",
+        "WXYZ,201.00,not in total,unavailable,not in total,unavailable,unavailable",
+        "Total,1001.00,100.00,1200.00,100.00,199.00,19.88",
     ]
-    assert "WXYZ: current value unavailable. No current price for WXYZ.DE." in errors
+    assert "WXYZ: current value unavailable. No current price for WXYZ.DE. It is left out of the totals." in errors
 
 
 def test_ambiguous_ticker_is_left_unavailable_without_a_chooser(tmp_path: Path) -> None:
@@ -405,7 +405,7 @@ def test_entered_price_values_an_investment_yahoo_does_not_have_without_fetching
     statement = write_statement(tmp_path, *TWO_HOLDINGS)
     provider = abcd_only()
     report = build_report(statement, provider, Settings.load(settings_path), symbol_overrides={"ABCD": "ABCD.DE"})
-    assert report.valuation.total_market_value is None
+    assert report.valuation.total_market_value == Decimal(1200)  # ABCD alone: WXYZ is left out
     calls = len(provider.calls)
 
     entered = with_entered_prices(report, {"WXYZ": Decimal("100")}, Settings.load(settings_path))
@@ -442,26 +442,6 @@ def test_entered_price_is_used_ahead_of_the_last_known_one_and_dropped_once_yaho
     # Dropped: the next offline run goes back to the last price fetched.
     later = build_report(SAMPLE, FakeProvider(offline=True), Settings.load(settings_path))
     assert later.valuation.holdings[0].price.last_known
-
-
-def test_left_out_investment_is_named_and_the_cli_total_covers_the_rest(tmp_path: Path) -> None:
-    settings_path = tmp_path / "settings.json"
-    settings = Settings.load(settings_path)
-    settings.leave_out_unpriced = True
-    settings.save()
-    statement = write_statement(tmp_path, *TWO_HOLDINGS)
-
-    code, output, errors = run_cli(
-        str(statement), "--symbol", "ABCD=ABCD.DE", provider=abcd_only(), settings=settings_path
-    )
-
-    assert code == 0
-    assert output.splitlines()[1:] == [
-        "ABCD,1001.00,100.00,1200.00,100.00,199.00,19.88",
-        "WXYZ,201.00,not in total,unavailable,not in total,unavailable,unavailable",
-        "Total,1001.00,100.00,1200.00,100.00,199.00,19.88",
-    ]
-    assert "It is left out of the totals, as chosen in Settings." in errors
 
 
 def test_cli_price_is_used_when_yahoo_has_none(tmp_path: Path) -> None:

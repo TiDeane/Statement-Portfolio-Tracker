@@ -105,10 +105,7 @@ Select an investment to:
 
 **Forget all...** does the same for every investment at once. Your spreadsheet choice and the last known prices are kept.
 
-Settings also has two switches, both off at first:
-
-- **When the app cannot tell which listing an investment is, use the first one without asking**.
-- **Leave investments without a current price out of the totals**. Normally one investment without a price makes the Total unavailable, because the app never guesses a value. With this switch on, the Total, the percentages and the spreadsheet cover the investments that do have a price, and the others show "not in total" in grey. Net worth stays unavailable on those runs, since it needs every value. The switch is used from the next time you press the green button.
+Settings also has the switch **When the app cannot tell which listing an investment is, use the first one without asking**.
 
 ## Read the result
 
@@ -123,7 +120,7 @@ Settings also has two switches, both off at first:
 
 The last row is the total. Investments you have sold completely are not listed.
 
-**"unavailable"** means the app could not get a current price for that investment. When a value is unavailable, the calculated values that depend on it are unavailable too.
+**"unavailable"** means the app could not get a current price for that investment. Its row is shown in grey, with "not in total" in the percentage columns, and the Total and the percentages cover the other investments only. The app never guesses a value for it.
 
 **A value marked with \*** uses the last price the app fetched on an earlier day, because Yahoo Finance could not be reached this time. Point at the value to see the date of that price. The Total is marked too, since it includes that value. Try again later for up-to-date values. An investment the app has never fetched a price for is shown as unavailable instead.
 
@@ -147,7 +144,7 @@ A value that uses the last price from an earlier day has a comment (a small red 
 
 A value that uses a price you entered has a comment saying so and on which day. A price you entered today counts as today's, so the day's row is written. A price you entered on an earlier day does not, and then no row is written, as above.
 
-If you chose in Settings to leave investments without a price out of the totals, such an investment keeps its row in **Current Holdings**, in grey, with "not in total" and a comment. The Total covers the rest, and the day's row in **Portfolio History** is still written for the rest, with Net Worth and Gain vs Deposits shown as unavailable. The history can therefore dip on a day an investment is left out.
+An investment without a price keeps its row in **Current Holdings**, in grey, with "not in total" and a comment, and the Total covers the rest. The day's row in **Portfolio History** is still written for the rest, with Net Worth and Gain vs Deposits shown as unavailable, so the history can dip on a day an investment is left out. Entering its price yourself avoids that.
 
 Your own sheets in that file are left exactly as they are. Before the app changes an existing spreadsheet for the first time, it saves a copy next to it named `<your file>_backup_before_first_update.xlsx`.
 

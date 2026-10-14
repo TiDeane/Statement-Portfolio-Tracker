@@ -42,7 +42,6 @@ NAME_TIP = "Double-click a name to change it. Leave it empty to use the fund's n
 YAHOO_NAME_TIP = "The fund's name from Yahoo Finance. Double-click to use your own name instead."
 ASK_AGAIN_STATUS = "Asks you on the next run"
 ALWAYS_FIRST_SETTING = "When the app cannot tell which listing an investment is, use the first one without asking"
-LEAVE_OUT_SETTING = "Leave investments without a current price out of the totals"
 NOTHING_REMEMBERED = "No investments are remembered yet. They appear here after your first run."
 
 
@@ -152,13 +151,6 @@ class SettingsDialog(QDialog):
             'the "Listing used" column above.'
         )
         self.always_first.toggled.connect(self._always_first_toggled)
-        self.leave_out = QCheckBox(LEAVE_OUT_SETTING)
-        self.leave_out.setToolTip(
-            "Without this, one investment without a price leaves the totals unavailable. With it, the totals, "
-            'the shares and the spreadsheet\'s history row cover the others, and that investment shows "not in '
-            'total". Net worth stays unavailable. Used from the next time you press step 3.'
-        )
-        self.leave_out.toggled.connect(self._leave_out_toggled)
         self.message_label = QLabel("")
         self.message_label.setObjectName("status")
         self.message_label.setWordWrap(True)
@@ -170,7 +162,6 @@ class SettingsDialog(QDialog):
         investments_layout.addWidget(self.empty_label)
         investments_layout.addLayout(row_buttons)
         investments_layout.addWidget(self.always_first)
-        investments_layout.addWidget(self.leave_out)
         investments_layout.addWidget(self.message_label)
 
         close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -227,13 +218,9 @@ class SettingsDialog(QDialog):
             self.table.selectRow(tickers.index(select))
         self._update_buttons()
 
-        for box, value in (
-            (self.always_first, self._settings.always_use_first_listing),
-            (self.leave_out, self._settings.leave_out_unpriced),
-        ):
-            box.blockSignals(True)  # showing the setting is not changing it
-            box.setChecked(value)
-            box.blockSignals(False)
+        self.always_first.blockSignals(True)  # showing the setting is not changing it
+        self.always_first.setChecked(self._settings.always_use_first_listing)
+        self.always_first.blockSignals(False)
 
     def selected_ticker(self) -> str | None:
         """The investment selected in the table, if any."""
@@ -272,10 +259,6 @@ class SettingsDialog(QDialog):
 
     def _always_first_toggled(self, checked: bool) -> None:
         self._settings.always_use_first_listing = checked
-        self._save()
-
-    def _leave_out_toggled(self, checked: bool) -> None:
-        self._settings.leave_out_unpriced = checked
         self._save()
 
     def rename_selected(self) -> None:

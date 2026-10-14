@@ -65,7 +65,7 @@ ENTERED_MARK = "(your price)"
 """Words, not a symbol: a small sign next to an amount is easily read as a plus."""
 MISSING_PRICES = "Yahoo Finance has no current price for {}."
 DOUBLE_CLICK_TO_ENTER = "Double-click to enter a price yourself."
-LEFT_OUT_TIP = f"No current price, so it is left out of the totals, as chosen in Settings. {DOUBLE_CLICK_TO_ENTER}"
+LEFT_OUT_TIP = f"No current price, so it is left out of the totals. {DOUBLE_CLICK_TO_ENTER}"
 WINDOW_WIDTH = 1000
 MAX_SCREEN_SHARE = 0.8
 """When the result table appears, the window grows to at most this share of the screen's usable height."""

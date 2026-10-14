@@ -405,7 +405,7 @@ class ExcelExporter:
                 )
             elif not holding.in_totals:
                 sheet.cell(row=row, column=_VALUE_COLUMN).comment = _comment(
-                    "No current price, so this investment is left out of the Total, as chosen in the app's Settings."
+                    "No current price, so this investment is left out of the Total."
                 )
         if valuation.total_market_value is not None:
             total_notes = []

@@ -32,7 +32,6 @@ from statement_tracker.ui.dialogs import (  # noqa: E402
 from statement_tracker.ui.settings_dialog import ASK_AGAIN_STATUS, SettingsDialog  # noqa: E402
 from statement_tracker.ui.main_window import (  # noqa: E402
     ENTERED_MARK,
-    MAX_SCREEN_SHARE,
     MIN_TABLE_HEIGHT,
     MIN_WINDOW_WIDTH,
     MainWindow,
@@ -188,10 +187,9 @@ def test_a_smaller_window_shrinks_the_table_instead_of_covering_it(app, tmp_path
     window.set_statement(SAMPLE)
     run(app, window)
     settle(app)
-    grown = window.height()
     table = window.table
     rows_height = table.horizontalHeader().height() + sum(table.rowHeight(row) for row in range(table.rowCount()))
-    assert table.viewport().height() + table.horizontalHeader().height() >= rows_height  # grown to show every row
+    assert table.viewport().height() + table.horizontalHeader().height() >= rows_height  # every row shows
 
     def top(widget) -> int:
         return widget.mapTo(window, widget.rect().topLeft()).y()
@@ -202,7 +200,7 @@ def test_a_smaller_window_shrinks_the_table_instead_of_covering_it(app, tmp_path
     window.resize(window.width(), 100)  # far smaller than everything needs
     settle(app)
 
-    assert window.height() <= grown  # two rows: the window is already as small as it can be
+    assert window.height() == window.minimumHeight()
     assert bottom(window.table) < top(window.price_bar) < top(window.settings_button)  # nothing covers the table
     assert window.table.height() >= MIN_TABLE_HEIGHT
 
@@ -305,29 +303,39 @@ def test_buttons_are_only_highlighted_when_reached_with_the_keyboard(app, tmp_pa
     window.close()
 
 
-def test_window_starts_compact_and_grows_to_show_the_result(app, tmp_path: Path) -> None:
+def test_the_result_has_its_own_page_in_the_same_window(app, tmp_path: Path) -> None:
     window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
     window.show()
-    app.processEvents()
-    start_height = window.height()
-    assert start_height < 600  # just the three steps, no reserved empty space
-    assert window.table.isHidden()
-
+    settle(app)
+    assert window.height() < 600  # just the three steps, no reserved empty space
+    assert window.pages.currentWidget() is window.steps_page
     window.set_statement(SAMPLE)
-    run(app, window)
+    settle(app)
+    start_height = window.height()
 
-    assert window.height() > start_height
-    assert not window.table.isHidden()
-
-    # A size the user chose by hand is never reduced by a later run.
-    window.resize(window.width(), window.height() + 150)
-    chosen = window.height()
     run(app, window)
-    assert window.height() == chosen
+    settle(app)
+
+    assert window.pages.currentWidget() is window.result_page
+    assert window.result_page.isVisible() and not window.steps_page.isVisible()
+    assert window.table.isVisible() and window.table.rowCount() == 2
+    assert window.height() == start_height  # the same window, not a longer one
+
+    window.back_button.click()
+    assert window.pages.currentWidget() is window.steps_page
+    window.go_button.click()  # step 3 again: back to the result page
+    assert window.pages.currentWidget() is window.result_page
+    assert not window.back_button.isEnabled()  # not while the prices are being fetched
+    run(app, window)
+    assert window.back_button.isEnabled()
+
+    # A file dropped on the result page is taken by the steps, which are shown again.
+    window.drop_file(tmp_path / "mine.xlsx")
+    assert window.pages.currentWidget() is window.steps_page
     window.close()
 
 
-def test_window_stops_growing_at_a_share_of_the_screen_and_the_table_scrolls(app, tmp_path: Path) -> None:
+def test_many_investments_scroll_in_the_table_without_lengthening_the_window(app, tmp_path: Path) -> None:
     tickers = [f"T{number:02d}" for number in range(20)]
     provider = FakeProvider()
     for ticker in tickers:
@@ -339,19 +347,19 @@ def test_window_stops_growing_at_a_share_of_the_screen_and_the_table_scrolls(app
     window, _ = make_window(tmp_path, provider)
     window.ask_listing = lambda resolution: f"{resolution.ticker}.DE"
     window.show()
-    app.processEvents()
-
     window.set_statement(write_statement(tmp_path, *lines))
+    settle(app)
+    start_height = window.height()
+
     run(app, window)
+    settle(app)
 
     table = window.table
     assert table.rowCount() == 21  # twenty investments and the total
     row, header = table.rowHeight(0), table.horizontalHeader().height()
-    limit = int(window.screen().availableGeometry().height() * MAX_SCREEN_SHARE)
-    assert MAX_SCREEN_SHARE == 0.8
-    # Never taller than 80% of the screen, unless the screen is too small for even two rows.
-    assert window.height() <= max(limit, window.minimumHeight())
+    assert window.height() == start_height
     assert table.height() < header + table.rowCount() * row  # the rest is reached by scrolling
+    assert table.verticalScrollBar().maximum() > 0
     window.close()
 
 

@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QScrollArea,
     QSizePolicy,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -72,10 +73,8 @@ LEFT_OUT_TIP = f"No current price, so it is left out of the totals. {DOUBLE_CLIC
 WINDOW_WIDTH = 1000
 MIN_WINDOW_WIDTH = 720
 """The window cannot be made narrower: below this the buttons and wrapped text get cramped."""
-MAX_SCREEN_SHARE = 0.8
-"""When the result table appears, the window grows to at most this share of the screen's usable height."""
 MIN_TABLE_HEIGHT = 115
-"""Room for the header and two rows, kept even on a screen too small for the limit above."""
+"""Room for the header and two rows: the result table never gets smaller; more rows scroll."""
 
 # The line at the top of each step: its text and the state the theme colours it by.
 STEP_TO_DO = ("To do: choose your statement file.", "todo")
@@ -121,7 +120,7 @@ def _default_provider() -> PriceProvider:
 
 
 class MainWindow(QMainWindow):
-    """Three steps and a result table."""
+    """Two pages in one window: the three steps, then the result table."""
 
     progressed = Signal(int, int, str)
     """Steps done, steps in total (0 = not known yet), what is happening. Safe to emit from any thread."""
@@ -254,9 +253,8 @@ class MainWindow(QMainWindow):
         self.table.verticalHeader().setDefaultSectionSize(36)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setAlternatingRowColors(True)
-        # Its height comes from the minimum set on it (see _grow_to_fit_table) and the room left,
-        # never from Qt's default preferred height, which would make the window's contents taller
-        # than the window's minimum size.
+        # It takes the room the result page has, never Qt's default preferred height, which would
+        # make the window's contents taller than the window's minimum size.
         self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
         self.table.setMinimumHeight(MIN_TABLE_HEIGHT)
         self.table.cellDoubleClicked.connect(self._cell_double_clicked)
@@ -287,17 +285,42 @@ class MainWindow(QMainWindow):
         footer.addWidget(self.settings_button)
         footer.addWidget(about_button)
 
+        # Two pages in the same window: the three steps, then the result. The window keeps its size.
+        self.steps_page = QWidget()
+        steps = QVBoxLayout(self.steps_page)
+        steps.setContentsMargins(0, 0, 0, 0)
+        steps.addWidget(intro)
+        steps.addWidget(statement_box)
+        steps.addWidget(spreadsheet_box)
+        steps.addWidget(self.go_button)
+        steps.addStretch(1)
+
+        self.back_button = QPushButton("← &Back to the steps")
+        self.back_button.setToolTip("Choose another statement or spreadsheet, or start again.")
+        self.back_button.clicked.connect(self.show_steps)
+        result_title = QLabel("Your investments")
+        result_title.setObjectName("intro")
+        result_header = QHBoxLayout()
+        result_header.addWidget(result_title)
+        result_header.addStretch(1)
+        result_header.addWidget(self.back_button)
+        self.result_page = QWidget()
+        result = QVBoxLayout(self.result_page)
+        result.setContentsMargins(0, 0, 0, 0)
+        result.addLayout(result_header)
+        result.addWidget(self.progress_bar)
+        result.addWidget(self.status_label)
+        result.addWidget(self.table, stretch=1)
+        self._filler = QWidget()  # takes the table's place when there is nothing to list
+        result.addWidget(self._filler, stretch=1)
+        result.addWidget(self.price_bar)
+
+        self.pages = QStackedWidget()
+        self.pages.addWidget(self.steps_page)
+        self.pages.addWidget(self.result_page)
+
         layout = QVBoxLayout()
-        layout.addWidget(intro)
-        layout.addWidget(statement_box)
-        layout.addWidget(spreadsheet_box)
-        layout.addWidget(self.go_button)
-        layout.addWidget(self.progress_bar)
-        layout.addWidget(self.status_label)
-        layout.addWidget(self.table, stretch=1)
-        self._filler = QWidget()  # takes the table's place until there is a result, so the steps stay at the top
-        layout.addWidget(self._filler, stretch=1)
-        layout.addWidget(self.price_bar)
+        layout.addWidget(self.pages, stretch=1)
         layout.addLayout(footer)
         central = QWidget()
         central.setLayout(layout)
@@ -321,11 +344,20 @@ class MainWindow(QMainWindow):
         central.setFocus()
 
         self._set_headers()
-        self.table.setVisible(False)
         self._refresh()
-        # Start only as tall as the three steps need; the window grows when there is a result to show.
+        # As tall as the three steps need. The result page then uses the same window.
         self._cap_size()
         self.resize(WINDOW_WIDTH, self._content_height())
+
+    # -- pages -------------------------------------------------------------------
+
+    def show_steps(self) -> None:
+        """Go back to the three steps. Step 3 fetches the prices again and shows the result page."""
+        if not self._busy():
+            self.pages.setCurrentWidget(self.steps_page)
+
+    def _show_result_page(self) -> None:
+        self.pages.setCurrentWidget(self.result_page)
 
     # -- choosing files ----------------------------------------------------------
 
@@ -410,7 +442,8 @@ class MainWindow(QMainWindow):
         event.acceptProposedAction()
 
     def drop_file(self, path: Path) -> None:
-        """A dropped Excel file is the spreadsheet; any other file is the statement."""
+        """A dropped Excel file is the spreadsheet; any other file is the statement. The steps are shown."""
+        self.show_steps()
         if path.suffix.lower() == ".xlsx":
             self.set_spreadsheet(path)
         else:
@@ -444,9 +477,10 @@ class MainWindow(QMainWindow):
         self.spreadsheet_option.setChecked(using)
         if self.spreadsheet_details.isHidden() == using:
             self.spreadsheet_details.setVisible(using)
-            if self.centralWidget():
-                QTimer.singleShot(0, self, self._cap_size)  # once the buttons shown or hidden are laid out
             self._fit_height_to_steps()
+        if self.centralWidget():
+            # Files, buttons and their wrapped text change the room the steps need; measured once laid out.
+            QTimer.singleShot(0, self, self._cap_size)
         if not using:
             self._badge(self.spreadsheet_badge, *STEP_OPTIONAL)
         elif waiting_for_file:
@@ -474,6 +508,7 @@ class MainWindow(QMainWindow):
         # With "Update my Excel spreadsheet" chosen but no file yet, there is nothing to update: wait for one.
         self.go_button.setEnabled(self._statement is not None and not waiting_for_file and not self._busy())
         self.settings_button.setEnabled(not self._busy())  # a run reads and saves the same settings
+        self.back_button.setEnabled(not self._busy())
         self.retry_button.setEnabled(self._statement is not None and not waiting_for_file and not self._busy())
         self.enter_price_button.setEnabled(not self._busy())
 
@@ -519,9 +554,13 @@ class MainWindow(QMainWindow):
         task.signals.finished.connect(self._finished)
         task.signals.failed.connect(self._failed)
         self._tasks.append(task)
+        # The result page shows the progress, then the result. What an earlier run showed is cleared.
+        self.table.setVisible(False)
+        self._filler.setVisible(True)
+        self.price_bar.setVisible(False)
+        self._show_result_page()
         self._show_progress(0, 0, "Starting...")
         self._refresh()
-        QTimer.singleShot(0, self, self._cap_size)  # the progress bar takes room too
         QThreadPool.globalInstance().start(task)
 
     def _show_progress(self, done: int, total: int, text: str) -> None:
@@ -634,10 +673,7 @@ class MainWindow(QMainWindow):
             self._status("Done. Your investments are shown below.", "ok")
         if not report.valuation.holdings:
             self._status("Done. The statement has no investments that you still hold.", "ok")
-        self._cap_size()
-        if report.valuation.holdings:
-            self._grow_to_fit_table()
-        # Measured again once what was just shown has been laid out: until then Qt still sizes it as hidden.
+        # Measured once what was just shown has been laid out: until then Qt still sizes it as hidden.
         QTimer.singleShot(0, self, self._cap_size)
 
     # -- showing the result ------------------------------------------------------
@@ -775,18 +811,18 @@ class MainWindow(QMainWindow):
         self.price_bar.setVisible(bool(missing))
 
     def _fit_height_to_steps(self) -> None:
-        """Before there is a result, keep the window as tall as the steps, shrinking as well as growing.
+        """Until the first result, keep the window as tall as the steps, shrinking as well as growing.
 
-        Showing or hiding the spreadsheet buttons changes that height. Once the result table
-        is shown, the window is left alone here: it only ever grows (see ``_grow_to_fit_table``).
+        Showing or hiding the spreadsheet buttons changes that height. After the first result the
+        window is left at the size the user may have given it; it only grows if it must.
         """
-        if not self.table.isHidden() or not self.centralWidget():  # isHidden: also right before the window is shown
+        if self._report is not None or self._busy() or not self.centralWidget():  # also before the window is shown
             return
         # Measured once the shown or hidden buttons have been laid out, not before.
         QTimer.singleShot(0, self, self._resize_to_steps)
 
     def _resize_to_steps(self) -> None:
-        if not self.table.isHidden():
+        if self._report is not None or self._busy():
             return
         self._cap_size()
         self.resize(self.width(), self._content_height())  # as when the window first opens
@@ -804,41 +840,19 @@ class MainWindow(QMainWindow):
         wraps needs the most height at the narrowest width allowed, so the minimum height is
         measured there and is then enough at every width. Called whenever what is shown changes.
         Where the window manager ignores this, the contents scroll instead.
+
+        The minimum covers both pages, so the window does not jump in size between them.
         """
         layout = self._content.layout()
+        margins = layout.contentsMargins()
+        inner = MIN_WINDOW_WIDTH - margins.left() - margins.right()
+        # Qt measures a stack of pages without their wrapped text, so each page is measured here.
+        pages = (self.steps_page, self.result_page)
+        for page in pages:
+            page.layout().activate()
+        self.pages.setMinimumHeight(max(page.layout().totalMinimumHeightForWidth(inner) for page in pages))
         layout.activate()
         self.setMinimumSize(MIN_WINDOW_WIDTH, layout.totalMinimumHeightForWidth(MIN_WINDOW_WIDTH))
-
-    def _grow_to_fit_table(self) -> None:
-        """Make the window tall enough to show every row, up to a share of the screen's height.
-
-        The limit adapts to the screen (MAX_SCREEN_SHARE of its usable height); rows that
-        do not fit are reached by scrolling the table. The window only ever grows here: a
-        size the user chose by hand is never reduced.
-
-        The table's full height is only used to measure: afterwards it may shrink again to
-        MIN_TABLE_HEIGHT, so that a window made smaller by the user scrolls the table instead
-        of drawing what is under it on top of it.
-        """
-        table = self.table
-        wanted = table.horizontalHeader().height() + 2 * table.frameWidth() + 2
-        wanted += sum(table.rowHeight(row) for row in range(table.rowCount()))
-        table.setMinimumHeight(wanted)
-        layout = self._content.layout()
-        # The table's preferred height is ignored (see __init__), so the room it needs counts through its minimum.
-        target = max(self._content_height(), layout.totalMinimumHeightForWidth(self._content.width()))
-        table.setMinimumHeight(MIN_TABLE_HEIGHT)
-        self._content.layout().activate()
-
-        screen = self.screen()
-        if screen:
-            # Too many rows for this screen: stop at the limit and let the table scroll. On a
-            # very small screen the table still keeps a couple of rows, even if that goes
-            # slightly past the limit.
-            target = min(target, int(screen.availableGeometry().height() * MAX_SCREEN_SHARE))
-        target = max(target, self.minimumHeight())
-        if target > self.height():
-            self.resize(self.width(), target)
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)

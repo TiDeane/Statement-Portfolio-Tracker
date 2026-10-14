@@ -7,8 +7,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 from statement_tracker.core.calculator import buys_by_ticker, compute_portfolio, value_portfolio
@@ -16,7 +17,7 @@ from statement_tracker.core.exporters.base import ExportResult
 from statement_tracker.core.exporters.excel import ExcelExporter
 from statement_tracker.core.market_data.pricing import RateBook, exchange_pair, price_in_currency
 from statement_tracker.core.market_data.provider import PriceProvider, PriceUnavailableError, Quote, SymbolInfo
-from statement_tracker.core.models import MarketPrice, PortfolioValuation, Statement
+from statement_tracker.core.models import HoldingValuation, MarketPrice, Portfolio, PortfolioValuation, Statement
 from statement_tracker.core.parser import load_statement
 from statement_tracker.core.ticker_resolver import Confidence, Resolution, resolve_ticker
 from statement_tracker.price_cache import PriceCache
@@ -39,6 +40,8 @@ class Report:
     statement: Statement
     valuation: PortfolioValuation
     notes: tuple[str, ...]
+    lookups: Lookups | None = field(default=None, repr=False, compare=False)
+    """What was fetched, so that ``with_entered_prices`` can work the report out again."""
 
 
 def price_steps(holdings: int) -> int:
@@ -90,6 +93,7 @@ def build_report(
     now: datetime | None = None,
     progress: Progress | None = None,
     price_cache: PriceCache | None = None,
+    entered_prices: Mapping[str, Decimal] | None = None,
 ) -> Report:
     """Load a statement and value its open positions at current prices.
 
@@ -101,6 +105,11 @@ def build_report(
     Every price fetched is kept in ``price_cache`` (by default the one next to
     the settings file). When a price cannot be fetched, the one kept from an
     earlier run is used instead, marked as last known, and a note says from when.
+
+    ``entered_prices`` (ticker -> price per share in the statement currency) are
+    prices the user typed in. They are kept like those given to ``with_entered_prices``:
+    used, ahead of last known prices, whenever Yahoo has no price for the ticker, and
+    dropped as soon as Yahoo has one.
 
     ``progress`` is called as work advances with (steps done, steps in total,
     what is happening now). The total is 0 until the statement has been read.
@@ -117,8 +126,8 @@ def build_report(
     # Notes are kept per ticker and put together in statement order at the end, so they read
     # the same however the prices arrive.
     ticker_notes: dict[str, list[str]] = {position.ticker: [] for position in portfolio.open_positions}
-    prices: dict[str, MarketPrice] = {}
     unavailable: dict[str, str] = {}
+    """Tickers left without a listing, with the reason."""
     settings_changed = False
 
     positions = portfolio.open_positions
@@ -190,24 +199,140 @@ def build_report(
     quotes = _fetch_quotes(provider, {symbol for symbol, _ in decided.values()}, prices_progress)
     rates = _fetch_rates(provider, quotes.values(), statement.currency)
 
+    # Prices typed in on the command line: kept like the ones typed in the window.
+    held = {position.ticker for position in positions}
+    entered_now = set()
+    general_notes = list(portfolio.warnings)
+    for ticker, price in (entered_prices or {}).items():
+        if ticker in held:
+            cache.enter(ticker, price, statement.currency, now)
+            entered_now.add(ticker)
+        else:
+            general_notes.append(
+                f"{ticker} is not an investment you still hold, so the price entered for it was not used."
+            )
+
     # 3. Use them in statement order, exactly as one ticker at a time would.
-    for position in positions:
+    report_progress(steps, steps, "Adding everything up...")
+    lookups = Lookups(
+        statement,
+        portfolio,
+        decided,
+        failed,
+        unavailable,
+        quotes,
+        rates,
+        {ticker: tuple(notes) for ticker, notes in ticker_notes.items()},
+        tuple(general_notes),
+    )
+    report, remembered = _assemble(lookups, settings, cache, now, entered_now)
+    if settings_changed or remembered:
+        settings.save()
+    cache.save()
+    return report
+
+
+def needs_price(holding: HoldingValuation) -> bool:
+    """True if the user may type in a price for this holding: Yahoo had no current price for it."""
+    return holding.price is None or holding.price.last_known or holding.price.entered
+
+
+def with_entered_prices(
+    report: Report,
+    entered: Mapping[str, Decimal],
+    settings: Settings,
+    *,
+    now: datetime | None = None,
+    price_cache: PriceCache | None = None,
+) -> Report:
+    """Value ``report`` again with prices per share the user typed in, without contacting Yahoo.
+
+    The prices (ticker -> price in the statement currency) are kept for later runs, and are
+    used whenever Yahoo has no price for that investment, until it has one again.
+    """
+    if report.lookups is None:
+        raise ValueError("This report was not made by build_report, so it cannot be worked out again.")
+    now = now or datetime.now(UTC)
+    cache = price_cache if price_cache is not None else PriceCache.beside(settings.path)
+    currency = report.statement.currency
+    for ticker, price in entered.items():
+        cache.enter(ticker, price, currency, now)
+    new_report, remembered = _assemble(report.lookups, settings, cache, now, set(entered))
+    if remembered:
+        settings.save()
+    cache.save()
+    return new_report
+
+
+@dataclass(frozen=True)
+class Lookups:
+    """What a run found out from Yahoo, kept so that its report can be worked out again without it."""
+
+    statement: Statement
+    portfolio: Portfolio
+    decided: Mapping[str, tuple[str, bool]]
+    """Ticker -> (Yahoo symbol, whether the user chose it)."""
+    failed: Mapping[str, PriceUnavailableError]
+    """Tickers whose listing could not be decided because Yahoo could not be reached."""
+    unmatched: Mapping[str, str]
+    """Tickers left without a listing, with the reason."""
+    quotes: Mapping[str, Quote | PriceUnavailableError]
+    rates: RateBook
+    matching_notes: Mapping[str, tuple[str, ...]]
+    """Notes from deciding each ticker's listing."""
+    general_notes: tuple[str, ...]
+
+
+def _day(price: MarketPrice) -> str:
+    """The local date a price was typed in on."""
+    return price.as_of.astimezone().date().isoformat() if price.as_of else "an earlier day"
+
+
+def _assemble(
+    lookups: Lookups, settings: Settings, cache: PriceCache, now: datetime, entered_now: set[str]
+) -> tuple[Report, bool]:
+    """Turn what was fetched into prices and notes, in statement order. Returns the report and
+    whether the settings changed. ``entered_now`` are the tickers whose price was typed in just now."""
+    statement, portfolio = lookups.statement, lookups.portfolio
+    currency = statement.currency
+    prices: dict[str, MarketPrice] = {}
+    unavailable: dict[str, str] = {}
+    ticker_notes: dict[str, list[str]] = {}
+    settings_changed = False
+
+    for position in portfolio.open_positions:
         ticker = position.ticker
-        notes = ticker_notes[ticker]
-        if ticker in unavailable:
-            continue
+        notes = ticker_notes[ticker] = list(lookups.matching_notes.get(ticker, ()))
         saved = settings.ticker_choices.get(ticker)
-        symbol, user_chose = decided.get(ticker, (None, False))
+        symbol, user_chose = lookups.decided.get(ticker, (None, False))
+        entered = cache.entered(ticker, currency)
+        if entered is not None:
+            entered = replace(entered, symbol=symbol or "")
+
+        if ticker in lookups.unmatched:
+            if entered is not None:
+                prices[ticker] = entered
+                notes.append(
+                    f"{ticker}: no Yahoo listing is used for it, so the price you entered on {_day(entered)} is used."
+                )
+            else:
+                unavailable[ticker] = lookups.unmatched[ticker]
+            continue
         try:
-            if ticker in failed:
-                raise failed[ticker]
-            outcome = quotes[symbol]
+            if ticker in lookups.failed:
+                raise lookups.failed[ticker]
+            outcome = lookups.quotes[symbol]
             if isinstance(outcome, PriceUnavailableError):
                 raise outcome
             quote = outcome
-            price = price_in_currency(quote, statement.currency, rates)
+            price = price_in_currency(quote, currency, lookups.rates)
         except PriceUnavailableError as exc:
-            last_known = cache.last_known(symbol, statement.currency) if symbol else None
+            # A price typed in is newer than the last one fetched: fetching one drops it.
+            if entered is not None:
+                prices[ticker] = entered
+                notes.append(f"{ticker}: {exc} The price you entered on {_day(entered)} is used instead.")
+                continue
+            last_known = cache.last_known(symbol, currency) if symbol else None
             if last_known is None:
                 unavailable[ticker] = str(exc)
                 continue
@@ -220,7 +345,13 @@ def build_report(
             continue
 
         prices[ticker] = price
-        cache.remember(price, statement.currency, now)
+        cache.remember(price, currency, now)
+        if entered is not None:
+            cache.forget_entered(ticker)
+            if ticker in entered_now:
+                notes.append(
+                    f"{ticker}: Yahoo has a current price for {symbol}, so it is used instead of the price you entered."
+                )
         if price.as_of is not None and now - price.as_of > STALE_PRICE_AGE:
             notes.append(
                 f"{ticker}: the latest price Yahoo has for {symbol} is from {price.as_of.date().isoformat()}, "
@@ -229,7 +360,7 @@ def build_report(
         if price.converted:
             notes.append(
                 f"{ticker}: the price is quoted in {price.quoted_currency} and was converted to "
-                f"{statement.currency} at the current exchange rate."
+                f"{currency} at the current exchange rate."
             )
         if saved is None or saved.symbol != symbol or (user_chose and not saved.confirmed):
             choice = TickerChoice(
@@ -237,16 +368,13 @@ def build_report(
             )
             settings_changed |= settings.remember(ticker, choice)
 
-    report_progress(steps, steps, "Adding everything up...")
-    if settings_changed:
-        settings.save()
-    cache.save()
-    notes = list(portfolio.warnings)
-    for position in positions:
+    notes = list(lookups.general_notes)
+    for position in portfolio.open_positions:
         notes.extend(ticker_notes[position.ticker])
     for ticker, reason in unavailable.items():
         notes.append(f"{ticker}: current value unavailable. {reason}")
-    return Report(statement, value_portfolio(portfolio, prices, unavailable), tuple(notes))
+    valuation = value_portfolio(portfolio, prices, unavailable)
+    return Report(statement, valuation, tuple(notes), lookups), settings_changed
 
 
 FETCH_WORKERS = 4

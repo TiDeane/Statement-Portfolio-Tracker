@@ -1,7 +1,9 @@
 """The last price fetched for each listing, so an unreachable Yahoo still leaves a value to show.
 
-Only Yahoo symbols, prices per share and their dates are kept: nothing from the
-statement, no amounts. The file sits next to the settings file.
+Also the prices the user typed in themselves, kept until Yahoo has a price again.
+
+Only Yahoo symbols, tickers, prices per share and their dates are kept: nothing
+from the statement, no amounts. The file sits next to the settings file.
 """
 
 from __future__ import annotations
@@ -18,12 +20,20 @@ from statement_tracker.core.models import MarketPrice
 LAST_PRICES_FILE = "last_prices.json"
 
 
+def _read(entries: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(entries, dict):
+        return {}
+    return {str(key): entry for key, entry in entries.items() if isinstance(entry, dict)}
+
+
 class PriceCache:
-    """Last known prices by Yahoo symbol, each in the statement currency it was worked out in, stored as JSON."""
+    """Last known prices by Yahoo symbol and entered prices by ticker, each in the statement
+    currency it was worked out in, stored as JSON."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
         self._entries: dict[str, dict[str, Any]] = {}
+        self._entered: dict[str, dict[str, Any]] = {}
         self._changed = False
 
     @classmethod
@@ -36,8 +46,9 @@ class PriceCache:
         """Load saved prices. A missing or damaged file gives an empty cache: it can only ever help."""
         cache = cls(path)
         try:
-            prices = json.loads(path.read_text(encoding="utf-8")).get("prices", {})
-            cache._entries = {str(symbol): entry for symbol, entry in prices.items() if isinstance(entry, dict)}
+            data = json.loads(path.read_text(encoding="utf-8"))
+            cache._entries = _read(data.get("prices"))
+            cache._entered = _read(data.get("entered"))
         except (OSError, ValueError, AttributeError):
             pass
         return cache
@@ -70,11 +81,42 @@ class PriceCache:
         except (KeyError, ValueError, InvalidOperation):
             return None
 
+    def enter(self, ticker: str, price: Decimal, currency: str, entered_at: datetime) -> None:
+        """Keep a price per share the user typed in for ``ticker``, in ``currency``, replacing any before."""
+        self._entered[ticker] = {"currency": currency, "price": str(price), "entered_at": entered_at.isoformat()}
+        self._changed = True
+
+    def entered(self, ticker: str, currency: str) -> MarketPrice | None:
+        """Return the price the user typed in for ``ticker`` in ``currency``, or None if there is none.
+
+        Its symbol is empty: the caller knows which listing, if any, the ticker uses.
+        """
+        entry = self._entered.get(ticker)
+        if entry is None or entry.get("currency") != currency:
+            return None
+        try:
+            return MarketPrice(
+                Decimal(str(entry["price"])),
+                "",
+                currency,
+                as_of=datetime.fromisoformat(str(entry["entered_at"])),
+                entered=True,
+            )
+        except (KeyError, ValueError, InvalidOperation):
+            return None
+
+    def forget_entered(self, ticker: str) -> None:
+        """Drop the price typed in for ``ticker``: Yahoo has one again."""
+        if self._entered.pop(ticker, None) is not None:
+            self._changed = True
+
     def save(self) -> None:
         """Write the prices if any changed, replacing the file in one step. Failures are ignored."""
         if not self._changed:
             return
-        data = {"prices": dict(sorted(self._entries.items()))}
+        data: dict[str, Any] = {"prices": dict(sorted(self._entries.items()))}
+        if self._entered:
+            data["entered"] = dict(sorted(self._entered.items()))
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             temporary = self.path.with_suffix(".tmp")

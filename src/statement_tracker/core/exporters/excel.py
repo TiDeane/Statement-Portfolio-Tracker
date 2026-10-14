@@ -210,9 +210,10 @@ class ExcelExporter:
                 del workbook[name]
 
         written = self._write_holdings(holdings, valuation)
-        # A history row is dated today, so it is only written when every value is today's.
-        last_known = valuation.uses_last_known_prices
-        history_action = "skipped" if last_known else self._write_history(history, valuation, today)
+        # A history row is dated today, so it is only written when every value is today's: a price
+        # typed in today counts, a last known one or one typed in on an earlier day does not.
+        current = valuation.prices_are_from(today)
+        history_action = self._write_history(history, valuation, today) if current else "skipped"
         _style(holdings, _HOLDINGS_FORMATS, bold_last_row=written > 0)
         _style(history, _HISTORY_FORMATS)
 
@@ -225,10 +226,15 @@ class ExcelExporter:
                 f'Not every current value is available, so no row was written to "{self.history_sheet}" '
                 "this time. Existing history was not changed."
             )
-        elif last_known:
+        elif valuation.uses_last_known_prices:
             notes.append(
                 "Some values use a price from an earlier day because Yahoo could not be reached, so no row "
                 f'was written to "{self.history_sheet}" this time. Existing history was not changed.'
+            )
+        elif not current:
+            notes.append(
+                "Some values use a price you entered on an earlier day, so no row was written to "
+                f'"{self.history_sheet}" this time. Existing history was not changed.'
             )
         self._save(workbook)
         return ExportResult(str(self.path), created, written, history_action, tuple(notes))
@@ -360,17 +366,28 @@ class ExcelExporter:
             for column, value in enumerate(values, start=1):
                 sheet.cell(row=row_number, column=column, value=value)
 
-        # A value at a price from an earlier run gets a comment (Excel shows a red corner) saying from when.
+        # A value at a price from an earlier run, or at one the user typed in, gets a comment (Excel
+        # shows a red corner) saying which and from when.
         for row, holding in enumerate(valuation.holdings, start=2):
-            if holding.price is not None and holding.price.last_known:
-                day = holding.price.as_of.date().isoformat() if holding.price.as_of else "an earlier day"
+            price = holding.price
+            if price is not None and price.last_known:
+                day = price.as_of.date().isoformat() if price.as_of else "an earlier day"
                 sheet.cell(row=row, column=_VALUE_COLUMN).comment = _comment(
                     f"Last known price, from {day}. Yahoo could not be reached when this was written."
                 )
-        if valuation.uses_last_known_prices and valuation.total_market_value is not None:
-            sheet.cell(row=total_row, column=_VALUE_COLUMN).comment = _comment(
-                "Includes last known prices from an earlier day, so this total is not up to date."
-            )
+            elif price is not None and price.entered:
+                day = price.as_of.astimezone().date().isoformat() if price.as_of else "an earlier day"
+                sheet.cell(row=row, column=_VALUE_COLUMN).comment = _comment(
+                    f"Price per share entered by hand on {day}, not from Yahoo."
+                )
+        if valuation.total_market_value is not None:
+            total_notes = []
+            if valuation.uses_last_known_prices:
+                total_notes.append("Includes last known prices from an earlier day, so this total is not up to date.")
+            if valuation.uses_entered_prices:
+                total_notes.append("Includes prices entered by hand.")
+            if total_notes:
+                sheet.cell(row=total_row, column=_VALUE_COLUMN).comment = _comment(" ".join(total_notes))
         return len(valuation.holdings)
 
     def _write_history(self, sheet: Any, valuation: PortfolioValuation, today: date) -> str:

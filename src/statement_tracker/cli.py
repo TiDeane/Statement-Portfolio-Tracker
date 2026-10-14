@@ -14,7 +14,7 @@ import csv
 import sys
 from collections.abc import Sequence
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import TextIO
 
@@ -43,7 +43,9 @@ def _price_time(price: MarketPrice | None) -> str:
     if price is None or price.as_of is None:
         return UNAVAILABLE
     shown = price.as_of.isoformat(timespec="minutes")
-    return f"{shown} (last known)" if price.last_known else shown
+    if price.last_known:
+        return f"{shown} (last known)"
+    return f"{shown} (entered by hand)" if price.entered else shown
 
 
 def report_rows(report: Report, details: bool = False) -> list[list[str]]:
@@ -91,7 +93,7 @@ def report_rows(report: Report, details: bool = False) -> list[list[str]]:
                 str(position.shares),
                 _number(position.average_cost, "0.0001"),
                 _number(price.price if price else None, "0.0001"),
-                price.symbol if price else UNAVAILABLE,
+                (price.symbol or "none") if price else UNAVAILABLE,
                 _price_time(price),
                 _money(position.realized_pnl),
                 _money(position.dividends),
@@ -180,6 +182,20 @@ def _parse_pairs(pairs: Sequence[str], option: str, value_name: str) -> dict[str
     return parsed
 
 
+def _parse_price(text: str) -> Decimal:
+    """Parse a --price amount: a positive number with a full stop for decimals."""
+    try:
+        price = Decimal(text)
+    except InvalidOperation:
+        price = None
+    if price is None or not price.is_finite() or price <= 0:
+        raise UserFacingError(
+            f'"{text}" is not a valid price.',
+            "Write the price per share as a positive number with a full stop for decimals, e.g. 512.34.",
+        )
+    return price
+
+
 def main(
     argv: Sequence[str] | None = None,
     provider: PriceProvider | None = None,
@@ -220,6 +236,14 @@ def main(
         "(remembered; without it the fund name from Yahoo is used); may be repeated",
     )
     parser.add_argument(
+        "--price",
+        action="append",
+        default=[],
+        metavar="TICKER=PRICE",
+        help="price per share, in the statement currency, to use when Yahoo has none for a ticker "
+        "(remembered until Yahoo has a price again); may be repeated",
+    )
+    parser.add_argument(
         "--spreadsheet",
         type=Path,
         metavar="FILE.xlsx",
@@ -244,6 +268,7 @@ def main(
     try:
         overrides = _parse_pairs(args.symbol, "--symbol", "YAHOOSYMBOL")
         names = _parse_pairs(args.name, "--name", "NAME")
+        entered = {ticker: _parse_price(text) for ticker, text in _parse_pairs(args.price, "--price", "PRICE").items()}
         settings = Settings.load(args.settings)
         if names:
             settings.index_names.update(names)
@@ -260,6 +285,7 @@ def main(
             chooser=_prompting_chooser(errors) if interactive else None,
             symbol_overrides=overrides,
             ignore_unknown_types=args.ignore_unknown_types,
+            entered_prices=entered,
         )
     except UserFacingError as error:
         print(f"{error.what_happened}\n{error.what_to_do}", file=errors)

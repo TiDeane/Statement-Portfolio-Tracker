@@ -9,7 +9,7 @@ import html
 import sys
 import traceback
 from collections.abc import Callable
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -43,7 +43,15 @@ from statement_tracker.settings import Settings
 from statement_tracker.ui import dialogs, theme
 from statement_tracker.ui.settings_dialog import SettingsDialog
 from statement_tracker.ui.workers import QuestionBridge, Task
-from statement_tracker.workflow import Report, build_report, display_name, price_steps, update_spreadsheet
+from statement_tracker.workflow import (
+    Report,
+    build_report,
+    display_name,
+    needs_price,
+    price_steps,
+    update_spreadsheet,
+    with_entered_prices,
+)
 
 UNAVAILABLE = "unavailable"
 NO_STATEMENT = "No file chosen yet. You can also drag the file onto this window."
@@ -56,6 +64,11 @@ LAST_KNOWN_NOTE = (
     f"Values marked {LAST_KNOWN_MARK} use the last price fetched on an earlier day, because Yahoo could not "
     "be reached. Try again later for up-to-date values."
 )
+ENTERED_MARK = "(your price)"
+"""Words, not a symbol: a small sign next to an amount is easily read as a plus."""
+ENTERED_NOTE = f"Values marked {ENTERED_MARK} use a price you entered yourself."
+MISSING_PRICES = "Yahoo Finance has no current price for some of your investments."
+DOUBLE_CLICK_TO_ENTER = "Double-click to enter a price yourself."
 WINDOW_WIDTH = 1000
 MAX_SCREEN_SHARE = 0.8
 """When the result table appears, the window grows to at most this share of the screen's usable height."""
@@ -111,11 +124,15 @@ class MainWindow(QMainWindow):
         settings: Settings,
         provider_factory: Callable[[], PriceProvider] = _default_provider,
         today: Callable[[], date] = date.today,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         super().__init__()
         self._settings = settings
         self._provider_factory = provider_factory
         self._today = today
+        self._now = now
+        self._report: Report | None = None
+        """The result shown, kept so that a price typed in can be added to it without fetching again."""
         self._statement: Path | None = None
         self._spreadsheet: Path | None = settings.spreadsheet_path
         self._spreadsheet_from_last_time = settings.spreadsheet_path is not None
@@ -131,6 +148,9 @@ class MainWindow(QMainWindow):
             self, error, can_retry=True
         )
         self.show_settings: Callable[[SettingsDialog], object] = lambda dialog: dialog.exec()
+        self.ask_price: Callable[[list[dialogs.PriceChoice], str, str], tuple[str, Decimal] | None] = (
+            lambda choices, selected, currency: dialogs.ask_price(self, choices, selected, currency)
+        )
         self._last_run: tuple[Path | None, date] = (None, today())
         self.progressed.connect(self._show_progress)
         self._bridge = QuestionBridge(lambda resolution: self.ask_listing(resolution), self)
@@ -227,6 +247,23 @@ class MainWindow(QMainWindow):
         self.table.verticalHeader().setDefaultSectionSize(36)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setAlternatingRowColors(True)
+        self.table.cellDoubleClicked.connect(self._cell_double_clicked)
+        # Shown when some price is not a current one from Yahoo: fetch again, or type one in.
+        self.price_bar = QWidget()
+        self.price_bar_label = QLabel(MISSING_PRICES)
+        self.price_bar_label.setWordWrap(True)
+        self.retry_button = QPushButton("T&ry again")
+        self.retry_button.setToolTip("Fetch the prices from Yahoo Finance again.")
+        self.retry_button.clicked.connect(self.start)
+        self.enter_price_button = QPushButton("&Enter a price...")
+        self.enter_price_button.setToolTip("Type in the current price of an investment yourself.")
+        self.enter_price_button.clicked.connect(lambda: self.enter_price())
+        price_bar = QHBoxLayout(self.price_bar)
+        price_bar.setContentsMargins(0, 0, 0, 0)
+        price_bar.addWidget(self.price_bar_label, stretch=1)
+        price_bar.addWidget(self.retry_button)
+        price_bar.addWidget(self.enter_price_button)
+        self.price_bar.setVisible(False)
         self.notes_label = QLabel("")
         self.notes_label.setObjectName("notes")
         self.notes_label.setWordWrap(True)
@@ -252,6 +289,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.table, stretch=1)
         self._filler = QWidget()  # takes the table's place until there is a result, so the steps stay at the top
         layout.addWidget(self._filler, stretch=1)
+        layout.addWidget(self.price_bar)
         layout.addWidget(self.notes_label)
         layout.addLayout(footer)
         central = QWidget()
@@ -416,6 +454,8 @@ class MainWindow(QMainWindow):
         # With "Update my Excel spreadsheet" chosen but no file yet, there is nothing to update: wait for one.
         self.go_button.setEnabled(self._statement is not None and not waiting_for_file and not self._busy())
         self.settings_button.setEnabled(not self._busy())  # a run reads and saves the same settings
+        self.retry_button.setEnabled(self._statement is not None and not waiting_for_file and not self._busy())
+        self.enter_price_button.setEnabled(not self._busy())
 
     def open_settings(self) -> None:
         """Show the settings window."""
@@ -503,6 +543,52 @@ class MainWindow(QMainWindow):
     def _finished(self, outcome: object) -> None:
         report, exported, export_error = outcome  # type: ignore[misc]
         self._done()
+        self._show_outcome(report, exported, export_error)
+
+    def _cell_double_clicked(self, row: int, column: int) -> None:
+        # Opened once the double-click itself is over, not from inside its handling.
+        QTimer.singleShot(0, self, lambda: self.enter_price(row))
+
+    def enter_price(self, row: int | None = None) -> None:
+        """Let the user type in the price of an investment Yahoo has no current price for.
+
+        ``row`` is the table row asked about, if any. The result and the spreadsheet are
+        worked out again with that price, without fetching anything.
+        """
+        report = self._report
+        if report is None or self._busy():
+            return
+        holdings = report.valuation.holdings
+        if row is not None and not (0 <= row < len(holdings) and needs_price(holdings[row])):
+            return  # the Total row, or an investment with a current price
+        choices = [
+            dialogs.PriceChoice(ticker, display_name(self._settings, ticker), holding.price)
+            for holding in holdings
+            if needs_price(holding) and (ticker := holding.position.ticker)
+        ]
+        if not choices:
+            return
+        selected = holdings[row].position.ticker if row is not None else choices[0].ticker
+        answer = self.ask_price(choices, selected, report.statement.currency)
+        if answer is None:
+            return
+        ticker, price = answer
+        report = with_entered_prices(report, {ticker: price}, self._settings, now=self._now())
+        spreadsheet, today = self._last_run[0], self._today()
+        self._last_run = (spreadsheet, today)
+        exported, export_error = None, None
+        if spreadsheet is not None:
+            try:
+                exported = update_spreadsheet(report, self._settings, spreadsheet, today)
+            except UserFacingError as error:
+                export_error = error
+        self._show_outcome(report, exported, export_error)
+
+    def _show_outcome(
+        self, report: Report, exported: ExportResult | None, export_error: UserFacingError | None
+    ) -> None:
+        """Show a result, the spreadsheet's update (offering to try saving it again) and the notes."""
+        self._report = report
         self._show_report(report)
 
         # The spreadsheet could not be saved (usually: still open in Excel). Offer to try just
@@ -518,6 +604,8 @@ class MainWindow(QMainWindow):
                 export_error = error
 
         notes = list(report.notes)
+        if report.valuation.uses_entered_prices:
+            notes.insert(0, ENTERED_NOTE)
         if report.valuation.uses_last_known_prices:
             notes.insert(0, LAST_KNOWN_NOTE)
         if exported is not None:
@@ -580,12 +668,23 @@ class MainWindow(QMainWindow):
             text += f" ({sign}{self._percent(abs(percent))})"
         return text
 
-    def _last_known_tip(self, price: MarketPrice) -> str:
-        if price.as_of is None:
-            return "Last known price from an earlier day: Yahoo could not be reached."
-        day = price.as_of.date()
-        shown = self._locale.toString(QDate(day.year, day.month, day.day), QLocale.FormatType.LongFormat)
-        return f"Last known price, from {shown}: Yahoo could not be reached."
+    def _long_date(self, day: date) -> str:
+        return self._locale.toString(QDate(day.year, day.month, day.day), QLocale.FormatType.LongFormat)
+
+    def _worth_mark(self, price: MarketPrice | None) -> tuple[str, str | None]:
+        """The mark after a holding's "Worth now", and its tooltip, saying where the price came from."""
+        if price is None:
+            return "", f"No current price. {DOUBLE_CLICK_TO_ENTER}"
+        if price.last_known:
+            if price.as_of is None:
+                tip = "Last known price from an earlier day: Yahoo could not be reached."
+            else:
+                tip = f"Last known price, from {self._long_date(price.as_of.date())}: Yahoo could not be reached."
+            return LAST_KNOWN_MARK, f"{tip} {DOUBLE_CLICK_TO_ENTER}"
+        if price.entered:
+            when = f" on {self._long_date(price.as_of.astimezone().date())}" if price.as_of else ""
+            return ENTERED_MARK, f"Price you entered{when}, used until Yahoo Finance has one. Double-click to change it."
+        return "", None
 
     def _set_headers(self) -> None:
         """Column order follows the spreadsheet: each percentage sits next to the amount it is a share of."""
@@ -633,25 +732,30 @@ class MainWindow(QMainWindow):
                 )
             )
 
-        # A value at a price from an earlier run is marked with LAST_KNOWN_MARK, and its tooltip says from when.
-        last_known: list[str | None] = [
-            self._last_known_tip(holding.price) if holding.price is not None and holding.price.last_known else None
+        # "Worth now" at a price from an earlier run is marked with LAST_KNOWN_MARK, at one the user typed
+        # in with ENTERED_MARK; the tooltip says which and from when. Each row: (mark, tooltip).
+        worth_marks = [
+            self._worth_mark(holding.price)
             for holding in valuation.holdings
         ]
         if valuation.holdings:
-            last_known.append(
-                "Includes last known prices from an earlier day, so this total is not up to date."
-                if valuation.uses_last_known_prices and valuation.total_market_value is not None
-                else None
-            )
+            total_marks, total_tips = [], []
+            if valuation.total_market_value is not None:
+                if valuation.uses_last_known_prices:
+                    total_marks.append(LAST_KNOWN_MARK)
+                    total_tips.append("Includes last known prices from an earlier day, so this total is not up to date.")
+                if valuation.uses_entered_prices:
+                    total_marks.append(ENTERED_MARK)
+                    total_tips.append("Includes prices you entered yourself.")
+            worth_marks.append((" ".join(total_marks), " ".join(total_tips) or None))
 
         colours = theme.current()
         self.table.setRowCount(len(rows))
         for row_number, (*texts, gain) in enumerate(rows):
             is_total = bool(valuation.holdings) and row_number == len(rows) - 1
             for column, text in enumerate(texts):
-                tip = last_known[row_number] if column == WORTH_COLUMN else None
-                item = QTableWidgetItem(f"{text} {LAST_KNOWN_MARK}" if tip else text)
+                mark, tip = worth_marks[row_number] if column == WORTH_COLUMN else ("", None)
+                item = QTableWidgetItem(f"{text} {mark}" if mark else text)
                 if tip:
                     item.setToolTip(tip)
                 if column:
@@ -668,6 +772,7 @@ class MainWindow(QMainWindow):
                 self.table.setItem(row_number, column, item)
         self.table.setVisible(bool(valuation.holdings))
         self._filler.setVisible(not valuation.holdings)
+        self.price_bar.setVisible(any(needs_price(holding) for holding in valuation.holdings))
 
     def _fit_height_to_steps(self) -> None:
         """Before there is a result, keep the window as tall as the steps, shrinking as well as growing.

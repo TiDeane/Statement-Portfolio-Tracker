@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 ZERO = Decimal(0)
@@ -108,6 +108,16 @@ class MarketPrice:
     as_of: datetime | None = None
     last_known: bool = False
     """True when Yahoo could not be reached and this is the price fetched on an earlier run."""
+    entered: bool = False
+    """True when the user typed this price in themselves; ``as_of`` is when."""
+
+    def is_from(self, day: date) -> bool:
+        """True unless this is a last known price, or a price entered on another day than ``day``."""
+        if self.last_known:
+            return False
+        if self.entered:
+            return self.as_of is not None and self.as_of.astimezone().date() == day
+        return True
 
 
 @dataclass(frozen=True)
@@ -141,3 +151,12 @@ class PortfolioValuation:
     def uses_last_known_prices(self) -> bool:
         """True if any holding is valued at a price from an earlier run, so the totals are not current."""
         return any(holding.price is not None and holding.price.last_known for holding in self.holdings)
+
+    @property
+    def uses_entered_prices(self) -> bool:
+        """True if any holding is valued at a price the user typed in."""
+        return any(holding.price is not None and holding.price.entered for holding in self.holdings)
+
+    def prices_are_from(self, day: date) -> bool:
+        """True if every price used is ``day``'s: none last known, none entered on an earlier day."""
+        return all(holding.price is None or holding.price.is_from(day) for holding in self.holdings)

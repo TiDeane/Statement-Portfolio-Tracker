@@ -3,7 +3,8 @@
 import gc
 import os
 import time
-from datetime import date
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -21,9 +22,17 @@ from statement_tracker.core.errors import UserFacingError  # noqa: E402
 from statement_tracker.core.parser import load_statement  # noqa: E402
 from statement_tracker.settings import Settings  # noqa: E402
 from statement_tracker.ui import theme  # noqa: E402
-from statement_tracker.ui.dialogs import ChooseListingDialog  # noqa: E402
+from statement_tracker.core.models import MarketPrice  # noqa: E402
+from statement_tracker.ui.dialogs import (  # noqa: E402
+    ChooseListingDialog,
+    EnterPriceDialog,
+    PriceChoice,
+    parse_price,
+)
 from statement_tracker.ui.settings_dialog import ASK_AGAIN_STATUS, SettingsDialog  # noqa: E402
 from statement_tracker.ui.main_window import (  # noqa: E402
+    ENTERED_MARK,
+    ENTERED_NOTE,
     LAST_KNOWN_NOTE,
     MAX_SCREEN_SHARE,
     MainWindow,
@@ -536,6 +545,91 @@ def test_last_known_price_is_marked_in_the_table_and_explained(app, tmp_path: Pa
     assert total.text().endswith(" *") and "not up to date" in total.toolTip()
     assert offline.notes_label.text().startswith(f"Note: {LAST_KNOWN_NOTE}")
     assert "is used instead" in offline.notes_label.text()
+
+
+def test_prices_line_appears_only_when_a_price_is_missing(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.set_statement(SAMPLE)
+    run(app, window)
+    assert window.price_bar.isHidden()
+    asked = []
+    window.ask_price = lambda *question: asked.append(question)
+    window.table.cellDoubleClicked.emit(0, 3)
+    settle(app)
+    assert asked == []  # a current price from Yahoo: nothing to enter
+
+    (tmp_path / "other").mkdir()  # no last known price there
+    offline, _ = make_window(tmp_path / "other", FakeProvider(offline=True))
+    offline.set_statement(SAMPLE)
+    run(app, offline)
+    assert not offline.price_bar.isHidden()
+    assert offline.table.item(0, 3).text() == "unavailable"
+    assert "Double-click to enter a price" in offline.table.item(0, 3).toolTip()
+
+
+def test_entered_price_fills_in_the_table_and_the_spreadsheet(app, tmp_path: Path) -> None:
+    window, errors = make_window(tmp_path, FakeProvider(offline=True))
+    window._now = lambda: datetime(TODAY.year, TODAY.month, TODAY.day, 12).astimezone()
+    spreadsheet = tmp_path / "mine.xlsx"
+    window.set_statement(SAMPLE)
+    window.set_spreadsheet(spreadsheet)
+    run(app, window)
+    asked = []
+
+    def answer(choices, selected, currency):
+        asked.append(([choice.label for choice in choices], selected, currency))
+        return "EQQB", Decimal("400")
+
+    window.ask_price = answer
+    window.table.cellDoubleClicked.emit(1, 3)  # the Total row: nothing to enter there
+    settle(app)
+    assert asked == []
+    window.table.cellDoubleClicked.emit(0, 3)
+    settle(app)
+
+    assert asked == [(["EQQB"], "EQQB", "EUR")]
+    assert errors == []
+    worth, total = window.table.item(0, 3), window.table.item(1, 3)
+    assert worth.text().endswith(f" {ENTERED_MARK}") and "Price you entered on" in worth.toolTip()
+    assert total.text().endswith(f" {ENTERED_MARK}") and "entered yourself" in total.toolTip()
+    assert window.notes_label.text().startswith(f"Note: {ENTERED_NOTE}")
+    assert not window.price_bar.isHidden()  # the price can still be changed, or fetched again
+    sheet = load_workbook(spreadsheet)["Current Holdings"]
+    assert sheet["D2"].value == pytest.approx(589.313384)
+    history = load_workbook(spreadsheet)["Portfolio History"]
+    assert history.max_row == 2  # typed in today, so today's row is written
+
+
+def test_enter_price_dialog_starts_from_the_price_known_and_returns_the_one_typed(app) -> None:
+    last_known = MarketPrice(
+        Decimal("498.1"), "BBBB.DE", "EUR", as_of=datetime(2026, 10, 3, 17, 30, tzinfo=UTC), last_known=True
+    )
+    choices = [PriceChoice("AAAA", "(AAAA) First fund", None), PriceChoice("BBBB", "(BBBB) Second fund", last_known)]
+    dialog = EnterPriceDialog(choices, "BBBB", "EUR")
+
+    assert dialog.investment.isVisibleTo(dialog) and dialog.investment.currentData() == "BBBB"
+    assert parse_price(dialog.price.text()) == Decimal("498.1")
+    assert dialog.use_button.isEnabled()
+
+    dialog.investment.setCurrentIndex(0)
+    assert dialog.price.text() == "" and not dialog.use_button.isEnabled()
+    dialog.price.setText("abc")
+    assert not dialog.use_button.isEnabled() and dialog.entered() is None
+    dialog.price.setText("512,34")
+    assert dialog.use_button.isEnabled()
+    assert dialog.entered() == ("AAAA", Decimal("512.34"))
+
+
+@pytest.mark.parametrize(
+    ("text", "price"),
+    [
+        ("512.34", "512.34"), ("512,34", "512.34"), (" 500 ", "500"), ("1,234.56", "1234.56"),
+        ("1.234,56", "1234.56"), ("1 234,5", "1234.5"), ("0", None), ("-5", None), ("", None),
+        ("abc", None), ("1.2.3", None), ("12 EUR", None), ("NaN", None),
+    ],
+)  # fmt: skip
+def test_typed_prices_are_read_with_a_comma_or_a_full_stop(text: str, price: str | None) -> None:
+    assert parse_price(text) == (Decimal(price) if price else None)
 
 
 def test_settings_rename_choose_again_and_forget_an_investment(app, tmp_path: Path) -> None:

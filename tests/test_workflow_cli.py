@@ -16,7 +16,7 @@ from statement_tracker.core.market_data.provider import PriceUnavailableError, Q
 from statement_tracker.core.parser import load_statement
 from statement_tracker.core.ticker_resolver import resolve_ticker
 from statement_tracker.settings import Settings, TickerChoice
-from statement_tracker.workflow import build_report
+from statement_tracker.workflow import build_report, with_entered_prices
 
 EQQB_BUYS = buys_by_ticker(load_statement(SAMPLE))["EQQB"]
 
@@ -391,6 +391,93 @@ def test_last_known_price_in_another_statement_currency_is_not_used(tmp_path: Pa
     report = build_report(usd, FakeProvider(offline=True), Settings.load(settings_path))
 
     assert report.valuation.holdings[0].market_value is None
+
+
+def abcd_only() -> FakeProvider:
+    """ABCD has a price; WXYZ cannot be found on Yahoo at all."""
+    provider = FakeProvider()
+    provider.add("ABCD.DE", "EUR", price="120")
+    return provider
+
+
+def test_entered_price_values_an_investment_yahoo_does_not_have_without_fetching(tmp_path: Path) -> None:
+    settings_path = tmp_path / "settings.json"
+    statement = write_statement(tmp_path, *TWO_HOLDINGS)
+    provider = abcd_only()
+    report = build_report(statement, provider, Settings.load(settings_path), symbol_overrides={"ABCD": "ABCD.DE"})
+    assert report.valuation.total_market_value is None
+    calls = len(provider.calls)
+
+    entered = with_entered_prices(report, {"WXYZ": Decimal("100")}, Settings.load(settings_path))
+
+    assert len(provider.calls) == calls  # nothing fetched again
+    wxyz = entered.valuation.holdings[1]
+    assert wxyz.price is not None and wxyz.price.entered and wxyz.market_value == Decimal(400)
+    assert entered.valuation.total_market_value == Decimal(1600)
+    assert entered.valuation.uses_entered_prices
+    assert not any("WXYZ: current value unavailable" in note for note in entered.notes)
+    assert any(note.startswith("WXYZ: no Yahoo listing is used for it, so the price you entered on") for note in entered.notes)
+
+    # Kept for the next run: Yahoo still has nothing for WXYZ.
+    again = build_report(statement, abcd_only(), Settings.load(settings_path))
+    assert again.valuation.holdings[1].price.entered
+    assert again.valuation.total_market_value == Decimal(1600)
+
+
+def test_entered_price_is_used_ahead_of_the_last_known_one_and_dropped_once_yahoo_has_a_price(tmp_path: Path) -> None:
+    settings_path = tmp_path / "settings.json"
+    build_report(SAMPLE, sample_provider(), Settings.load(settings_path))  # last known: 400
+    offline = build_report(SAMPLE, FakeProvider(offline=True), Settings.load(settings_path))
+
+    entered = with_entered_prices(offline, {"EQQB": Decimal("450")}, Settings.load(settings_path))
+
+    price = entered.valuation.holdings[0].price
+    assert price.entered and not price.last_known and price.price == Decimal("450")
+    assert price.symbol == "EQQB.DE"
+    assert any("Prices could not be fetched (offline). The price you entered on" in note for note in entered.notes)
+    assert build_report(SAMPLE, FakeProvider(offline=True), Settings.load(settings_path)).valuation.holdings[0].price.entered
+
+    online = build_report(SAMPLE, sample_provider(), Settings.load(settings_path))
+    assert not online.valuation.holdings[0].price.entered
+    # Dropped: the next offline run goes back to the last price fetched.
+    later = build_report(SAMPLE, FakeProvider(offline=True), Settings.load(settings_path))
+    assert later.valuation.holdings[0].price.last_known
+
+
+def test_cli_price_is_used_when_yahoo_has_none(tmp_path: Path) -> None:
+    statement = write_statement(tmp_path, *TWO_HOLDINGS)
+
+    code, output, errors = run_cli(
+        str(statement), "--details", "--symbol", "ABCD=ABCD.DE", "--price", "WXYZ=100",
+        provider=abcd_only(), settings=tmp_path / "settings.json",
+    )  # fmt: skip
+
+    assert code == 0
+    wxyz = output.splitlines()[2]
+    assert wxyz.startswith("WXYZ,201.00,16.72,400.00,25.00,199.00,99.00,4,50.2500,100.0000,none,")
+    assert "(entered by hand)" in wxyz
+    assert output.splitlines()[3].startswith("Total,1202.00,100.00,1600.00,")
+    assert "the price you entered on" in errors
+
+
+def test_cli_price_is_not_used_when_yahoo_has_one(tmp_path: Path) -> None:
+    code, output, errors = run_cli(
+        str(SAMPLE), "--price", "EQQB=1", provider=sample_provider(), settings=tmp_path / "settings.json"
+    )
+
+    assert code == 0
+    assert output.splitlines()[1] == "EQQB,541.49,100.00,589.31,100.00,47.82,8.83"
+    assert "Yahoo has a current price for EQQB.DE, so it is used instead of the price you entered" in errors
+
+
+@pytest.mark.parametrize("price", ["abc", "0", "-5", "1,5", "NaN"])
+def test_cli_rejects_a_price_that_is_not_a_positive_number(tmp_path: Path, price: str) -> None:
+    code, output, errors = run_cli(
+        str(SAMPLE), "--price", f"EQQB={price}", provider=sample_provider(), settings=tmp_path / "settings.json"
+    )
+
+    assert (code, output) == (2, "")
+    assert "is not a valid price" in errors
 
 
 def test_a_damaged_last_prices_file_is_ignored(tmp_path: Path) -> None:

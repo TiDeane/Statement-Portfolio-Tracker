@@ -83,7 +83,7 @@ Revolut may move these menus in newer versions of its app.
 ## Use the app
 
 1. **Step 1: your Revolut statement.** Click **Choose statement file...** and pick the CSV file, or drag the file onto the window.
-2. **Step 2 (optional): your Excel spreadsheet.** If you wish to write the app's output into an Excel sheet, click **Choose my spreadsheet...** to use an Excel file you already have, or **Create a new one...**. The app remembers your choice for next time, and you can change it at any point.
+2. **Step 2 (optional): your Excel spreadsheet.** Choose **Don't use a spreadsheet** to only see the results in the window, or **Update my Excel spreadsheet** to also write them into Excel. With the second, two buttons appear: **Choose my spreadsheet...** to use an Excel file you already have, or **Create a new one...**. You can also drag an Excel file onto the window. The app remembers your choice for next time, and you can change it at any point.
 3. **Step 3.** Click the green button. A progress bar shows how far the app is while it fetches prices, which takes a few seconds. The window then grows to show your investments.
 
 ### If the app asks you to confirm an investment

@@ -13,10 +13,11 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QLocale, QStandardPaths, Qt, QThreadPool, Signal
+from PySide6.QtCore import QDate, QLocale, QStandardPaths, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QBrush, QCloseEvent, QColor, QDragEnterEvent, QDropEvent, QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QButtonGroup,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QProgressBar,
     QPushButton,
+    QRadioButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -45,7 +47,6 @@ from statement_tracker.workflow import Report, build_report, display_name, price
 
 UNAVAILABLE = "unavailable"
 NO_STATEMENT = "No file chosen yet. You can also drag the file onto this window."
-NO_SPREADSHEET = "No spreadsheet. The results will only be shown here."
 
 TABLE_HEADERS = ["Investment", "Invested", "% of invested", "Worth now", "% of worth now", "Gain or loss"]
 WORTH_COLUMN = 3
@@ -66,6 +67,8 @@ STEP_TO_DO = ("To do: choose your statement file.", "todo")
 STEP_DONE = ("✓ Done", "ok")
 STEP_OPTIONAL = ("Optional. You can skip this step.", "optional")
 STEP_REMEMBERED = ("✓ Already done: remembered from last time.", "ok")
+STEP_PICK_SPREADSHEET = ("To do: choose your spreadsheet or create a new one.", "todo")
+PICK_SPREADSHEET = "Choose an Excel file you already have, or let the app create a new one."
 
 Outcome = tuple[Report, ExportResult | None, UserFacingError | None]
 
@@ -116,6 +119,10 @@ class MainWindow(QMainWindow):
         self._statement: Path | None = None
         self._spreadsheet: Path | None = settings.spreadsheet_path
         self._spreadsheet_from_last_time = settings.spreadsheet_path is not None
+        self._wants_spreadsheet = False
+        """"Update my Excel spreadsheet" is chosen but no file has been picked yet."""
+        self._set_aside_spreadsheet: Path | None = None
+        """The file used before "Don't use a spreadsheet" was chosen, restored if the user changes their mind."""
         self._tasks: list[Task] = []
         self._locale = QLocale()
         self.ask_listing: Callable[[Resolution], str | None] = self._ask_listing
@@ -158,25 +165,42 @@ class MainWindow(QMainWindow):
         # Step 2
         self.spreadsheet_label = QLabel()
         self.spreadsheet_label.setWordWrap(True)
-        existing_button = QPushButton("Choose my &spreadsheet...")
-        existing_button.setToolTip("Pick an Excel file you already have. Your own sheets in it are not changed.")
-        existing_button.clicked.connect(self._choose_spreadsheet)
-        new_button = QPushButton("Create a &new one...")
-        new_button.setToolTip("Let the app create a new Excel file for you.")
-        new_button.clicked.connect(self._create_spreadsheet)
-        self.no_spreadsheet_button = QPushButton("&Don't use a spreadsheet")
-        self.no_spreadsheet_button.clicked.connect(lambda: self.set_spreadsheet(None))
+        # The choice (none, or a spreadsheet) is a pair of radio buttons; choosing or creating the
+        # file are plain actions under the second. Nothing that is an action is ever highlighted.
+        self.no_spreadsheet_option = QRadioButton("&Don't use a spreadsheet: only show the results here")
+        self.no_spreadsheet_option.clicked.connect(self._stop_using_spreadsheet)
+        self.spreadsheet_option = QRadioButton("&Update my Excel spreadsheet")
+        self.spreadsheet_option.clicked.connect(self._use_spreadsheet)
+        spreadsheet_options = QButtonGroup(self)
+        spreadsheet_options.addButton(self.no_spreadsheet_option)
+        spreadsheet_options.addButton(self.spreadsheet_option)
+        self.existing_spreadsheet_button = QPushButton("Choose my &spreadsheet...")
+        self.existing_spreadsheet_button.setToolTip(
+            "Pick an Excel file you already have. Your own sheets in it are not changed."
+        )
+        self.existing_spreadsheet_button.clicked.connect(self._choose_spreadsheet)
+        self.new_spreadsheet_button = QPushButton("Create a &new one...")
+        self.new_spreadsheet_button.setToolTip("Let the app create a new Excel file for you.")
+        self.new_spreadsheet_button.clicked.connect(self._create_spreadsheet)
         spreadsheet_buttons = QHBoxLayout()
-        for button in (existing_button, new_button, self.no_spreadsheet_button):
-            spreadsheet_buttons.addWidget(button)
+        spreadsheet_buttons.addWidget(self.existing_spreadsheet_button)
+        spreadsheet_buttons.addWidget(self.new_spreadsheet_button)
         spreadsheet_buttons.addStretch(1)
+        # The file and its buttons belong to "Update my Excel spreadsheet": indented under it, and only
+        # shown while it is chosen (they mean nothing without a spreadsheet).
+        self.spreadsheet_details = QWidget()
+        spreadsheet_details = QVBoxLayout(self.spreadsheet_details)
+        spreadsheet_details.setContentsMargins(26, 0, 0, 0)
+        spreadsheet_details.addWidget(self.spreadsheet_label)
+        spreadsheet_details.addLayout(spreadsheet_buttons)
         spreadsheet_box = QGroupBox("Step 2 (optional): your Excel spreadsheet")
         self.spreadsheet_badge = QLabel()
         self.spreadsheet_badge.setObjectName("badge")
         spreadsheet_layout = QVBoxLayout(spreadsheet_box)
         spreadsheet_layout.addWidget(self.spreadsheet_badge)
-        spreadsheet_layout.addWidget(self.spreadsheet_label)
-        spreadsheet_layout.addLayout(spreadsheet_buttons)
+        spreadsheet_layout.addWidget(self.no_spreadsheet_option)
+        spreadsheet_layout.addWidget(self.spreadsheet_option)
+        spreadsheet_layout.addWidget(self.spreadsheet_details)
 
         # Step 3
         self.go_button = QPushButton()
@@ -336,18 +360,45 @@ class MainWindow(QMainWindow):
         else:
             self.set_statement(path)
 
+    def _stop_using_spreadsheet(self) -> None:
+        """"Don't use a spreadsheet" was chosen. The file is kept in mind for this session, in case it is chosen again."""
+        if self._spreadsheet is not None:
+            self._set_aside_spreadsheet = self._spreadsheet
+        self._wants_spreadsheet = False
+        self.set_spreadsheet(None)
+
+    def _use_spreadsheet(self) -> None:
+        """"Update my Excel spreadsheet" was chosen: back to the file set aside, or wait for one to be picked."""
+        if self._spreadsheet is not None:
+            return
+        self._wants_spreadsheet = True
+        if self._set_aside_spreadsheet is not None:
+            self.set_spreadsheet(self._set_aside_spreadsheet)
+        else:
+            self._refresh()
+
     def _refresh(self) -> None:
         self.statement_label.setText(_file_text(self._statement) if self._statement else NO_STATEMENT)
         self.statement_label.setToolTip(str(self._statement) if self._statement else "")
         self._badge(self.statement_badge, *(STEP_DONE if self._statement else STEP_TO_DO))
-        if self._spreadsheet is None:
+
+        using = self._spreadsheet is not None or self._wants_spreadsheet
+        waiting_for_file = using and self._spreadsheet is None
+        self.no_spreadsheet_option.setChecked(not using)
+        self.spreadsheet_option.setChecked(using)
+        if self.spreadsheet_details.isHidden() == using:
+            self.spreadsheet_details.setVisible(using)
+            self._fit_height_to_steps()
+        if not using:
             self._badge(self.spreadsheet_badge, *STEP_OPTIONAL)
+        elif waiting_for_file:
+            self._badge(self.spreadsheet_badge, *STEP_PICK_SPREADSHEET)
         elif self._spreadsheet_from_last_time:
             self._badge(self.spreadsheet_badge, *STEP_REMEMBERED)
         else:
             self._badge(self.spreadsheet_badge, *STEP_DONE)
         if self._spreadsheet is None:
-            self.spreadsheet_label.setText(NO_SPREADSHEET)
+            self.spreadsheet_label.setText(PICK_SPREADSHEET)
         elif self._spreadsheet.exists():
             self.spreadsheet_label.setText(
                 _file_text(self._spreadsheet, "It will be updated. Close it in Excel first.")
@@ -357,13 +408,13 @@ class MainWindow(QMainWindow):
                 _file_text(self._spreadsheet, "It does not exist yet and will be created.")
             )
         self.spreadsheet_label.setToolTip(str(self._spreadsheet) if self._spreadsheet else "")
-        self.no_spreadsheet_button.setEnabled(self._spreadsheet is not None)
         self.go_button.setText(
             "Step 3: show my investments and update my spreadsheet"
             if self._spreadsheet
             else "Step 3: show my investments"
         )
-        self.go_button.setEnabled(self._statement is not None and not self._busy())
+        # With "Update my Excel spreadsheet" chosen but no file yet, there is nothing to update: wait for one.
+        self.go_button.setEnabled(self._statement is not None and not waiting_for_file and not self._busy())
         self.settings_button.setEnabled(not self._busy())  # a run reads and saves the same settings
 
     def open_settings(self) -> None:
@@ -595,6 +646,24 @@ class MainWindow(QMainWindow):
         self._filler.setVisible(not valuation.holdings)
         if valuation.holdings:
             self._grow_to_fit_table()
+
+    def _fit_height_to_steps(self) -> None:
+        """Before there is a result, keep the window as tall as the steps, shrinking as well as growing.
+
+        Showing or hiding the spreadsheet buttons changes that height. Once the result table
+        is shown, the window is left alone here: it only ever grows (see ``_grow_to_fit_table``).
+        """
+        if not self.table.isHidden() or not self.centralWidget():  # isHidden: also right before the window is shown
+            return
+        # Measured once the shown or hidden buttons have been laid out, not before.
+        QTimer.singleShot(0, self, self._resize_to_steps)
+
+    def _resize_to_steps(self) -> None:
+        if not self.table.isHidden():
+            return
+        self.centralWidget().layout().activate()
+        self.layout().activate()
+        self.resize(self.width(), self.sizeHint().height())  # as when the window first opens
 
     def _grow_to_fit_table(self) -> None:
         """Make the window tall enough to show every row, up to a share of the screen's height.

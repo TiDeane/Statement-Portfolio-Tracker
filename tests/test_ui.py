@@ -26,7 +26,6 @@ from statement_tracker.ui.settings_dialog import ASK_AGAIN_STATUS, SettingsDialo
 from statement_tracker.ui.main_window import (  # noqa: E402
     LAST_KNOWN_NOTE,
     MAX_SCREEN_SHARE,
-    NO_SPREADSHEET,
     MainWindow,
     default_start_folder,
 )
@@ -120,13 +119,92 @@ def test_button_is_disabled_until_a_statement_is_chosen(app, tmp_path: Path) -> 
     window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
 
     assert not window.go_button.isEnabled()
-    assert window.spreadsheet_label.text() == NO_SPREADSHEET
+    assert window.no_spreadsheet_option.isChecked()
     assert window.go_button.text() == "Step 3: show my investments"
 
     window.set_statement(SAMPLE)
 
     assert window.go_button.isEnabled()
     assert shows(window.statement_label, SAMPLE)
+
+
+def test_step_2_shows_the_choice_as_options_and_the_files_as_actions(
+    app, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.set_statement(SAMPLE)
+
+    def state() -> tuple[bool, bool, bool]:
+        """(no spreadsheet chosen, spreadsheet chosen, step 3 possible)"""
+        return window.no_spreadsheet_option.isChecked(), window.spreadsheet_option.isChecked(), window.go_button.isEnabled()
+
+    def files_shown() -> bool:
+        return window.existing_spreadsheet_button.isVisibleTo(window) and window.spreadsheet_label.isVisibleTo(window)
+
+    # The file buttons are actions: never checkable, so never highlighted as if they were the choice.
+    assert not window.existing_spreadsheet_button.isCheckable() and not window.new_spreadsheet_button.isCheckable()
+    # Without a spreadsheet they mean nothing, so they are not shown.
+    assert state() == (True, False, True) and not files_shown()
+
+    # Choosing "Update my Excel spreadsheet" shows them, and asks for a file before step 3 can run.
+    window.spreadsheet_option.click()
+    assert state() == (False, True, False) and files_shown()
+    assert window.spreadsheet_badge.text().startswith("To do")
+
+    # A cancelled file dialog changes nothing.
+    monkeypatch.setattr(QtWidgets.QFileDialog, "getOpenFileName", lambda *args, **kwargs: ("", ""))
+    window.existing_spreadsheet_button.click()
+    assert state() == (False, True, False)
+
+    new_file = tmp_path / "new.xlsx"
+    monkeypatch.setattr(QtWidgets.QFileDialog, "getSaveFileName", lambda *args, **kwargs: (str(new_file), ""))
+    window.new_spreadsheet_button.click()
+    assert state() == (False, True, True) and "will be created" in window.spreadsheet_label.text()
+
+    # Back to no spreadsheet and then to the spreadsheet again: the file is still there.
+    window.no_spreadsheet_option.click()
+    assert state() == (True, False, True) and not files_shown()
+    window.spreadsheet_option.click()
+    assert state() == (False, True, True) and new_file.name in window.spreadsheet_label.text()
+
+    # Dropping an Excel file on the window switches to the spreadsheet too.
+    window.no_spreadsheet_option.click()
+    window.drop_file(new_file)
+    assert state() == (False, True, True) and files_shown()
+
+
+def test_the_window_fits_the_steps_until_there_is_a_result(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.show()
+    settle(app)
+    without_files = window.height()
+
+    window.spreadsheet_option.click()
+    settle(app)
+    with_files = window.height()
+    window.no_spreadsheet_option.click()
+    settle(app)
+
+    assert with_files > without_files  # grown for the file buttons...
+    assert window.height() == without_files  # ...and back, with no empty band left at the bottom
+
+    window.set_statement(SAMPLE)
+    run(app, window)
+    with_result = window.height()
+    window.spreadsheet_option.click()
+    window.no_spreadsheet_option.click()
+    settle(app)
+    assert window.height() >= with_result  # with a result shown, the window is never shrunk
+
+
+def test_a_remembered_spreadsheet_is_shown_as_the_choice_with_nothing_to_press(app, tmp_path: Path) -> None:
+    first, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    first.set_spreadsheet(tmp_path / "mine.xlsx")
+
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+
+    assert window.spreadsheet_option.isChecked() and not window.no_spreadsheet_option.isChecked()
+    assert window.spreadsheet_badge.text() == "✓ Already done: remembered from last time."
 
 
 def test_each_step_says_whether_it_is_done_optional_or_remembered(app, tmp_path: Path) -> None:

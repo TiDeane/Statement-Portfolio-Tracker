@@ -214,16 +214,15 @@ def test_a_sheet_with_our_name_that_is_not_ours_is_never_overwritten(tmp_path: P
     assert load_workbook(path).sheetnames == ["Current Holdings"]
 
 
-def test_missing_price_writes_unavailable_and_leaves_history_alone(tmp_path: Path) -> None:
+def test_without_any_price_unavailable_is_written_and_history_is_left_alone(tmp_path: Path) -> None:
     path = tmp_path / "portfolio.xlsx"
     ExcelExporter(path).export(valuation(), DAY_ONE)
 
-    result = ExcelExporter(path).export(valuation(wxyz=None), DAY_TWO)
+    result = ExcelExporter(path).export(valuation(abcd=None, wxyz=None), DAY_TWO)
 
     holdings = rows(path, "Current Holdings")
     assert result.history == "skipped"
-    assert holdings[1][:5] == ("ABCD", 1001, pytest.approx(0.832779, abs=1e-6), 1200, "unavailable")
-    assert (holdings[2][0], holdings[2][1], holdings[2][3], holdings[2][4]) == ("WXYZ", 201, "unavailable", "unavailable")
+    assert (holdings[1][0], holdings[1][3], holdings[1][4]) == ("ABCD", "unavailable", "unavailable")
     assert holdings[3][:5] == ("Total", 1202, 1, "unavailable", "unavailable")
     assert len(rows(path, "Portfolio History")) == 2
     assert "no row was written" in " ".join(result.notes)
@@ -262,7 +261,7 @@ def test_left_out_investment_is_greyed_and_the_total_and_history_cover_the_rest(
     portfolio = compute_portfolio(statement_from(*LINES))
     prices = {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}
 
-    result = ExcelExporter(path).export(value_portfolio(portfolio, prices, leave_out_unpriced=True), DAY_ONE)
+    result = ExcelExporter(path).export(value_portfolio(portfolio, prices), DAY_ONE)
 
     holdings = rows(path, "Current Holdings")
     assert holdings[1][:5] == ("ABCD", 1001, 1, 1200, "=D2/D$4")

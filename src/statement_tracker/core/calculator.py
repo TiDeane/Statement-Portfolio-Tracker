@@ -111,18 +111,14 @@ def value_portfolio(
     portfolio: Portfolio,
     prices: Mapping[str, MarketPrice],
     unavailable: Mapping[str, str] | None = None,
-    leave_out_unpriced: bool = False,
 ) -> PortfolioValuation:
     """Value the open positions at the given prices (already in the statement currency).
 
     A ticker missing from ``prices`` is shown as unavailable, with the reason from
-    ``unavailable`` when there is one. Totals and shares of the current value need
-    every price, so a single missing price leaves them as None: nothing is estimated.
-    Shares of the amount invested come from the statement alone and are always there.
-
-    With ``leave_out_unpriced``, holdings without a price are left out of the totals
-    instead, and the totals and shares (of the amount invested too) cover the rest.
-    Net worth and gain vs deposits still need every value, so they stay None.
+    ``unavailable`` when there is one, and is left out of the totals: the totals and
+    shares (of the amount invested too) cover the rest. Nothing is estimated, so net
+    worth and gain vs deposits, which need every value, stay None. Without any price
+    at all, the totals are None too.
     """
     unavailable = unavailable or {}
     open_positions = portfolio.open_positions
@@ -132,7 +128,7 @@ def value_portfolio(
         if position.ticker in prices
     }
     complete = len(values) == len(open_positions)
-    leaving_out = leave_out_unpriced and not complete and bool(values)
+    leaving_out = not complete and bool(values)
     total = sum(values.values(), ZERO) if complete or leaving_out else None
     left_out = [position for position in open_positions if leaving_out and position.ticker not in values]
     invested = portfolio.total_cost_basis - sum((position.cost_basis for position in left_out), ZERO)

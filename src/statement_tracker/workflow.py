@@ -368,8 +368,7 @@ def _assemble(
             )
             settings_changed |= settings.remember(ticker, choice)
 
-    # An investment without a price is left out of the totals rather than making them unavailable.
-    valuation = value_portfolio(portfolio, prices, unavailable, leave_out_unpriced=True)
+    valuation = value_portfolio(portfolio, prices, unavailable)  # what has no price is left out of the totals
     left_out = {holding.position.ticker for holding in valuation.left_out}
     notes = list(lookups.general_notes)
     for position in portfolio.open_positions:

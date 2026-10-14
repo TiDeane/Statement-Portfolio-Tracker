@@ -32,8 +32,6 @@ from statement_tracker.ui.dialogs import (  # noqa: E402
 from statement_tracker.ui.settings_dialog import ASK_AGAIN_STATUS, SettingsDialog  # noqa: E402
 from statement_tracker.ui.main_window import (  # noqa: E402
     ENTERED_MARK,
-    ENTERED_NOTE,
-    LAST_KNOWN_NOTE,
     MAX_SCREEN_SHARE,
     MainWindow,
     default_start_folder,
@@ -182,41 +180,6 @@ def test_step_2_shows_the_choice_as_options_and_the_files_as_actions(
     assert state() == (False, True, True) and files_shown()
 
 
-def test_long_notes_get_their_own_room_under_the_table(app, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import dataclasses
-
-    from statement_tracker.ui import main_window
-
-    real_build = main_window.build_report
-    long_note = "no listing could be matched to your purchases, so the first one found was used, as you asked. " * 3
-
-    def with_long_notes(*args, **kwargs):
-        report = real_build(*args, **kwargs)
-        return dataclasses.replace(report, notes=report.notes + tuple(f"TICK{n}: {long_note}" for n in range(6)))
-
-    monkeypatch.setattr(main_window, "build_report", with_long_notes)
-    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
-    window.show()
-    window.set_statement(SAMPLE)
-    run(app, window)
-    settle(app)
-
-    def bottom_of_table() -> int:
-        return window.table.mapTo(window, window.table.rect().bottomLeft()).y()
-
-    def top_of_notes() -> int:
-        return window.notes_label.mapTo(window, window.notes_label.rect().topLeft()).y()
-
-    notes = window.notes_label
-    assert top_of_notes() > bottom_of_table()
-    assert notes.height() >= notes.heightForWidth(notes.width())  # every line shown, none cut off
-
-    window.resize(700, window.height())  # narrower: the notes wrap onto more lines and still fit
-    settle(app)
-    assert top_of_notes() > bottom_of_table()
-    assert notes.height() >= notes.heightForWidth(notes.width())
-
-
 def test_the_window_fits_the_steps_until_there_is_a_result(app, tmp_path: Path) -> None:
     window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
     window.show()
@@ -351,7 +314,6 @@ def test_statement_alone_shows_the_investments(app, tmp_path: Path) -> None:
     assert rows[0][2].startswith("100") and rows[0][4].startswith("100")  # both shares: the only holding
     assert rows[1][0] == "Total"
     assert window.status_label.text() == "Done. Your investments are shown below."
-    assert "EQQB was matched to EQQB.DE" in window.notes_label.text()
     assert list(tmp_path.glob("*.xlsx")) == []
 
 
@@ -543,8 +505,6 @@ def test_last_known_price_is_marked_in_the_table_and_explained(app, tmp_path: Pa
     worth, total = offline.table.item(0, 3), offline.table.item(1, 3)
     assert worth.text().endswith(" *") and "Last known price, from" in worth.toolTip()
     assert total.text().endswith(" *") and "not up to date" in total.toolTip()
-    assert offline.notes_label.text().startswith(f"Note: {LAST_KNOWN_NOTE}")
-    assert "is used instead" in offline.notes_label.text()
 
 
 def test_prices_line_appears_only_when_a_price_is_missing(app, tmp_path: Path) -> None:
@@ -592,7 +552,6 @@ def test_entered_price_fills_in_the_table_and_the_spreadsheet(app, tmp_path: Pat
     worth, total = window.table.item(0, 3), window.table.item(1, 3)
     assert worth.text().endswith(f" {ENTERED_MARK}") and "Price you entered on" in worth.toolTip()
     assert total.text().endswith(f" {ENTERED_MARK}") and "entered yourself" in total.toolTip()
-    assert window.notes_label.text().startswith(f"Note: {ENTERED_NOTE}")
     assert not window.price_bar.isHidden()  # the price can still be changed, or fetched again
     sheet = load_workbook(spreadsheet)["Current Holdings"]
     assert sheet["D2"].value == pytest.approx(589.313384)
@@ -625,7 +584,6 @@ def test_investments_without_a_price_can_be_left_out_of_the_totals_from_settings
     assert "left out of the totals" in window.table.item(1, 3).toolTip()
     assert eqqb[2] == eqqb[4] == total[2] == total[4]  # 100 %: EQQB is all the totals cover
     assert total[1] == eqqb[1] and total[3] == eqqb[3]
-    assert "It is left out of the totals, as chosen in Settings." in window.notes_label.text()
 
 
 def test_enter_price_dialog_starts_from_the_price_known_and_returns_the_one_typed(app) -> None:

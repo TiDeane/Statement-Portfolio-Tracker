@@ -14,7 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from PySide6.QtCore import QDate, QLocale, QStandardPaths, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QBrush, QCloseEvent, QColor, QDragEnterEvent, QDropEvent, QFont, QResizeEvent
+from PySide6.QtGui import QBrush, QCloseEvent, QColor, QDragEnterEvent, QDropEvent, QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -61,13 +61,8 @@ TABLE_HEADERS = ["Investment", "Invested", "% of invested", "Worth now", "% of w
 WORTH_COLUMN = 3
 GAIN_COLUMN = 5
 LAST_KNOWN_MARK = "*"
-LAST_KNOWN_NOTE = (
-    f"Values marked {LAST_KNOWN_MARK} use the last price fetched on an earlier day, because Yahoo could not "
-    "be reached. Try again later for up-to-date values."
-)
 ENTERED_MARK = "(your price)"
 """Words, not a symbol: a small sign next to an amount is easily read as a plus."""
-ENTERED_NOTE = f"Values marked {ENTERED_MARK} use a price you entered yourself."
 MISSING_PRICES = "Yahoo Finance has no current price for some of your investments."
 DOUBLE_CLICK_TO_ENTER = "Double-click to enter a price yourself."
 LEFT_OUT_TIP = f"No current price, so it is left out of the totals, as chosen in Settings. {DOUBLE_CLICK_TO_ENTER}"
@@ -266,10 +261,6 @@ class MainWindow(QMainWindow):
         price_bar.addWidget(self.retry_button)
         price_bar.addWidget(self.enter_price_button)
         self.price_bar.setVisible(False)
-        self.notes_label = QLabel("")
-        self.notes_label.setObjectName("notes")
-        self.notes_label.setWordWrap(True)
-        self.notes_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         self.settings_button = QPushButton("Se&ttings")
         self.settings_button.setToolTip("Rename your investments, choose a listing again, or forget them.")
@@ -292,7 +283,6 @@ class MainWindow(QMainWindow):
         self._filler = QWidget()  # takes the table's place until there is a result, so the steps stay at the top
         layout.addWidget(self._filler, stretch=1)
         layout.addWidget(self.price_bar)
-        layout.addWidget(self.notes_label)
         layout.addLayout(footer)
         central = QWidget()
         central.setLayout(layout)
@@ -589,7 +579,7 @@ class MainWindow(QMainWindow):
     def _show_outcome(
         self, report: Report, exported: ExportResult | None, export_error: UserFacingError | None
     ) -> None:
-        """Show a result, the spreadsheet's update (offering to try saving it again) and the notes."""
+        """Show a result and the spreadsheet's update, offering to try saving it again."""
         self._report = report
         self._show_report(report)
 
@@ -605,46 +595,18 @@ class MainWindow(QMainWindow):
             except UserFacingError as error:
                 export_error = error
 
-        notes = list(report.notes)
-        if report.valuation.uses_entered_prices:
-            notes.insert(0, ENTERED_NOTE)
-        if report.valuation.uses_last_known_prices:
-            notes.insert(0, LAST_KNOWN_NOTE)
+        # The window shows no notes: the marks in the table explain themselves in their tooltips.
         if exported is not None:
             done = "created" if exported.created else "updated"
             self._status(f"Done. Your spreadsheet was {done}: {exported.destination}", "ok")
-            notes.extend(exported.notes)
         elif export_error is not None:
             self._status("Your investments are shown below, but the spreadsheet was not updated.", "error")
         else:
             self._status("Done. Your investments are shown below.", "ok")
         if not report.valuation.holdings:
             self._status("Done. The statement has no investments that you still hold.", "ok")
-        self.notes_label.setText("\n".join(f"Note: {note}" for note in notes))
-        self._fit_notes()
-        # Sized last, once the notes are in: they take room under the table too.
         if report.valuation.holdings:
             self._grow_to_fit_table()
-
-    def _fit_notes(self, window_width: int | None = None) -> None:
-        """Reserve the height the notes need at the current width.
-
-        Qt does not keep room for word-wrapped text by itself, so without this a short window
-        squeezes the notes onto the table. The table, which can scroll, gives way instead.
-        """
-        label = self.notes_label
-        if not label.text():
-            label.setMinimumHeight(0)
-            return
-        # The width the notes get: the window's, less the margins. The label's own width is out of
-        # date while the window is being resized.
-        margins = self.centralWidget().layout().contentsMargins()
-        width = (window_width if window_width is not None else self.width()) - margins.left() - margins.right()
-        label.setMinimumHeight(label.heightForWidth(width))
-
-    def resizeEvent(self, event: QResizeEvent) -> None:
-        super().resizeEvent(event)
-        self._fit_notes(event.size().width())  # a different width wraps the notes onto a different number of lines
 
     # -- showing the result ------------------------------------------------------
 

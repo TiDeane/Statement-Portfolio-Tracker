@@ -61,8 +61,7 @@ WHERE_IS_THE_FILE_TEXT = (
 ALWAYS_FIRST_TEXT = "Always choose the first option"
 ALWAYS_FIRST_TIP = (
     "Use the first listing now, and from now on whenever the app cannot tell by itself, without asking. "
-    "When the first one could not be checked against your purchases, a note says so. "
-    "You can turn this off in Settings."
+    "Settings shows which listing each investment uses, and you can turn this off there."
 )
 
 
@@ -185,8 +184,7 @@ class ChooseListingDialog(QDialog):
             # Nothing to choose from: there is only something to use once a symbol is typed.
             self._typed.textChanged.connect(lambda text: self.use_button.setEnabled(bool(text.strip())))
             self.use_button.setEnabled(False)
-        # Offered whenever there is a first listing to take. Where it does not fit the purchases,
-        # the run says so in a note each time it is used.
+        # Offered whenever there is a first listing to take.
         self.always_first_button = QPushButton(ALWAYS_FIRST_TEXT)
         self.always_first_button.setToolTip(ALWAYS_FIRST_TIP)
         self.always_first_button.setVisible(bool(resolution.candidates))

@@ -90,7 +90,7 @@ Revolut may move these menus in newer versions of its app.
 
 Many funds are traded on several stock exchanges under the same code. When the app cannot tell which one is yours, it shows a short list. They are usually the same fund at almost the same price, so pick the one whose name and currency match what you see in Revolut. The app remembers your answer and does not ask again. If you are unsure, **Skip this investment** leaves it without a current value; nothing is guessed. If you picked the wrong one, see Settings below.
 
-If you don't want to be asked at all, press **Always choose the first option**. The app uses the first listing for this investment, and from then on whenever it cannot tell by itself, and a note under the table says which one it used. When several listings fit your purchases, the first one fits best. When none fits (the app says it "could not tell for sure"), the first one is only the first found, so the note asks you to check that it is your fund. You can turn this off in Settings.
+If you don't want to be asked at all, press **Always choose the first option**. The app uses the first listing for this investment, and from then on whenever it cannot tell by itself. When several listings fit your purchases, the first one fits best. When none fits (the app says it "could not tell for sure"), the first one is only the first found, so check in Settings, under "Listing used", that it is your fund. You can turn this off in Settings.
 
 ### Settings
 
@@ -135,8 +135,6 @@ When Yahoo Finance has no current price for an investment, a line appears under 
 - **Enter a price...** lets you type in the price of one share yourself, for example the one shown in the Revolut app. You can also double-click the investment in the table. The app adds everything up again straight away and updates your spreadsheet, without fetching anything.
 
 A value worked out from a price you entered is marked **(your price)**, and so is the Total. The app keeps that price for the next times, so you don't have to type it again, and uses it whenever Yahoo Finance has no price for that investment. As soon as Yahoo Finance has one again, the app uses Yahoo's and forgets yours. To change a price you entered, double-click the investment.
-
-Notes under the table explain anything unusual, such as a price that is several days old.
 
 ## Your Excel spreadsheet
 

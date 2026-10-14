@@ -148,8 +148,8 @@ class SettingsDialog(QDialog):
         self.always_first = QCheckBox(ALWAYS_FIRST_SETTING)
         self.always_first.setToolTip(
             "Usually the same fund is traded on more than one exchange, and the first listing fits your "
-            "purchases best. When no listing fits your purchases, the first one found is used and a note "
-            "under the table asks you to check it."
+            "purchases best. When no listing fits your purchases, the first one found is used: check it in "
+            'the "Listing used" column above.'
         )
         self.always_first.toggled.connect(self._always_first_toggled)
         self.leave_out = QCheckBox(LEAVE_OUT_SETTING)

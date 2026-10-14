@@ -134,11 +134,14 @@ class HoldingValuation:
     invested_percent: Decimal | None = None
     """Share of the total amount invested in open holdings; needs no prices."""
     unavailable_reason: str | None = None
+    in_totals: bool = True
+    """False when the holding has no price and the user chose to leave such holdings out of the totals."""
 
 
 @dataclass(frozen=True)
 class PortfolioValuation:
-    """Open holdings valued at current prices. Totals are None if any price is missing."""
+    """Open holdings valued at current prices. Totals are None if any price is missing, unless the
+    holdings without a price are left out of them; net worth then stays None, as it needs every value."""
 
     portfolio: Portfolio
     holdings: tuple[HoldingValuation, ...]
@@ -146,6 +149,16 @@ class PortfolioValuation:
     unrealized_pnl: Decimal | None
     net_worth: Decimal | None
     gain_vs_deposits: Decimal | None
+
+    @property
+    def left_out(self) -> tuple[HoldingValuation, ...]:
+        """Holdings without a price that are left out of the totals, at the user's choice."""
+        return tuple(holding for holding in self.holdings if not holding.in_totals)
+
+    @property
+    def invested_in_totals(self) -> Decimal:
+        """Cost basis of the open holdings the totals cover: all of them, less any left out."""
+        return self.portfolio.total_cost_basis - sum((holding.position.cost_basis for holding in self.left_out), ZERO)
 
     @property
     def uses_last_known_prices(self) -> bool:

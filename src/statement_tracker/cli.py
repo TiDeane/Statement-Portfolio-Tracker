@@ -27,6 +27,7 @@ from statement_tracker.settings import Settings
 from statement_tracker.workflow import Chooser, Report, build_report, update_spreadsheet
 
 UNAVAILABLE = "unavailable"
+NOT_IN_TOTAL = "not in total"
 _CENT = Decimal("0.01")
 _HUNDRED = Decimal(100)
 
@@ -82,9 +83,9 @@ def report_rows(report: Report, details: bool = False) -> list[list[str]]:
         row = [
             position.ticker,
             _money(position.cost_basis),
-            _money(holding.invested_percent),
+            _money(holding.invested_percent) if holding.in_totals else NOT_IN_TOTAL,
             _money(holding.market_value),
-            _money(holding.allocation_percent),
+            _money(holding.allocation_percent) if holding.in_totals else NOT_IN_TOTAL,
             _money(holding.unrealized_pnl),
             _money(holding.percent_change),
         ]
@@ -102,7 +103,7 @@ def report_rows(report: Report, details: bool = False) -> list[list[str]]:
 
     valuation = report.valuation
     if valuation.holdings:
-        invested, value = valuation.portfolio.total_cost_basis, valuation.total_market_value
+        invested, value = valuation.invested_in_totals, valuation.total_market_value
         gain = valuation.unrealized_pnl
         total = [
             "Total",

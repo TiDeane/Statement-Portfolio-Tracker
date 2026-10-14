@@ -111,6 +111,7 @@ def value_portfolio(
     portfolio: Portfolio,
     prices: Mapping[str, MarketPrice],
     unavailable: Mapping[str, str] | None = None,
+    leave_out_unpriced: bool = False,
 ) -> PortfolioValuation:
     """Value the open positions at the given prices (already in the statement currency).
 
@@ -118,6 +119,10 @@ def value_portfolio(
     ``unavailable`` when there is one. Totals and shares of the current value need
     every price, so a single missing price leaves them as None: nothing is estimated.
     Shares of the amount invested come from the statement alone and are always there.
+
+    With ``leave_out_unpriced``, holdings without a price are left out of the totals
+    instead, and the totals and shares (of the amount invested too) cover the rest.
+    Net worth and gain vs deposits still need every value, so they stay None.
     """
     unavailable = unavailable or {}
     open_positions = portfolio.open_positions
@@ -127,12 +132,15 @@ def value_portfolio(
         if position.ticker in prices
     }
     complete = len(values) == len(open_positions)
-    total = sum(values.values(), ZERO) if complete else None
-    invested = portfolio.total_cost_basis
+    leaving_out = leave_out_unpriced and not complete and bool(values)
+    total = sum(values.values(), ZERO) if complete or leaving_out else None
+    left_out = [position for position in open_positions if leaving_out and position.ticker not in values]
+    invested = portfolio.total_cost_basis - sum((position.cost_basis for position in left_out), ZERO)
 
     holdings = []
     for position in open_positions:
         value = values.get(position.ticker)
+        in_totals = not leaving_out or value is not None
         unrealized = value - position.cost_basis if value is not None else None
         holdings.append(
             HoldingValuation(
@@ -146,15 +154,18 @@ def value_portfolio(
                     else None
                 ),
                 allocation_percent=(value / total * HUNDRED if value is not None and total else None),
-                invested_percent=(position.cost_basis / invested * HUNDRED if invested > ZERO else None),
+                invested_percent=(
+                    position.cost_basis / invested * HUNDRED if in_totals and invested > ZERO else None
+                ),
                 unavailable_reason=(
                     None if value is not None else unavailable.get(position.ticker, "No price available.")
                 ),
+                in_totals=in_totals,
             )
         )
 
-    unrealized_total = total - portfolio.total_cost_basis if total is not None else None
-    net_worth = total + portfolio.cash if total is not None else None
+    unrealized_total = total - invested if total is not None else None
+    net_worth = total + portfolio.cash if total is not None and complete else None
     return PortfolioValuation(
         portfolio=portfolio,
         holdings=tuple(holdings),

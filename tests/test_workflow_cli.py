@@ -444,6 +444,26 @@ def test_entered_price_is_used_ahead_of_the_last_known_one_and_dropped_once_yaho
     assert later.valuation.holdings[0].price.last_known
 
 
+def test_left_out_investment_is_named_and_the_cli_total_covers_the_rest(tmp_path: Path) -> None:
+    settings_path = tmp_path / "settings.json"
+    settings = Settings.load(settings_path)
+    settings.leave_out_unpriced = True
+    settings.save()
+    statement = write_statement(tmp_path, *TWO_HOLDINGS)
+
+    code, output, errors = run_cli(
+        str(statement), "--symbol", "ABCD=ABCD.DE", provider=abcd_only(), settings=settings_path
+    )
+
+    assert code == 0
+    assert output.splitlines()[1:] == [
+        "ABCD,1001.00,100.00,1200.00,100.00,199.00,19.88",
+        "WXYZ,201.00,not in total,unavailable,not in total,unavailable,unavailable",
+        "Total,1001.00,100.00,1200.00,100.00,199.00,19.88",
+    ]
+    assert "It is left out of the totals, as chosen in Settings." in errors
+
+
 def test_cli_price_is_used_when_yahoo_has_none(tmp_path: Path) -> None:
     statement = write_statement(tmp_path, *TWO_HOLDINGS)
 

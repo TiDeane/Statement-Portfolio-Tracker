@@ -105,7 +105,10 @@ Select an investment to:
 
 **Forget all...** does the same for every investment at once. Your spreadsheet choice and the last known prices are kept.
 
-Settings also has the switch **When the app cannot tell which listing an investment is, use the first one without asking**.
+Settings also has two switches, both off at first:
+
+- **When the app cannot tell which listing an investment is, use the first one without asking**.
+- **Leave investments without a current price out of the totals**. Normally one investment without a price makes the Total unavailable, because the app never guesses a value. With this switch on, the Total, the percentages and the spreadsheet cover the investments that do have a price, and the others show "not in total" in grey. Net worth stays unavailable on those runs, since it needs every value. The switch is used from the next time you press the green button.
 
 ## Read the result
 
@@ -145,6 +148,8 @@ If you chose a spreadsheet, the app creates two sheets (or updates them if they 
 A value that uses the last price from an earlier day has a comment (a small red corner in Excel) saying from when. On those runs no row is written to **Portfolio History**, because that row would be dated today.
 
 A value that uses a price you entered has a comment saying so and on which day. A price you entered today counts as today's, so the day's row is written. A price you entered on an earlier day does not, and then no row is written, as above.
+
+If you chose in Settings to leave investments without a price out of the totals, such an investment keeps its row in **Current Holdings**, in grey, with "not in total" and a comment. The Total covers the rest, and the day's row in **Portfolio History** is still written for the rest, with Net Worth and Gain vs Deposits shown as unavailable. The history can therefore dip on a day an investment is left out.
 
 Your own sheets in that file are left exactly as they are. Before the app changes an existing spreadsheet for the first time, it saves a copy next to it named `<your file>_backup_before_first_update.xlsx`.
 

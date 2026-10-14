@@ -269,3 +269,32 @@ def test_valuation_with_a_missing_price_estimates_nothing() -> None:
     assert wxyz.unavailable_reason == "Yahoo has no data."
     assert valuation.total_market_value is None
     assert valuation.net_worth is None
+    assert abcd.in_totals and wxyz.in_totals and valuation.left_out == ()
+
+
+def test_holdings_without_a_price_can_be_left_out_of_the_totals() -> None:
+    prices = {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}
+    valuation = value_portfolio(_two_holdings(), prices, {"WXYZ": "Yahoo has no data."}, leave_out_unpriced=True)
+
+    abcd, wxyz = valuation.holdings
+    assert (abcd.in_totals, wxyz.in_totals) == (True, False)
+    assert valuation.left_out == (wxyz,)
+    # The totals and shares cover ABCD alone.
+    assert valuation.invested_in_totals == Decimal("1001")
+    assert valuation.total_market_value == Decimal("1200")
+    assert valuation.unrealized_pnl == Decimal("199")
+    assert abcd.allocation_percent == Decimal("100") and abcd.invested_percent == Decimal("100")
+    assert wxyz.invested_percent is None and wxyz.allocation_percent is None and wxyz.market_value is None
+    # Net worth needs every value: still nothing estimated.
+    assert valuation.net_worth is None and valuation.gain_vs_deposits is None
+
+
+def test_leaving_out_changes_nothing_when_every_price_is_there_or_none_is() -> None:
+    both = {
+        "ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR"),
+        "WXYZ": MarketPrice(Decimal("100"), "WXYZ.DE", "EUR"),
+    }
+    assert value_portfolio(_two_holdings(), both, leave_out_unpriced=True) == value_portfolio(_two_holdings(), both)
+
+    nothing = value_portfolio(_two_holdings(), {}, leave_out_unpriced=True)
+    assert nothing.total_market_value is None and nothing.left_out == ()

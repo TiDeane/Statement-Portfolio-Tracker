@@ -257,6 +257,27 @@ def test_last_known_price_is_written_with_a_comment_and_leaves_history_alone(tmp
     assert sheet["D3"].comment is None and sheet["D4"].comment is None
 
 
+def test_left_out_investment_is_greyed_and_the_total_and_history_cover_the_rest(tmp_path: Path) -> None:
+    path = tmp_path / "portfolio.xlsx"
+    portfolio = compute_portfolio(statement_from(*LINES))
+    prices = {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}
+
+    result = ExcelExporter(path).export(value_portfolio(portfolio, prices, leave_out_unpriced=True), DAY_ONE)
+
+    holdings = rows(path, "Current Holdings")
+    assert holdings[1][:5] == ("ABCD", 1001, 1, 1200, "=D2/D$4")
+    assert holdings[2][:5] == ("WXYZ", 201, "not in total", "unavailable", "not in total")
+    assert holdings[3][:6] == ("Total", 1001, 1, 1200, "=D4/D$4", pytest.approx(0.198801, abs=1e-6))
+    sheet = load_workbook(path)["Current Holdings"]
+    assert sheet["A3"].font.color.rgb.endswith("808080") and sheet["A2"].font.color is None
+    assert "left out of the Total" in sheet["D3"].comment.text
+    assert result.history == "added"
+    history = rows(path, "Portfolio History")[1]
+    assert history[1:4] == (1001, 1200, 199)
+    assert (history[6], history[8]) == ("unavailable", "unavailable")  # net worth needs every value
+    assert "leaves out what has no price (WXYZ)" in " ".join(result.notes)
+
+
 def entered_on(day: date) -> MarketPrice:
     """WXYZ at 100, typed in by the user at noon (local time) on ``day``."""
     noon = datetime(day.year, day.month, day.day, 12).astimezone()

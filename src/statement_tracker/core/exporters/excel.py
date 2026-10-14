@@ -29,7 +29,9 @@ from statement_tracker.core.models import PortfolioValuation
 DEFAULT_HOLDINGS_SHEET = "Current Holdings"
 DEFAULT_HISTORY_SHEET = "Portfolio History"
 UNAVAILABLE = "unavailable"
+NOT_IN_TOTAL = "not in total"
 TOTAL_LABEL = "Total"
+_LEFT_OUT_COLOUR = "808080"
 
 HOLDINGS_HEADER = (
     "Index",
@@ -138,8 +140,13 @@ def _shown_length(value: Any, number_format: str | None) -> int:
     return len(str(value))
 
 
-def _style(sheet: Any, formats: dict[int, str], bold_last_row: bool = False) -> None:
-    """Coloured bold header, black outline on every cell, number formats, columns wide enough for their text."""
+def _style(
+    sheet: Any, formats: dict[int, str], bold_last_row: bool = False, grey_rows: frozenset[int] = frozenset()
+) -> None:
+    """Coloured bold header, black outline on every cell, number formats, columns wide enough for their text.
+
+    ``grey_rows`` are written in grey: rows left out of the Total.
+    """
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import column_index_from_string, get_column_letter
 
@@ -162,7 +169,9 @@ def _style(sheet: Any, formats: dict[int, str], bold_last_row: bool = False) -> 
             else:
                 if number_format:
                     cell.number_format = number_format
-                cell.font = Font(bold=bold_last_row and row == sheet.max_row)
+                cell.font = Font(
+                    bold=bold_last_row and row == sheet.max_row, color=_LEFT_OUT_COLOUR if row in grey_rows else None
+                )
                 cell.alignment = Alignment(vertical="center")
                 widest = max(widest, _shown_length(cell.value, number_format))
         sheet.column_dimensions[get_column_letter(column)].width = widest + 3
@@ -214,7 +223,8 @@ class ExcelExporter:
         # typed in today counts, a last known one or one typed in on an earlier day does not.
         current = valuation.prices_are_from(today)
         history_action = self._write_history(history, valuation, today) if current else "skipped"
-        _style(holdings, _HOLDINGS_FORMATS, bold_last_row=written > 0)
+        grey_rows = frozenset(row for row, holding in enumerate(valuation.holdings, start=2) if not holding.in_totals)
+        _style(holdings, _HOLDINGS_FORMATS, bold_last_row=written > 0, grey_rows=grey_rows)
         _style(history, _HISTORY_FORMATS)
 
         notes: list[str] = []
@@ -235,6 +245,12 @@ class ExcelExporter:
             notes.append(
                 "Some values use a price you entered on an earlier day, so no row was written to "
                 f'"{self.history_sheet}" this time. Existing history was not changed.'
+            )
+        elif valuation.left_out:
+            tickers = ", ".join(holding.position.ticker for holding in valuation.left_out)
+            notes.append(
+                f'Today\'s row in "{self.history_sheet}" leaves out what has no price ({tickers}): its totals '
+                "cover the rest only, and its Net Worth and Gain vs Deposits are unavailable."
             )
         self._save(workbook)
         return ExportResult(str(self.path), created, written, history_action, tuple(notes))
@@ -335,20 +351,25 @@ class ExcelExporter:
         for row, holding in enumerate(valuation.holdings, start=2):
             position = holding.position
             name = self.index_names.get(position.ticker)
+            if not holding.in_totals:
+                share_of_invested, share_of_value = NOT_IN_TOTAL, NOT_IN_TOTAL
+            else:
+                share_of_invested = _percent(holding.invested_percent)
+                share_of_value = f"=D{row}/D${total_row}" if has_total else UNAVAILABLE
             rows.append(
                 [
                     f"({position.ticker}) {name}" if name else position.ticker,
                     position.cost_basis,
-                    _percent(holding.invested_percent),
+                    share_of_invested,
                     _cell(holding.market_value),
-                    f"=D{row}/D${total_row}" if has_total else UNAVAILABLE,
+                    share_of_value,
                     _percent(holding.percent_change),
                     position.dividends,
                     currency,
                 ]
             )
         if valuation.holdings:
-            invested = valuation.portfolio.total_cost_basis
+            invested = valuation.invested_in_totals
             unrealized = valuation.unrealized_pnl
             rows.append(
                 [
@@ -358,7 +379,9 @@ class ExcelExporter:
                     _cell(valuation.total_market_value),
                     f"=D{total_row}/D${total_row}" if has_total else UNAVAILABLE,
                     _cell(unrealized / invested if unrealized is not None and invested > 0 else None),
-                    sum((holding.position.dividends for holding in valuation.holdings), Decimal(0)),
+                    sum(
+                        (holding.position.dividends for holding in valuation.holdings if holding.in_totals), Decimal(0)
+                    ),
                     currency,
                 ]
             )
@@ -380,6 +403,10 @@ class ExcelExporter:
                 sheet.cell(row=row, column=_VALUE_COLUMN).comment = _comment(
                     f"Price per share entered by hand on {day}, not from Yahoo."
                 )
+            elif not holding.in_totals:
+                sheet.cell(row=row, column=_VALUE_COLUMN).comment = _comment(
+                    "No current price, so this investment is left out of the Total, as chosen in the app's Settings."
+                )
         if valuation.total_market_value is not None:
             total_notes = []
             if valuation.uses_last_known_prices:
@@ -395,7 +422,7 @@ class ExcelExporter:
         portfolio = valuation.portfolio
         if valuation.total_market_value is None or valuation.unrealized_pnl is None:
             return "skipped"
-        cost_basis = portfolio.total_cost_basis
+        cost_basis = valuation.invested_in_totals
         values = [
             today,
             cost_basis,
@@ -403,9 +430,9 @@ class ExcelExporter:
             valuation.unrealized_pnl,
             portfolio.realized_pnl,
             _cell(valuation.unrealized_pnl / cost_basis if cost_basis > 0 else None),
-            valuation.net_worth,
+            _cell(valuation.net_worth),  # unavailable when something is left out of the totals
             portfolio.net_deposits,
-            valuation.gain_vs_deposits,
+            _cell(valuation.gain_vs_deposits),
         ]
 
         target = None

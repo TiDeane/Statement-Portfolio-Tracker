@@ -54,6 +54,7 @@ from statement_tracker.workflow import (
 )
 
 UNAVAILABLE = "unavailable"
+NOT_IN_TOTAL = "not in total"
 NO_STATEMENT = "No file chosen yet. You can also drag the file onto this window."
 
 TABLE_HEADERS = ["Investment", "Invested", "% of invested", "Worth now", "% of worth now", "Gain or loss"]
@@ -69,6 +70,7 @@ ENTERED_MARK = "(your price)"
 ENTERED_NOTE = f"Values marked {ENTERED_MARK} use a price you entered yourself."
 MISSING_PRICES = "Yahoo Finance has no current price for some of your investments."
 DOUBLE_CLICK_TO_ENTER = "Double-click to enter a price yourself."
+LEFT_OUT_TIP = f"No current price, so it is left out of the totals, as chosen in Settings. {DOUBLE_CLICK_TO_ENTER}"
 WINDOW_WIDTH = 1000
 MAX_SCREEN_SHARE = 0.8
 """When the result table appears, the window grows to at most this share of the screen's usable height."""
@@ -709,16 +711,16 @@ class MainWindow(QMainWindow):
             (
                 display_name(self._settings, holding.position.ticker),
                 self._money(holding.position.cost_basis, currency),
-                self._percent(holding.invested_percent),
+                self._percent(holding.invested_percent) if holding.in_totals else NOT_IN_TOTAL,
                 self._money(holding.market_value, currency),
-                self._percent(holding.allocation_percent),
+                self._percent(holding.allocation_percent) if holding.in_totals else NOT_IN_TOTAL,
                 self._gain(holding.unrealized_pnl, holding.percent_change, currency),
                 holding.unrealized_pnl,
             )
             for holding in valuation.holdings
         ]
         if valuation.holdings:
-            invested, gain = valuation.portfolio.total_cost_basis, valuation.unrealized_pnl
+            invested, gain = valuation.invested_in_totals, valuation.unrealized_pnl
             whole = Decimal(100)
             rows.append(
                 (
@@ -735,9 +737,10 @@ class MainWindow(QMainWindow):
         # "Worth now" at a price from an earlier run is marked with LAST_KNOWN_MARK, at one the user typed
         # in with ENTERED_MARK; the tooltip says which and from when. Each row: (mark, tooltip).
         worth_marks = [
-            self._worth_mark(holding.price)
+            self._worth_mark(holding.price) if holding.in_totals else ("", LEFT_OUT_TIP)
             for holding in valuation.holdings
         ]
+        left_out_rows = {index for index, holding in enumerate(valuation.holdings) if not holding.in_totals}
         if valuation.holdings:
             total_marks, total_tips = [], []
             if valuation.total_market_value is not None:
@@ -763,7 +766,7 @@ class MainWindow(QMainWindow):
                 if column == GAIN_COLUMN and gain:
                     # The arrow and the colour belong to the gain or loss, never to the value itself.
                     item.setForeground(QBrush(QColor(colours.good if gain > 0 else colours.bad)))
-                elif text == UNAVAILABLE:
+                elif text in (UNAVAILABLE, NOT_IN_TOTAL) or row_number in left_out_rows:
                     item.setForeground(QBrush(QColor(colours.muted)))
                 if is_total:
                     font = QFont(item.font())

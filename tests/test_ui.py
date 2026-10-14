@@ -20,7 +20,7 @@ from openpyxl import load_workbook  # noqa: E402
 from statement_tracker.core.calculator import buys_by_ticker  # noqa: E402
 from statement_tracker.core.errors import UserFacingError  # noqa: E402
 from statement_tracker.core.parser import load_statement  # noqa: E402
-from statement_tracker.settings import Settings  # noqa: E402
+from statement_tracker.settings import Settings, TickerChoice  # noqa: E402
 from statement_tracker.ui import theme  # noqa: E402
 from statement_tracker.core.models import MarketPrice  # noqa: E402
 from statement_tracker.ui.dialogs import (  # noqa: E402
@@ -598,6 +598,34 @@ def test_entered_price_fills_in_the_table_and_the_spreadsheet(app, tmp_path: Pat
     assert sheet["D2"].value == pytest.approx(589.313384)
     history = load_workbook(spreadsheet)["Portfolio History"]
     assert history.max_row == 2  # typed in today, so today's row is written
+
+
+def test_investments_without_a_price_can_be_left_out_of_the_totals_from_settings(app, tmp_path: Path) -> None:
+    statement = write_statement(
+        tmp_path,
+        "2025-01-06T09:00:00.000Z,,CASH TOP-UP,,,EUR 2000,EUR,1",
+        "2025-01-06T10:00:00.000Z,EQQB,BUY - MARKET,1,EUR 380.00,EUR 381,EUR,1",
+        "2025-01-20T10:00:00.000Z,ZQXJ,BUY - MARKET,2,EUR 50.00,EUR 100,EUR,1",  # not on Yahoo
+    )
+    settings = Settings.load(tmp_path / "settings.json")
+    settings.remember("EQQB", TickerChoice("EQQB.DE", "Nasdaq fund", confirmed=True))
+    settings.save()
+    dialog = SettingsDialog(Settings.load(tmp_path / "settings.json"))
+    assert not dialog.leave_out.isChecked()  # off unless the user turns it on
+    dialog.leave_out.setChecked(True)
+    assert Settings.load(tmp_path / "settings.json").leave_out_unpriced
+
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.ask_listing = lambda resolution: None  # "Skip this investment"
+    window.set_statement(statement)
+    run(app, window)
+
+    eqqb, zqxj, total = cells(window)
+    assert zqxj[0] == "ZQXJ" and zqxj[2] == zqxj[4] == "not in total" and zqxj[3] == "unavailable"
+    assert "left out of the totals" in window.table.item(1, 3).toolTip()
+    assert eqqb[2] == eqqb[4] == total[2] == total[4]  # 100 %: EQQB is all the totals cover
+    assert total[1] == eqqb[1] and total[3] == eqqb[3]
+    assert "It is left out of the totals, as chosen in Settings." in window.notes_label.text()
 
 
 def test_enter_price_dialog_starts_from_the_price_known_and_returns_the_one_typed(app) -> None:

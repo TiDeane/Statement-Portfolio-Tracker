@@ -840,6 +840,19 @@ def test_always_use_the_first_listing_is_offered_whenever_there_is_a_listing(app
     assert not nothing_found.always_first_button.isVisibleTo(nothing_found)
 
 
+def test_nothing_found_asks_for_a_symbol_or_to_skip(app) -> None:
+    from statement_tracker.core.ticker_resolver import resolve_ticker
+
+    dialog = ChooseListingDialog(resolve_ticker("EQQB", EQQB_BUYS, "EUR", FakeProvider()))
+
+    # Only typing a symbol gives something to use; until then, skipping is the way on.
+    assert dialog.use_button.text() == "Use this symbol" and not dialog.use_button.isEnabled()
+    dialog._typed.setText("  ")
+    assert not dialog.use_button.isEnabled()
+    dialog._typed.setText("EQQB.SW")
+    assert dialog.use_button.isEnabled() and dialog.chosen_symbol() == "EQQB.SW"
+
+
 def test_always_using_the_first_listing_is_remembered_and_shown_in_settings(
     app, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -138,7 +138,13 @@ class ChooseListingDialog(QDialog):
                 "Choose the one that matches yours, if it is in the list:"
             )
         else:
-            intro = f"The app could not find {ticker} on Yahoo Finance by itself."
+            intro = (
+                f"The app could not find your investment {ticker} on Yahoo Finance, so it cannot look up "
+                "its price.\n\n"
+                "If you know its Yahoo Finance symbol (for example ABCD.DE), type it below and press "
+                '"Use this symbol". Otherwise press "Skip this investment": its value is then shown as '
+                "unavailable, and you can enter its price yourself afterwards."
+            )
         label = QLabel(intro)
         label.setWordWrap(True)
         layout.addWidget(label)
@@ -161,17 +167,24 @@ class ChooseListingDialog(QDialog):
             layout.addWidget(button)
 
         self._typed = QLineEdit()
-        self._typed.setPlaceholderText("Or type the Yahoo Finance symbol here (optional)")
+        if resolution.candidates:
+            self._typed.setPlaceholderText("Not in the list? Type its Yahoo Finance symbol here instead")
+        else:
+            self._typed.setPlaceholderText("Yahoo Finance symbol, for example ABCD.DE")
         layout.addWidget(self._typed)
 
         self.setMinimumWidth(520)
         self._always_first = False
         # Laid out by hand, not with QDialogButtonBox, which reorders buttons per operating system:
         # the order here is part of the design.
-        self.use_button = QPushButton("Use this one")
+        self.use_button = QPushButton("Use this one" if resolution.candidates else "Use this symbol")
         self.use_button.setObjectName("primary")  # the coloured main action, styled in ui/theme.py
         self.use_button.setDefault(True)
         self.use_button.clicked.connect(self.accept)
+        if not resolution.candidates:
+            # Nothing to choose from: there is only something to use once a symbol is typed.
+            self._typed.textChanged.connect(lambda text: self.use_button.setEnabled(bool(text.strip())))
+            self.use_button.setEnabled(False)
         # Offered whenever there is a first listing to take. Where it does not fit the purchases,
         # the run says so in a note each time it is used.
         self.always_first_button = QPushButton(ALWAYS_FIRST_TEXT)

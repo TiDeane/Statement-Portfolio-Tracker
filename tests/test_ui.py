@@ -1,5 +1,6 @@
 """The main window, driven without a screen and with a mocked provider. No network."""
 
+import gc
 import os
 import time
 from datetime import date
@@ -11,6 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 QtWidgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
 
 from fakes import SAMPLE, FakeProvider, ranges_around, write_statement  # noqa: E402
+from PySide6.QtCore import QEvent  # noqa: E402
 from openpyxl import load_workbook  # noqa: E402
 
 from statement_tracker.core.calculator import buys_by_ticker  # noqa: E402
@@ -34,6 +36,21 @@ TODAY = date(2026, 10, 12)
 @pytest.fixture(scope="module")
 def app():
     return QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+
+@pytest.fixture(autouse=True)
+def close_windows_afterwards(app):
+    """Destroy each test's windows and dialogs when it ends.
+
+    Left to Python's garbage collector, a window from one test can be destroyed at a random
+    moment in the middle of a later test's event handling, which crashes Qt.
+    """
+    yield
+    for widget in QtWidgets.QApplication.topLevelWidgets():
+        widget.close()
+        widget.deleteLater()
+    QtWidgets.QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+    gc.collect()
 
 
 def provider_with(*symbols: str) -> FakeProvider:

@@ -62,6 +62,7 @@ class FakeProvider:
     search_results: dict[str, Sequence[SymbolInfo]] = field(default_factory=dict)
     offline: bool = False
     calls: list[tuple[str, str]] = field(default_factory=list)
+    prepared: int = 0
 
     def add(
         self,
@@ -78,6 +79,9 @@ class FakeProvider:
         self.listings[symbol] = Listing(
             info, Decimal(price) if price is not None else None, ranges or {}, as_of
         )
+
+    def prepare(self) -> None:
+        self.prepared += 1
 
     def _listing(self, kind: str, symbol: str) -> Listing:
         self.calls.append((kind, symbol))

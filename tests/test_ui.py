@@ -428,9 +428,10 @@ def test_progress_bar_counts_each_investment_and_the_spreadsheet(app, tmp_path: 
     run(app, window)
 
     assert seen[0] == (0, 0, "Reading your statement...")  # total not known yet: a moving bar
-    # One investment plus the spreadsheet: two steps in total.
-    assert (0, 2, "Getting the current price of EQQB (1 of 1)...") in seen
-    assert seen[-1] == (1, 2, "Updating your spreadsheet...")
+    # Getting ready, one investment and the spreadsheet: three steps in total.
+    assert (0, 3, "Getting ready to look up prices...") in seen
+    assert (1, 3, "Getting the current price of EQQB (1 of 1)...") in seen
+    assert seen[-1] == (2, 3, "Updating your spreadsheet...")
     assert [done for done, total, _ in seen if total] == sorted(done for done, total, _ in seen if total)
     assert window.progress_bar.isHidden()  # hidden again once finished
     assert window.progress_bar.format() == "%p%"

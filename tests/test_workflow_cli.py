@@ -327,12 +327,30 @@ def test_progress_is_reported_for_each_investment(tmp_path: Path) -> None:
         progress=lambda done, total, text: seen.append((done, total, text)),
     )
 
+    # Getting ready (loading the price library) is a step of its own, before the first price.
     assert seen == [
         (0, 0, "Reading your statement..."),
-        (0, 2, "Getting the current price of ABCD (1 of 2)..."),
-        (1, 2, "Getting the current price of WXYZ (2 of 2)..."),
-        (2, 2, "Adding everything up..."),
+        (0, 3, "Getting ready to look up prices..."),
+        (1, 3, "Getting the current price of ABCD (1 of 2)..."),
+        (2, 3, "Getting the current price of WXYZ (2 of 2)..."),
+        (3, 3, "Adding everything up..."),
     ]
+    assert provider.prepared == 1
+
+
+def test_nothing_is_prepared_without_investments_to_price(tmp_path: Path) -> None:
+    provider = FakeProvider()
+    seen: list[tuple[int, int, str]] = []
+
+    build_report(
+        write_statement(tmp_path, TWO_HOLDINGS[0]),
+        provider,
+        Settings.load(tmp_path / "settings.json"),
+        progress=lambda done, total, text: seen.append((done, total, text)),
+    )
+
+    assert provider.prepared == 0
+    assert seen == [(0, 0, "Reading your statement..."), (0, 0, "Adding everything up...")]
 
 
 def test_old_latest_price_is_pointed_out(tmp_path: Path) -> None:

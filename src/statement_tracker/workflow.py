@@ -40,6 +40,11 @@ class Report:
     notes: tuple[str, ...]
 
 
+def price_steps(holdings: int) -> int:
+    """Progress steps for pricing ``holdings`` investments: getting ready, then one per investment."""
+    return holdings + 1 if holdings else 0
+
+
 def display_name(settings: Settings, ticker: str) -> str:
     """Return "(TICKER) Name" when a name is known for the ticker, else the ticker alone."""
     name = settings.index_name(ticker)
@@ -114,10 +119,15 @@ def build_report(
     settings_changed = False
 
     positions = portfolio.open_positions
+    steps = price_steps(len(positions))
+    if positions:
+        # Loading the price library takes seconds on a cold start: its own step, so the bar does not stall.
+        report_progress(0, steps, "Getting ready to look up prices...")
+        provider.prepare()
     for number, position in enumerate(positions):
         ticker = position.ticker
         report_progress(
-            number, len(positions), f"Getting the current price of {ticker} ({number + 1} of {len(positions)})..."
+            number + 1, steps, f"Getting the current price of {ticker} ({number + 1} of {len(positions)})..."
         )
         saved = settings.ticker_choices.get(ticker)
         symbol: str | None = overrides.get(ticker) or (saved.symbol if saved else None)
@@ -171,7 +181,7 @@ def build_report(
             )
             settings_changed |= settings.remember(ticker, choice)
 
-    report_progress(len(positions), len(positions), "Adding everything up...")
+    report_progress(steps, steps, "Adding everything up...")
     if settings_changed:
         settings.save()
     cache.save()

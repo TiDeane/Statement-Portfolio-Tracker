@@ -59,6 +59,10 @@ class SymbolHistory:
 class PriceProvider(Protocol):
     """A source of prices. Implementations raise PriceUnavailableError, never return guesses."""
 
+    def prepare(self) -> None:
+        """Do any slow one-time setup (such as loading libraries) now, so it can be shown as its own step."""
+        ...
+
     def quote(self, symbol: str) -> Quote:
         """Return the latest price of ``symbol``."""
         ...

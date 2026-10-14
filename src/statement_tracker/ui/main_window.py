@@ -40,7 +40,7 @@ from statement_tracker.core.ticker_resolver import Resolution
 from statement_tracker.settings import Settings
 from statement_tracker.ui import dialogs, theme
 from statement_tracker.ui.workers import QuestionBridge, Task
-from statement_tracker.workflow import Report, build_report, display_name, update_spreadsheet
+from statement_tracker.workflow import Report, build_report, display_name, price_steps, update_spreadsheet
 
 UNAVAILABLE = "unavailable"
 NO_STATEMENT = "No file chosen yet. You can also drag the file onto this window."
@@ -370,7 +370,7 @@ class MainWindow(QMainWindow):
             )
             if spreadsheet is None:
                 return report, None, None
-            steps = len(report.valuation.holdings)
+            steps = price_steps(len(report.valuation.holdings))
             self.progressed.emit(steps, steps + 1, "Updating your spreadsheet...")
             try:
                 return report, update_spreadsheet(report, self._settings, spreadsheet, today), None

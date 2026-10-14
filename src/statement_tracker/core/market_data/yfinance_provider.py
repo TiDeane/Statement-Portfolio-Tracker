@@ -50,6 +50,10 @@ class YFinanceProvider:
             self._yfinance = yfinance
         return self._yfinance
 
+    def prepare(self) -> None:
+        """Load yfinance (and with it pandas and numpy): several seconds on a cold start."""
+        self._module()
+
     def _fetch(self, symbol: str, **period: Any) -> tuple[Any, dict[str, Any]]:
         """Return (daily price table, metadata) for a symbol from one Yahoo request."""
         yfinance = self._module()

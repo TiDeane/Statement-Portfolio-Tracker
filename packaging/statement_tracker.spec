@@ -29,6 +29,27 @@ UNUSED_QT_FRAGMENTS = (
     "QtVirtualKeyboard",
     "qtvirtualkeyboard",
     "qpdf",
+    # Prices are fetched with Python's own HTTP client, never through Qt, so Qt's networking,
+    # its TLS backends and its network-status plugins are never loaded.
+    "QtNetwork",
+    "Qt6Network",
+    "plugins/tls/",
+    "plugins/networkinformation/",
+    # The app shows no pictures. Kept: SVG and ICO, which icons and icon themes can use.
+    "imageformats/libqgif",
+    "imageformats/qgif",
+    "imageformats/libqjpeg",
+    "imageformats/qjpeg",
+    "imageformats/libqtiff",
+    "imageformats/qtiff",
+    "imageformats/libqwebp",
+    "imageformats/qwebp",
+    "imageformats/libqtga",
+    "imageformats/qtga",
+    "imageformats/libqwbmp",
+    "imageformats/qwbmp",
+    "imageformats/libqicns",
+    "imageformats/qicns",
 )
 
 
@@ -47,6 +68,7 @@ a = Analysis(
     # package in the build environment) can never end up in the download.
     excludes=[
         "tkinter", "matplotlib", "IPython", "pytest", "pandas", "numpy", "yfinance", "curl_cffi", "lxml",
+        "PySide6.QtNetwork",
     ],
     noarchive=False,
 )

@@ -20,6 +20,7 @@ from statement_tracker.settings import Settings  # noqa: E402
 from statement_tracker.ui import theme  # noqa: E402
 from statement_tracker.ui.dialogs import ChooseListingDialog  # noqa: E402
 from statement_tracker.ui.main_window import (  # noqa: E402
+    LAST_KNOWN_NOTE,
     MAX_SCREEN_SHARE,
     NO_SPREADSHEET,
     MainWindow,
@@ -360,8 +361,9 @@ def test_try_again_saves_the_spreadsheet_without_fetching_prices_again(
     real_replace, attempts, asked = os.replace, [], []
 
     def locked_twice(source, target) -> None:
-        attempts.append(target)
-        if len(attempts) <= 2:
+        if Path(target) == spreadsheet:  # other files (settings, last prices) are saved normally
+            attempts.append(target)
+        if Path(target) == spreadsheet and len(attempts) <= 2:
             raise PermissionError(13, "being used by another process")
         real_replace(source, target)
 
@@ -379,6 +381,23 @@ def test_try_again_saves_the_spreadsheet_without_fetching_prices_again(
     assert spreadsheet.exists()
     assert "Your spreadsheet was created" in window.status_label.text()
     assert window.status_label.property("state") == "ok"
+
+
+def test_last_known_price_is_marked_in_the_table_and_explained(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.set_statement(SAMPLE)
+    run(app, window)
+    assert "*" not in cells(window)[0][3]
+
+    offline, _ = make_window(tmp_path, FakeProvider(offline=True))
+    offline.set_statement(SAMPLE)
+    run(app, offline)
+
+    worth, total = offline.table.item(0, 3), offline.table.item(1, 3)
+    assert worth.text().endswith(" *") and "Last known price, from" in worth.toolTip()
+    assert total.text().endswith(" *") and "not up to date" in total.toolTip()
+    assert offline.notes_label.text().startswith(f"Note: {LAST_KNOWN_NOTE}")
+    assert "is used instead" in offline.notes_label.text()
 
 
 def test_progress_bar_counts_each_investment_and_the_spreadsheet(app, tmp_path: Path) -> None:

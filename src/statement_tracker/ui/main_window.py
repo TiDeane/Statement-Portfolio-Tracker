@@ -13,7 +13,7 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from PySide6.QtCore import QLocale, QStandardPaths, Qt, QThreadPool, Signal
+from PySide6.QtCore import QDate, QLocale, QStandardPaths, Qt, QThreadPool, Signal
 from PySide6.QtGui import QBrush, QCloseEvent, QColor, QDragEnterEvent, QDropEvent, QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -35,6 +35,7 @@ from statement_tracker import APP_NAME
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.exporters.base import ExportResult
 from statement_tracker.core.market_data.provider import PriceProvider
+from statement_tracker.core.models import MarketPrice
 from statement_tracker.core.ticker_resolver import Resolution
 from statement_tracker.settings import Settings
 from statement_tracker.ui import dialogs, theme
@@ -46,7 +47,13 @@ NO_STATEMENT = "No file chosen yet. You can also drag the file onto this window.
 NO_SPREADSHEET = "No spreadsheet. The results will only be shown here."
 
 TABLE_HEADERS = ["Investment", "Invested", "% of invested", "Worth now", "% of worth now", "Gain or loss"]
+WORTH_COLUMN = 3
 GAIN_COLUMN = 5
+LAST_KNOWN_MARK = "*"
+LAST_KNOWN_NOTE = (
+    f"Values marked {LAST_KNOWN_MARK} use the last price fetched on an earlier day, because Yahoo could not "
+    "be reached. Try again later for up-to-date values."
+)
 WINDOW_WIDTH = 1000
 MAX_SCREEN_SHARE = 0.8
 """When the result table appears, the window grows to at most this share of the screen's usable height."""
@@ -433,6 +440,8 @@ class MainWindow(QMainWindow):
                 export_error = error
 
         notes = list(report.notes)
+        if report.valuation.uses_last_known_prices:
+            notes.insert(0, LAST_KNOWN_NOTE)
         if exported is not None:
             done = "created" if exported.created else "updated"
             self._status(f"Done. Your spreadsheet was {done}: {exported.destination}", "ok")
@@ -468,6 +477,13 @@ class MainWindow(QMainWindow):
         if percent is not None:
             text += f" ({sign}{self._percent(abs(percent))})"
         return text
+
+    def _last_known_tip(self, price: MarketPrice) -> str:
+        if price.as_of is None:
+            return "Last known price from an earlier day: Yahoo could not be reached."
+        day = price.as_of.date()
+        shown = self._locale.toString(QDate(day.year, day.month, day.day), QLocale.FormatType.LongFormat)
+        return f"Last known price, from {shown}: Yahoo could not be reached."
 
     def _set_headers(self) -> None:
         """Column order follows the spreadsheet: each percentage sits next to the amount it is a share of."""
@@ -515,12 +531,27 @@ class MainWindow(QMainWindow):
                 )
             )
 
+        # A value at a price from an earlier run is marked with LAST_KNOWN_MARK, and its tooltip says from when.
+        last_known: list[str | None] = [
+            self._last_known_tip(holding.price) if holding.price is not None and holding.price.last_known else None
+            for holding in valuation.holdings
+        ]
+        if valuation.holdings:
+            last_known.append(
+                "Includes last known prices from an earlier day, so this total is not up to date."
+                if valuation.uses_last_known_prices and valuation.total_market_value is not None
+                else None
+            )
+
         colours = theme.current()
         self.table.setRowCount(len(rows))
         for row_number, (*texts, gain) in enumerate(rows):
             is_total = bool(valuation.holdings) and row_number == len(rows) - 1
             for column, text in enumerate(texts):
-                item = QTableWidgetItem(text)
+                tip = last_known[row_number] if column == WORTH_COLUMN else None
+                item = QTableWidgetItem(f"{text} {LAST_KNOWN_MARK}" if tip else text)
+                if tip:
+                    item.setToolTip(tip)
                 if column:
                     item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 if column == GAIN_COLUMN and gain:

@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 from zipfile import BadZipFile
 
+from statement_tracker import APP_NAME
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.exporters.base import ExportResult
 from statement_tracker.core.models import PortfolioValuation
@@ -86,6 +87,7 @@ _MONEY_FORMAT = "0.00"
 _PERCENT_FORMAT = "0.00%"
 _DATE_FORMAT = "yyyy-mm-dd"
 # Column number -> number format. Columns not listed keep Excel's general format.
+_VALUE_COLUMN = HOLDINGS_HEADER.index("Current Value") + 1
 _HOLDINGS_FORMATS = {
     2: _MONEY_FORMAT,
     3: _PERCENT_FORMAT,
@@ -114,6 +116,12 @@ def _cell(value: Decimal | None) -> Decimal | str:
 def _percent(value: Decimal | None) -> Decimal | str:
     """A percentage as Excel stores it (21.08% is 0.2108), shown with a % sign by the cell format."""
     return UNAVAILABLE if value is None else value / _HUNDRED
+
+
+def _comment(text: str) -> Any:
+    from openpyxl.comments import Comment
+
+    return Comment(text, APP_NAME, width=220, height=70)
 
 
 def _shown_length(value: Any, number_format: str | None) -> int:
@@ -202,7 +210,9 @@ class ExcelExporter:
                 del workbook[name]
 
         written = self._write_holdings(holdings, valuation)
-        history_action = self._write_history(history, valuation, today)
+        # A history row is dated today, so it is only written when every value is today's.
+        last_known = valuation.uses_last_known_prices
+        history_action = "skipped" if last_known else self._write_history(history, valuation, today)
         _style(holdings, _HOLDINGS_FORMATS, bold_last_row=written > 0)
         _style(history, _HISTORY_FORMATS)
 
@@ -210,10 +220,15 @@ class ExcelExporter:
         if first_write:
             backup = self._backup()
             notes.append(f'A backup of the spreadsheet as it was is in "{backup.name}".')
-        if history_action == "skipped":
+        if valuation.total_market_value is None:
             notes.append(
                 f'Not every current value is available, so no row was written to "{self.history_sheet}" '
                 "this time. Existing history was not changed."
+            )
+        elif last_known:
+            notes.append(
+                "Some values use a price from an earlier day because Yahoo could not be reached, so no row "
+                f'was written to "{self.history_sheet}" this time. Existing history was not changed.'
             )
         self._save(workbook)
         return ExportResult(str(self.path), created, written, history_action, tuple(notes))
@@ -344,6 +359,18 @@ class ExcelExporter:
         for row_number, values in enumerate(rows, start=1):
             for column, value in enumerate(values, start=1):
                 sheet.cell(row=row_number, column=column, value=value)
+
+        # A value at a price from an earlier run gets a comment (Excel shows a red corner) saying from when.
+        for row, holding in enumerate(valuation.holdings, start=2):
+            if holding.price is not None and holding.price.last_known:
+                day = holding.price.as_of.date().isoformat() if holding.price.as_of else "an earlier day"
+                sheet.cell(row=row, column=_VALUE_COLUMN).comment = _comment(
+                    f"Last known price, from {day}. Yahoo could not be reached when this was written."
+                )
+        if valuation.uses_last_known_prices and valuation.total_market_value is not None:
+            sheet.cell(row=total_row, column=_VALUE_COLUMN).comment = _comment(
+                "Includes last known prices from an earlier day, so this total is not up to date."
+            )
         return len(valuation.holdings)
 
     def _write_history(self, sheet: Any, valuation: PortfolioValuation, today: date) -> str:

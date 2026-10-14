@@ -1,7 +1,7 @@
 """Excel export: our two sheets are written, everything else in the workbook is left alone."""
 
 import io
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -227,6 +227,34 @@ def test_missing_price_writes_unavailable_and_leaves_history_alone(tmp_path: Pat
     assert holdings[3][:5] == ("Total", 1202, 1, "unavailable", "unavailable")
     assert len(rows(path, "Portfolio History")) == 2
     assert "no row was written" in " ".join(result.notes)
+
+
+def test_last_known_price_is_written_with_a_comment_and_leaves_history_alone(tmp_path: Path) -> None:
+    path = tmp_path / "portfolio.xlsx"
+    ExcelExporter(path).export(valuation(), DAY_ONE)
+    portfolio = compute_portfolio(statement_from(*LINES))
+    prices = {
+        "ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR"),
+        "WXYZ": MarketPrice(
+            Decimal("100"), "WXYZ.DE", "EUR", as_of=datetime(2026, 10, 9, 17, 35, tzinfo=UTC), last_known=True
+        ),
+    }
+
+    result = ExcelExporter(path).export(value_portfolio(portfolio, prices), DAY_TWO)
+
+    sheet = load_workbook(path)["Current Holdings"]
+    assert (sheet["D2"].value, sheet["D3"].value, sheet["D4"].value) == (1200, 400, 1600)
+    assert sheet["D2"].comment is None
+    assert "Last known price, from 2026-10-09" in sheet["D3"].comment.text
+    assert "not up to date" in sheet["D4"].comment.text
+    assert result.history == "skipped"
+    assert len(rows(path, "Portfolio History")) == 2
+    assert "Yahoo could not be reached, so no row was written" in " ".join(result.notes)
+
+    ExcelExporter(path).export(valuation(), DAY_TWO)
+
+    sheet = load_workbook(path)["Current Holdings"]
+    assert sheet["D3"].comment is None and sheet["D4"].comment is None
 
 
 def test_workbook_open_in_excel_gives_a_friendly_message(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

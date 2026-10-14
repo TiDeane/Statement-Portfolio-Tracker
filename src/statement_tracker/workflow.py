@@ -18,6 +18,7 @@ from statement_tracker.core.market_data.provider import PriceProvider, PriceUnav
 from statement_tracker.core.models import MarketPrice, PortfolioValuation, Statement
 from statement_tracker.core.parser import load_statement
 from statement_tracker.core.ticker_resolver import Confidence, Resolution, resolve_ticker
+from statement_tracker.price_cache import PriceCache
 from statement_tracker.settings import Settings, TickerChoice
 
 STALE_PRICE_AGE = timedelta(days=5)
@@ -82,6 +83,7 @@ def build_report(
     ignore_unknown_types: bool = False,
     now: datetime | None = None,
     progress: Progress | None = None,
+    price_cache: PriceCache | None = None,
 ) -> Report:
     """Load a statement and value its open positions at current prices.
 
@@ -89,6 +91,10 @@ def build_report(
     so explicitly), the saved settings, automatic matching, and ``chooser``.
     New choices are saved. A ticker without a symbol or a price is reported as
     unavailable with the reason; it is never estimated.
+
+    Every price fetched is kept in ``price_cache`` (by default the one next to
+    the settings file). When a price cannot be fetched, the one kept from an
+    earlier run is used instead, marked as last known, and a note says from when.
 
     ``progress`` is called as work advances with (steps done, steps in total,
     what is happening now). The total is 0 until the statement has been read.
@@ -100,6 +106,7 @@ def build_report(
     buys = buys_by_ticker(statement)
     overrides = dict(symbol_overrides or {})
     now = now or datetime.now(UTC)
+    cache = price_cache if price_cache is not None else PriceCache.beside(settings.path)
 
     notes: list[str] = list(portfolio.warnings)
     prices: dict[str, MarketPrice] = {}
@@ -134,10 +141,20 @@ def build_report(
             quote = provider.quote(symbol)
             price = price_in_currency(quote, statement.currency, provider)
         except PriceUnavailableError as exc:
-            unavailable[ticker] = str(exc)
+            last_known = cache.last_known(symbol, statement.currency) if symbol else None
+            if last_known is None:
+                unavailable[ticker] = str(exc)
+                continue
+            prices[ticker] = last_known
+            day = last_known.as_of.date().isoformat() if last_known.as_of else "an earlier day"
+            notes.append(
+                f"{ticker}: {exc} The last price fetched for {symbol}, from {day}, is used instead, "
+                "so this value and the totals are not up to date."
+            )
             continue
 
         prices[ticker] = price
+        cache.remember(price, statement.currency, now)
         if price.as_of is not None and now - price.as_of > STALE_PRICE_AGE:
             notes.append(
                 f"{ticker}: the latest price Yahoo has for {symbol} is from {price.as_of.date().isoformat()}, "
@@ -157,6 +174,7 @@ def build_report(
     report_progress(len(positions), len(positions), "Adding everything up...")
     if settings_changed:
         settings.save()
+    cache.save()
     for ticker, reason in unavailable.items():
         notes.append(f"{ticker}: current value unavailable. {reason}")
     return Report(statement, value_portfolio(portfolio, prices, unavailable), tuple(notes))

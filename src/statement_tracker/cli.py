@@ -20,6 +20,7 @@ from typing import TextIO
 from statement_tracker import APP_NAME, __version__
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.market_data.provider import PriceProvider
+from statement_tracker.core.models import MarketPrice
 from statement_tracker.core.ticker_resolver import Confidence, Resolution
 from statement_tracker.settings import Settings
 from statement_tracker.workflow import Chooser, Report, build_report, update_spreadsheet
@@ -34,6 +35,13 @@ def _money(value: Decimal | None) -> str:
 
 def _number(value: Decimal | None, places: str) -> str:
     return UNAVAILABLE if value is None else str(value.quantize(Decimal(places), rounding=ROUND_HALF_UP))
+
+
+def _price_time(price: MarketPrice | None) -> str:
+    if price is None or price.as_of is None:
+        return UNAVAILABLE
+    shown = price.as_of.isoformat(timespec="minutes")
+    return f"{shown} (last known)" if price.last_known else shown
 
 
 def percent_is_by_value(report: Report) -> bool:
@@ -81,7 +89,7 @@ def report_rows(report: Report, details: bool = False) -> list[list[str]]:
                 _number(position.average_cost, "0.0001"),
                 _number(price.price if price else None, "0.0001"),
                 price.symbol if price else UNAVAILABLE,
-                price.as_of.isoformat(timespec="minutes") if price and price.as_of else UNAVAILABLE,
+                _price_time(price),
                 _money(position.realized_pnl),
                 _money(position.dividends),
             ]

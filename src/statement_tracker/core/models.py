@@ -106,6 +106,8 @@ class MarketPrice:
     quoted_currency: str
     converted: bool = False
     as_of: datetime | None = None
+    last_known: bool = False
+    """True when Yahoo could not be reached and this is the price fetched on an earlier run."""
 
 
 @dataclass(frozen=True)
@@ -134,3 +136,8 @@ class PortfolioValuation:
     unrealized_pnl: Decimal | None
     net_worth: Decimal | None
     gain_vs_deposits: Decimal | None
+
+    @property
+    def uses_last_known_prices(self) -> bool:
+        """True if any holding is valued at a price from an earlier run, so the totals are not current."""
+        return any(holding.price is not None and holding.price.last_known for holding in self.holdings)

@@ -105,6 +105,8 @@ The last row is the total. Investments you have sold completely are not listed.
 
 **"unavailable"** means the app could not get a current price for that investment. When a value is unavailable, the calculated values that depend on it are unavailable too.
 
+**A value marked with \*** uses the last price the app fetched on an earlier day, because Yahoo Finance could not be reached this time. Point at the value to see the date of that price. The Total is marked too, since it includes that value. Try again later for up-to-date values. An investment the app has never fetched a price for is shown as unavailable instead.
+
 Notes under the table explain anything unusual, such as a price that is several days old.
 
 ## Your Excel spreadsheet
@@ -113,6 +115,8 @@ If you chose a spreadsheet, the app adds creates two sheets (or updates them if 
 
 - **Current Holdings**: one row per investment and a Total row, rewritten each time.
 - **Portfolio History**: one row per day you run the app, so you can see your totals over time. Running twice on the same day updates that day's row; older rows are never changed.
+
+A value that uses the last price from an earlier day has a comment (a small red corner in Excel) saying from when. On those runs no row is written to **Portfolio History**, because that row would be dated today.
 
 Your own sheets in that file are left exactly as they are. Before the app changes an existing spreadsheet for the first time, it saves a copy next to it named `<your file>_backup_before_first_update.xlsx`.
 
@@ -128,14 +132,14 @@ Everything happens on your computer. There are no accounts, and the app does not
 
 The only information that leaves your computer are the codes of your investments and dates, sent to Yahoo Finance to look up prices. Your amounts and your statement file are never sent anywhere.
 
-The app keeps its settings (your confirmed investments and where your spreadsheet is) in your user folder: on Windows under `%LOCALAPPDATA%\StatementPortfolioTracker`.
+The app keeps its settings (your confirmed investments and where your spreadsheet is) and the last price it fetched for each fund in your user folder: on Windows under `%LOCALAPPDATA%\StatementPortfolioTracker`. Those prices are prices per share from Yahoo Finance; none of your amounts are kept.
 
 ## Known limitations
 
 - Only Revolut's stock statement in CSV format is supported, and only the "All time" range.
 - The statement must be in a single currency. Statements with trades in more than one currency, or with a currency conversion, are not supported yet and are rejected with an explanation.
 - Only these kinds of entries are understood: cash top-ups, market buys, market sells and dividends. Anything else (for example a stock split or a withdrawal) stops the app with a message naming the row, so that it never shows numbers built on a guess. Please report it if this happens to you.
-- Prices need an internet connection. Without one, current values are shown as unavailable.
+- Prices need an internet connection. Without one, the app uses the last prices it fetched, marked with \*, or shows values as unavailable if it has never fetched them.
 - The figures are simple: what you paid against what it is worth now. There are no tax calculations and no time-weighted returns.
 - The app is in English only. It does not update itself; new versions are on the Releases page.
 

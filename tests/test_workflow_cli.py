@@ -220,6 +220,78 @@ def test_unreachable_provider_leaves_values_unavailable(tmp_path: Path) -> None:
     assert "offline" in errors
 
 
+def test_last_known_price_is_used_when_yahoo_cannot_be_reached(tmp_path: Path) -> None:
+    settings_path = tmp_path / "settings.json"
+    online = sample_provider()
+    online.listings["EQQB.DE"].as_of = datetime(2026, 10, 9, 17, 35, tzinfo=UTC)
+    build_report(SAMPLE, online, Settings.load(settings_path))
+
+    report = build_report(SAMPLE, FakeProvider(offline=True), Settings.load(settings_path))
+
+    holding = report.valuation.holdings[0]
+    assert holding.price is not None and holding.price.last_known
+    assert (holding.price.price, holding.price.symbol) == (Decimal("400"), "EQQB.DE")
+    assert holding.market_value == Decimal("1.47328346") * 400
+    assert report.valuation.uses_last_known_prices
+    assert report.valuation.total_market_value is not None
+    assert (
+        "EQQB: Prices could not be fetched (offline). The last price fetched for EQQB.DE, from 2026-10-09, "
+        "is used instead, so this value and the totals are not up to date."
+    ) in report.notes
+
+
+def test_cli_marks_the_time_of_a_last_known_price(tmp_path: Path) -> None:
+    settings_path = tmp_path / "settings.json"
+    online = sample_provider()
+    online.listings["EQQB.DE"].as_of = datetime(2026, 10, 9, 17, 35, tzinfo=UTC)
+    run_cli(str(SAMPLE), provider=online, settings=settings_path)
+
+    code, output, errors = run_cli(
+        str(SAMPLE), "--details", provider=FakeProvider(offline=True), settings=settings_path
+    )
+
+    assert code == 0
+    assert output.splitlines()[1].startswith("EQQB,541.49,589.31,100.00,")
+    assert ",2026-10-09T17:35+00:00 (last known)," in output.splitlines()[1]
+    assert "is used instead" in errors
+
+
+def test_a_fresh_price_replaces_the_last_known_one(tmp_path: Path) -> None:
+    settings_path = tmp_path / "settings.json"
+    build_report(SAMPLE, sample_provider(), Settings.load(settings_path))
+    newer = sample_provider()
+    newer.listings["EQQB.DE"].price = Decimal("410")
+    build_report(SAMPLE, newer, Settings.load(settings_path))
+
+    report = build_report(SAMPLE, FakeProvider(offline=True), Settings.load(settings_path))
+
+    assert report.valuation.holdings[0].price.price == Decimal("410")
+
+
+def test_last_known_price_in_another_statement_currency_is_not_used(tmp_path: Path) -> None:
+    settings_path = tmp_path / "settings.json"
+    build_report(SAMPLE, sample_provider(), Settings.load(settings_path))
+    usd = write_statement(
+        tmp_path,
+        "2025-01-06T09:00:00.000Z,,CASH TOP-UP,,,USD 2000,USD,1",
+        "2025-01-06T10:00:00.000Z,EQQB,BUY - MARKET,1,USD 400.00,USD 401,USD,1",
+    )
+
+    report = build_report(usd, FakeProvider(offline=True), Settings.load(settings_path))
+
+    assert report.valuation.holdings[0].market_value is None
+
+
+def test_a_damaged_last_prices_file_is_ignored(tmp_path: Path) -> None:
+    settings_path = tmp_path / "settings.json"
+    (tmp_path / "last_prices.json").write_text("{not json", encoding="utf-8")
+
+    report = build_report(SAMPLE, sample_provider(), Settings.load(settings_path))
+
+    assert report.valuation.holdings[0].market_value is not None
+    assert "EQQB.DE" in (tmp_path / "last_prices.json").read_text(encoding="utf-8")
+
+
 def test_price_in_another_currency_is_converted_and_labelled(tmp_path: Path) -> None:
     provider = FakeProvider()
     provider.add("EQQB", "USD", price="500")

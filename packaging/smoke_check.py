@@ -100,8 +100,8 @@ def main() -> int:
         lines.append(f"| Price fetch from the packaged app | {outcome} |")
     lines.append("")
     lines.append(
-        "Launch-to-exit times include importing yfinance and openpyxl, which the real app "
-        "does in the background after the window is already visible."
+        "Launch-to-exit times include importing openpyxl, which the real app only does "
+        "when it updates a spreadsheet, after the window is already visible."
     )
     markdown = "\n".join(lines) + "\n"
 

@@ -69,7 +69,7 @@ def _run_smoke_test(sample: Path, out: Path | None, quote_symbol: str | None) ->
         report["bundled_sample_rows"] = spike.count_statement_rows(spike.bundled_sample_path())
         report["sample_rows"] = spike.count_statement_rows(sample)
         window.set_statement(sample)
-        imports = (spike.import_yfinance(), spike.import_openpyxl())
+        imports = (spike.import_openpyxl(),)
         report["imports"] = {
             item.name: {"version": item.version, "seconds": round(item.seconds, 3)} for item in imports
         }

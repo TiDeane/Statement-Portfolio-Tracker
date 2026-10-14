@@ -38,6 +38,5 @@ def test_empty_file_is_a_header_mismatch(tmp_path: Path) -> None:
 
 
 def test_heavy_dependencies_import_and_openpyxl_round_trips() -> None:
-    assert spike.import_yfinance().version
     assert spike.import_openpyxl().version
     assert spike.openpyxl_roundtrip()

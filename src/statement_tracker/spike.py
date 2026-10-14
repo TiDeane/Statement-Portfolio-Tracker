@@ -65,14 +65,6 @@ def count_statement_rows(path: Path) -> int:
         return sum(1 for row in reader if any(cell.strip() for cell in row))
 
 
-def import_yfinance() -> ImportReport:
-    """Import yfinance (slow: it pulls in pandas and numpy) and time it."""
-    started = time.perf_counter()
-    import yfinance
-
-    return ImportReport("yfinance", yfinance.__version__, time.perf_counter() - started)
-
-
 def import_openpyxl() -> ImportReport:
     """Import openpyxl and time it."""
     started = time.perf_counter()
@@ -94,8 +86,8 @@ def openpyxl_roundtrip() -> bool:
 
 
 def fetch_last_price(symbol: str) -> tuple[str, str]:
-    """Return (last price, currency) for a Yahoo symbol. Uses the network."""
-    import yfinance
+    """Return (last price, currency) for a Yahoo symbol, the way the app fetches prices. Uses the network."""
+    from statement_tracker.core.market_data.yahoo_provider import YahooProvider
 
-    info = yfinance.Ticker(symbol).fast_info
-    return str(info["lastPrice"]), str(info["currency"])
+    quote = YahooProvider().quote(symbol)
+    return str(quote.price), quote.currency

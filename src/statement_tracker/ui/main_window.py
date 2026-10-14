@@ -95,9 +95,9 @@ def _file_text(path: Path, remark: str = "") -> str:
 
 
 def _default_provider() -> PriceProvider:
-    from statement_tracker.core.market_data.yfinance_provider import YFinanceProvider
+    from statement_tracker.core.market_data.yahoo_provider import YahooProvider
 
-    return YFinanceProvider()
+    return YahooProvider()
 
 
 class MainWindow(QMainWindow):

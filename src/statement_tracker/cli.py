@@ -249,9 +249,9 @@ def main(
             settings.index_names.update(names)
             settings.save()
         if provider is None:
-            from statement_tracker.core.market_data.yfinance_provider import YFinanceProvider
+            from statement_tracker.core.market_data.yahoo_provider import YahooProvider
 
-            provider = YFinanceProvider()
+            provider = YahooProvider()
         interactive = not args.no_prompt and sys.stdin is not None and sys.stdin.isatty()
         report = build_report(
             args.statement,

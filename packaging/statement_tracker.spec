@@ -8,8 +8,6 @@ Build from the repo root:
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all
-
 ROOT = Path(SPECPATH).parent
 sys.path.insert(0, str(ROOT / "src"))
 
@@ -17,10 +15,6 @@ from statement_tracker import APP_NAME, __version__  # noqa: E402
 
 EXE_NAME = "StatementPortfolioTracker"
 BUNDLE_ID = "io.github.tideane.statementportfoliotracker"
-
-# curl_cffi (yfinance's HTTP client) ships a native library and CA bundle that
-# PyInstaller's import analysis does not find on its own.
-curl_datas, curl_binaries, curl_hiddenimports = collect_all("curl_cffi")
 
 # Qt pieces a Widgets-only app never loads. Dropping them trims the download.
 UNUSED_QT_FRAGMENTS = (
@@ -48,10 +42,12 @@ def _wanted(entry) -> bool:
 a = Analysis(
     [str(ROOT / "packaging" / "entry.py")],
     pathex=[str(ROOT / "src")],
-    binaries=curl_binaries,
-    datas=[(str(ROOT / "samples" / "revolut_sample.csv"), "samples"), *curl_datas],
-    hiddenimports=curl_hiddenimports,
-    excludes=["tkinter", "matplotlib", "IPython", "pytest"],
+    datas=[(str(ROOT / "samples" / "revolut_sample.csv"), "samples")],
+    # Heavy libraries the app does not use. Listed so that an installed copy (from another
+    # package in the build environment) can never end up in the download.
+    excludes=[
+        "tkinter", "matplotlib", "IPython", "pytest", "pandas", "numpy", "yfinance", "curl_cffi", "lxml",
+    ],
     noarchive=False,
 )
 a.binaries = [entry for entry in a.binaries if _wanted(entry)]

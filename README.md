@@ -4,7 +4,7 @@ See how your Revolut investments are doing, and keep an Excel spreadsheet up to 
 
 The app reads the account statement CSV file you export from the Revolut app. It works out what you still hold, looks up current prices, and shows for each investment what you invested, what it is worth now, your gain or loss, and its share of the total. If you want, it also writes the same figures into an Excel spreadsheet.
 
-> **Unofficial.** This app is not made by, affiliated with or endorsed by Revolut. It is not financial advice. Prices come from Yahoo Finance through an unofficial library; they may be delayed or wrong, and Yahoo's terms apply to them. Check important numbers against your Revolut app.
+> **Unofficial.** This app is not made by, affiliated with or endorsed by Revolut. It is not financial advice. Prices are read from Yahoo Finance's public web pages, which is unofficial; they may be delayed or wrong, and Yahoo's terms apply to them. Check important numbers against your Revolut app.
 
 ## Install
 

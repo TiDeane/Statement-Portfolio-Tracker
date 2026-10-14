@@ -12,8 +12,9 @@ license-files = ["LICENSE"]
 dependencies = [
     # GUI. Essentials only: the Addons wheel (WebEngine, 3D, ...) is not needed.
     "PySide6-Essentials>=6.8,<7",
-    # Default price provider. Brings pandas and numpy with it; our code does not import them.
-    "yfinance>=1.0,<2",
+    # Root certificates for the HTTPS requests to Yahoo, which a packaged app cannot always
+    # find on the system (macOS, some Linux). Prices are fetched with Python's own HTTP client.
+    "certifi>=2024.2.2",
     # Excel export (Phase 2); imported by the Phase 0 spike to prove it packages.
     "openpyxl>=3.1,<4",
     # Finds the per-user settings folder on each operating system.

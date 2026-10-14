@@ -128,7 +128,7 @@ Notes under the table explain anything unusual, such as a price that is several 
 
 ## Your Excel spreadsheet
 
-If you chose a spreadsheet, the app adds creates two sheets (or updates them if they already exist), writing:
+If you chose a spreadsheet, the app creates two sheets (or updates them if they already exist), writing:
 
 - **Current Holdings**: one row per investment and a Total row, rewritten each time.
 - **Portfolio History**: one row per day you run the app, so you can see your totals over time. Running twice on the same day updates that day's row; older rows are never changed.
@@ -139,9 +139,21 @@ Your own sheets in that file are left exactly as they are. Before the app change
 
 ### IMPORTANT NOTE
 
-The app only changes its own two sheets, but to save them it has to write the whole file again. Values, formulas, colours, colour rules and charts in your own sheets are kept. **Pictures, shapes and text boxes are not**: they disappear from the saved file. If your spreadsheet has any of those, let the app create a separate new spreadsheet instead
+The app only changes its own two sheets, but to save them it has to write the whole file again. Values, formulas, colours, colour rules and charts in your own sheets are kept. **Pictures, shapes and text boxes are not**: they disappear from the saved file. If your spreadsheet has any of those, let the app create a separate new spreadsheet instead.
 
 The backup copy mentioned above is created in case something of yours does go missing.
+
+### Using Google Sheets
+
+Google Sheets can open and edit Excel files kept in Google Drive, so you can use the app with it:
+
+1. Install [Google Drive for desktop](https://www.google.com/drive/download/) and sign in. Your Drive then appears on your computer like a folder or a drive (on Windows, usually `G:`).
+2. In step 2, choose **Create a new one...** and save it inside your Drive, or choose an Excel file that is already there.
+3. Open the file from [drive.google.com](https://drive.google.com). Google Sheets edits it as an Excel file and shows a small **.XLSX** label next to its name.
+
+After each run, Drive uploads the updated file within a few moments; reload the page in your browser to see the new values. Close the file in Google Sheets before you press the green button, so that your edits and the app's don't overwrite each other.
+
+The file stays an Excel file. **File > Save as Google Sheets** makes a separate copy, which the app does not update.
 
 ## Privacy
 

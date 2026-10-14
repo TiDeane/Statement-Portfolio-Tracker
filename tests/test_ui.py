@@ -33,6 +33,8 @@ from statement_tracker.ui.settings_dialog import ASK_AGAIN_STATUS, SettingsDialo
 from statement_tracker.ui.main_window import (  # noqa: E402
     ENTERED_MARK,
     MAX_SCREEN_SHARE,
+    MIN_TABLE_HEIGHT,
+    MIN_WINDOW_WIDTH,
     MainWindow,
     default_start_folder,
 )
@@ -180,6 +182,61 @@ def test_step_2_shows_the_choice_as_options_and_the_files_as_actions(
     assert state() == (False, True, True) and files_shown()
 
 
+def test_a_smaller_window_shrinks_the_table_instead_of_covering_it(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, FakeProvider(offline=True))  # no price: the line with buttons shows
+    window.show()
+    window.set_statement(SAMPLE)
+    run(app, window)
+    settle(app)
+    grown = window.height()
+    table = window.table
+    rows_height = table.horizontalHeader().height() + sum(table.rowHeight(row) for row in range(table.rowCount()))
+    assert table.viewport().height() + table.horizontalHeader().height() >= rows_height  # grown to show every row
+
+    def top(widget) -> int:
+        return widget.mapTo(window, widget.rect().topLeft()).y()
+
+    def bottom(widget) -> int:
+        return widget.mapTo(window, widget.rect().bottomLeft()).y()
+
+    window.resize(window.width(), 100)  # far smaller than everything needs
+    settle(app)
+
+    assert window.height() <= grown  # two rows: the window is already as small as it can be
+    assert bottom(window.table) < top(window.price_bar) < top(window.settings_button)  # nothing covers the table
+    assert window.table.height() >= MIN_TABLE_HEIGHT
+
+    # Narrow as well: wrapped text takes more lines, and the window still keeps room for everything.
+    window.resize(300, 100)
+    settle(app)
+
+    assert window.width() == MIN_WINDOW_WIDTH
+    assert bottom(window.status_label) < top(window.table)
+    assert bottom(window.table) < top(window.price_bar) < top(window.settings_button)
+    assert bottom(window.settings_button) <= window.height()
+    assert window.table.height() >= MIN_TABLE_HEIGHT
+
+    # Some window managers ignore the minimum size (Weston's, as under WSL). The window then grows back to it.
+    minimum = window.minimumSize()
+    window.setMinimumSize(0, 0)  # what Qt enforces: nothing, as such a window manager...
+    window.minimumSize = lambda: minimum  # ...while the window still knows its own minimum
+    window.resize(300, 200)
+    settle(app)
+
+    assert window.size() == minimum
+    del window.minimumSize
+
+    # And if it cannot grow back either, the contents scroll rather than being drawn over each other.
+    window.resize(300, 200)
+    settle(app)
+
+    assert window.height() == 200
+    assert window.centralWidget().verticalScrollBar().isVisible()
+    assert bottom(window.status_label) < top(window.table)
+    assert bottom(window.table) < top(window.price_bar) < top(window.settings_button)
+    assert window.table.height() >= MIN_TABLE_HEIGHT
+
+
 def test_the_window_fits_the_steps_until_there_is_a_result(app, tmp_path: Path) -> None:
     window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
     window.show()
@@ -293,7 +350,7 @@ def test_window_stops_growing_at_a_share_of_the_screen_and_the_table_scrolls(app
     limit = int(window.screen().availableGeometry().height() * MAX_SCREEN_SHARE)
     assert MAX_SCREEN_SHARE == 0.8
     # Never taller than 80% of the screen, unless the screen is too small for even two rows.
-    assert window.height() <= max(limit, window.minimumSizeHint().height())
+    assert window.height() <= max(limit, window.minimumHeight())
     assert table.height() < header + table.rowCount() * row  # the rest is reached by scrolling
     window.close()
 

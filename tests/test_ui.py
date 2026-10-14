@@ -587,3 +587,66 @@ def test_listing_dialog_returns_the_selection_or_the_typed_symbol(app) -> None:
     assert dialog.chosen_symbol() == "EQQB.MI"
     dialog._typed.setText(" EQQB.SW ")
     assert dialog.chosen_symbol() == "EQQB.SW"
+
+
+def test_always_use_the_first_listing_is_offered_whenever_there_is_a_listing(app, tmp_path: Path) -> None:
+    from statement_tracker.core.ticker_resolver import Confidence, resolve_ticker
+
+    several = ChooseListingDialog(resolve_ticker("EQQB", EQQB_BUYS, "EUR", provider_with("EQQB.DE", "EQQB.MI")))
+    # The buttons, in this order: use the selection, always use the first, skip.
+    row = [several.use_button, several.always_first_button, several.skip_button]
+    layout = several.layout().itemAt(several.layout().count() - 1).layout()
+    shown = [layout.itemAt(i).widget() for i in range(layout.count()) if layout.itemAt(i).widget()]
+    assert shown == row
+    assert several.always_first_button.isVisibleTo(several)
+
+    # "Always choose the first option" uses the first listing now, even with another one selected.
+    several._group.button(1).setChecked(True)
+    several.always_first_button.click()
+    assert several.result() == QtWidgets.QDialog.DialogCode.Accepted
+    assert (several.chosen_symbol(), several.always_use_first()) == ("EQQB.DE", True)
+
+    used = ChooseListingDialog(resolve_ticker("EQQB", EQQB_BUYS, "EUR", provider_with("EQQB.DE", "EQQB.MI")))
+    used._group.button(1).setChecked(True)
+    used.use_button.click()
+    assert (used.chosen_symbol(), used.always_use_first()) == ("EQQB.MI", False)
+
+    # Choosing a matched listing again from Settings: the first one fits, so it is offered too.
+    matched = resolve_ticker("EQQB", EQQB_BUYS, "EUR", provider_with("EQQB.DE"))
+    assert matched.confidence is Confidence.CONFIDENT
+    again = ChooseListingDialog(matched)
+    assert again.always_first_button.isVisibleTo(again)
+
+    # "The app could not tell for sure": listings found, none fitting the purchases. Offered as well.
+    far_off = {day: (low + 100, high + 100) for day, (low, high) in ranges_around(EQQB_BUYS).items()}
+    unmatched = FakeProvider()
+    unmatched.add("EQQB.DE", "EUR", price="400", ranges=far_off)  # exists, but no purchase fits its prices
+    guess = resolve_ticker("EQQB", EQQB_BUYS, "EUR", unmatched)
+    assert guess.confidence is Confidence.UNRESOLVED and guess.candidates
+    none_fit = ChooseListingDialog(guess)
+    assert none_fit.always_first_button.isVisibleTo(none_fit)
+
+    # Nothing found at all: there is no first listing to take.
+    nothing_found = ChooseListingDialog(resolve_ticker("EQQB", EQQB_BUYS, "EUR", FakeProvider()))
+    assert not nothing_found.always_first_button.isVisibleTo(nothing_found)
+
+
+def test_always_using_the_first_listing_is_remembered_and_shown_in_settings(
+    app, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from statement_tracker.ui import dialogs
+
+    monkeypatch.setattr(dialogs, "ask_listing", lambda parent, resolution: ("EQQB.DE", True))
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE", "EQQB.MI"))
+    window.set_statement(SAMPLE)
+    run(app, window)
+
+    assert window.table.item(0, 0).text() == "(EQQB) Nasdaq fund"
+    settings_path = tmp_path / "settings.json"
+    assert Settings.load(settings_path).always_use_first_listing
+    assert Settings.load(settings_path).ticker_choices["EQQB"].symbol == "EQQB.DE"
+
+    dialog = SettingsDialog(Settings.load(settings_path))
+    assert dialog.always_first.isChecked()
+    dialog.always_first.setChecked(False)
+    assert not Settings.load(settings_path).always_use_first_listing

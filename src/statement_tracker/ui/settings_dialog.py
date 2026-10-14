@@ -14,6 +14,7 @@ from PySide6.QtCore import QEvent, QModelIndex, QPersistentModelIndex, Qt, QTime
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QGroupBox,
@@ -40,6 +41,7 @@ NAME_COLUMN = 1
 NAME_TIP = "Double-click a name to change it. Leave it empty to use the fund's name from Yahoo Finance."
 YAHOO_NAME_TIP = "The fund's name from Yahoo Finance. Double-click to use your own name instead."
 ASK_AGAIN_STATUS = "Asks you on the next run"
+ALWAYS_FIRST_SETTING = "When the app cannot tell which listing an investment is, use the first one without asking"
 NOTHING_REMEMBERED = "No investments are remembered yet. They appear here after your first run."
 
 
@@ -142,6 +144,13 @@ class SettingsDialog(QDialog):
             row_buttons.addWidget(button)
         row_buttons.addStretch(1)
         row_buttons.addWidget(self.forget_all_button)  # apart: it is not about the selected investment
+        self.always_first = QCheckBox(ALWAYS_FIRST_SETTING)
+        self.always_first.setToolTip(
+            "Usually the same fund is traded on more than one exchange, and the first listing fits your "
+            "purchases best. When no listing fits your purchases, the first one found is used and a note "
+            "under the table asks you to check it."
+        )
+        self.always_first.toggled.connect(self._always_first_toggled)
         self.message_label = QLabel("")
         self.message_label.setObjectName("status")
         self.message_label.setWordWrap(True)
@@ -152,6 +161,7 @@ class SettingsDialog(QDialog):
         investments_layout.addWidget(self.table)
         investments_layout.addWidget(self.empty_label)
         investments_layout.addLayout(row_buttons)
+        investments_layout.addWidget(self.always_first)
         investments_layout.addWidget(self.message_label)
 
         close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -208,6 +218,10 @@ class SettingsDialog(QDialog):
             self.table.selectRow(tickers.index(select))
         self._update_buttons()
 
+        self.always_first.blockSignals(True)  # showing the setting is not changing it
+        self.always_first.setChecked(self._settings.always_use_first_listing)
+        self.always_first.blockSignals(False)
+
     def selected_ticker(self) -> str | None:
         """The investment selected in the table, if any."""
         rows = self.table.selectionModel().selectedRows()
@@ -242,6 +256,10 @@ class SettingsDialog(QDialog):
             )
             return False
         return True
+
+    def _always_first_toggled(self, checked: bool) -> None:
+        self._settings.always_use_first_listing = checked
+        self._save()
 
     def rename_selected(self) -> None:
         """Start typing a new name in the selected investment's name cell, as a double click does."""

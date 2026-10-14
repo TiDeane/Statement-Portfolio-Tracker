@@ -143,6 +143,21 @@ def build_report(
                 if resolution.best is not None and not asking_again:
                     symbol = resolution.best.info.symbol
                     notes.append(f"{ticker} was matched to {_describe(resolution.best.info)}.")
+                elif resolution.candidates and settings.always_use_first_listing and not asking_again:
+                    first = resolution.candidates[0]
+                    symbol = first.info.symbol
+                    if first.is_match:
+                        notes.append(
+                            f"{ticker}: more than one listing fits, so the first one was used, as you asked: "
+                            f"{_describe(first.info)}. Another can be chosen in Settings."
+                        )
+                    else:
+                        # Not checked against the purchases: said plainly, so the user can look at it.
+                        notes.append(
+                            f"{ticker}: no listing could be matched to your purchases, so the first one found was "
+                            f"used, as you asked: {_describe(first.info)}. Check that it is your fund; another "
+                            "can be chosen in Settings."
+                        )
                 elif chooser is not None:
                     symbol = chooser(resolution)
                     user_chose = symbol is not None

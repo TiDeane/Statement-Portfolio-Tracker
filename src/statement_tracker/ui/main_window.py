@@ -118,7 +118,7 @@ class MainWindow(QMainWindow):
         self._spreadsheet_from_last_time = settings.spreadsheet_path is not None
         self._tasks: list[Task] = []
         self._locale = QLocale()
-        self.ask_listing: Callable[[Resolution], str | None] = lambda resolution: dialogs.ask_listing(self, resolution)
+        self.ask_listing: Callable[[Resolution], str | None] = self._ask_listing
         self.show_error: Callable[[UserFacingError], object] = lambda error: dialogs.show_error(self, error)
         self.ask_retry: Callable[[UserFacingError], bool] = lambda error: dialogs.show_error(
             self, error, can_retry=True
@@ -265,6 +265,18 @@ class MainWindow(QMainWindow):
             self._settings.spreadsheet_path = path
             self._save_settings()
         self._refresh()
+
+    def _ask_listing(self, resolution: Resolution) -> str | None:
+        """Ask which listing a ticker is. "Always choose the first option" is saved at once.
+
+        This runs while the background run waits for the answer, so nothing else is
+        reading or saving the settings meanwhile; the rest of this run already follows it.
+        """
+        symbol, always_first = dialogs.ask_listing(self, resolution)
+        if always_first and not self._settings.always_use_first_listing:
+            self._settings.always_use_first_listing = True
+            self._save_settings()
+        return symbol
 
     def _save_settings(self) -> None:
         try:

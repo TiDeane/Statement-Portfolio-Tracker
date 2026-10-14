@@ -90,6 +90,8 @@ Revolut may move these menus in newer versions of its app.
 
 Many funds are traded on several stock exchanges under the same code. When the app cannot tell which one is yours, it shows a short list. They are usually the same fund at almost the same price, so pick the one whose name and currency match what you see in Revolut. The app remembers your answer and does not ask again. If you are unsure, **Skip this investment** leaves it without a current value; nothing is guessed. If you picked the wrong one, see Settings below.
 
+If you don't want to be asked at all, press **Always choose the first option**. The app uses the first listing for this investment, and from then on whenever it cannot tell by itself, and a note under the table says which one it used. When several listings fit your purchases, the first one fits best. When none fits (the app says it "could not tell for sure"), the first one is only the first found, so the note asks you to check that it is your fund. You can turn this off in Settings.
+
 ### Settings
 
 The **Settings** button lists the investments the app remembers.
@@ -102,6 +104,8 @@ Select an investment to:
 - **Forget** it: the app matches it again on the next run, as on the first day.
 
 **Forget all...** does the same for every investment at once. Your spreadsheet choice and the last known prices are kept.
+
+Settings also has the switch **When the app cannot tell which listing an investment is, use the first one without asking**.
 
 ## Read the result
 

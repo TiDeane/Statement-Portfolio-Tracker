@@ -44,6 +44,8 @@ class Settings:
         self.ticker_choices: dict[str, TickerChoice] = {}
         self.ask_again: set[str] = set()
         """Tickers whose listing the user wants to choose again on the next run."""
+        self.always_use_first_listing = False
+        """When the app cannot tell a ticker's listing, take the first one instead of asking. Set by the user."""
         self.suffixes: tuple[str, ...] = DEFAULT_SUFFIXES
         self.index_names: dict[str, str] = {}
         """Names the user gave their investments, by statement ticker."""
@@ -65,6 +67,7 @@ class Settings:
                 ticker: TickerChoice(**choice) for ticker, choice in raw.get("ticker_choices", {}).items()
             }
             settings.ask_again = {str(ticker) for ticker in raw.get("ask_again", [])}
+            settings.always_use_first_listing = bool(raw.get("always_use_first_listing", False))
             settings.suffixes = tuple(raw.get("suffixes", DEFAULT_SUFFIXES))
             settings.index_names = {str(k): str(v) for k, v in raw.get("index_names", {}).items()}
             last_folder = raw.get("last_folder")
@@ -86,6 +89,7 @@ class Settings:
         data = {
             "ticker_choices": {ticker: asdict(choice) for ticker, choice in sorted(self.ticker_choices.items())},
             "ask_again": sorted(self.ask_again),
+            "always_use_first_listing": self.always_use_first_listing,
             "suffixes": list(self.suffixes),
             "index_names": dict(sorted(self.index_names.items())),
             "last_folder": str(self.last_folder) if self.last_folder else None,

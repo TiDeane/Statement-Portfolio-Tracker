@@ -192,6 +192,52 @@ def test_confirmed_choice_is_never_replaced_by_automatic_matching(tmp_path: Path
     assert settings.ticker_choices["EQQB"].symbol == "EQQB.MI"
 
 
+def test_always_using_the_first_listing_skips_the_question(tmp_path: Path) -> None:
+    settings = Settings.load(tmp_path / "settings.json")
+    settings.always_use_first_listing = True
+    provider = sample_provider()
+    provider.add("EQQB.MI", "EUR", price="401", ranges=ranges_around(EQQB_BUYS))
+    asked: list[str] = []
+
+    report = build_report(SAMPLE, provider, settings, chooser=lambda resolution: asked.append(resolution.ticker))
+
+    assert asked == []
+    assert report.valuation.holdings[0].price.symbol == "EQQB.DE"
+    assert any("more than one listing fits, so the first one was used, as you asked" in note for note in report.notes)
+    saved = Settings.load(tmp_path / "settings.json").ticker_choices["EQQB"]
+    assert (saved.symbol, saved.confirmed) == ("EQQB.DE", False)  # the app's pick, not the user's
+
+    # A listing that exists but does not fit the purchases is taken too, with a note saying it was not checked.
+    far_off = {day: (low + 100, high + 100) for day, (low, high) in ranges_around(EQQB_BUYS).items()}
+    unmatched = FakeProvider()
+    unmatched.add("EQQB.DE", "EUR", price="400", ranges=far_off, name="Nasdaq fund", exchange="XETRA")
+    report = build_report(
+        SAMPLE, unmatched, _always_first(tmp_path),
+        chooser=lambda resolution: asked.append(resolution.ticker),
+    )  # fmt: skip
+    assert asked == []
+    assert report.valuation.holdings[0].price.symbol == "EQQB.DE"
+    assert any("no listing could be matched to your purchases" in note and "Check that it is your fund" in note
+               for note in report.notes)  # fmt: skip
+
+    # With no listing found at all there is nothing to take: the user is asked.
+    nothing = FakeProvider()
+    nothing.add("WXYZ.DE", "EUR", price="100")  # no price history, so not a listing for WXYZ's purchases
+    statement = write_statement(tmp_path, *TWO_HOLDINGS)
+    build_report(
+        statement, nothing, settings, symbol_overrides={"ABCD": "WXYZ.DE"},
+        chooser=lambda resolution: asked.append(resolution.ticker),
+    )  # fmt: skip
+    assert asked == ["WXYZ"]
+
+
+def _always_first(folder: Path) -> Settings:
+    """Fresh settings, in their own file, that always take the first listing."""
+    settings = Settings.load(folder / "always-first.json")
+    settings.always_use_first_listing = True
+    return settings
+
+
 def test_choosing_again_asks_even_when_matching_is_sure_and_only_once(tmp_path: Path) -> None:
     settings = Settings.load(tmp_path / "settings.json")
     provider = sample_provider()
@@ -241,12 +287,13 @@ def test_forgetting_drops_listings_and_names_and_keeps_the_rest(tmp_path: Path) 
     build_report(SAMPLE, sample_provider(), settings)
     settings.index_names = {"EQQB": "Nasdaq", "OLD": "Sold long ago"}
     settings.spreadsheet_path = tmp_path / "mine.xlsx"
+    settings.always_use_first_listing = True
 
     settings.forget("EQQB")
     assert settings.known_tickers() == ["OLD"]
     settings.forget_all()
     assert settings.known_tickers() == []
-    assert settings.spreadsheet_path == tmp_path / "mine.xlsx"
+    assert settings.spreadsheet_path == tmp_path / "mine.xlsx" and settings.always_use_first_listing
 
 
 def test_symbol_given_by_the_user_replaces_a_saved_choice(tmp_path: Path) -> None:

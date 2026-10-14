@@ -42,6 +42,28 @@ def test_one_fitting_listing_is_confident() -> None:
     assert [candidate.info.symbol for candidate in resolution.candidates] == ["EQQB.DE", "EQQB.MI", "EQQB.L"]
 
 
+def test_candidate_listings_are_checked_at_the_same_time_and_kept_in_order() -> None:
+    import threading
+
+    pairs = threading.Barrier(2, timeout=5)
+
+    class WaitsForAnother(FakeProvider):
+        """Each history request waits for a second one to start: only works if they run together."""
+
+        def history(self, symbol: str, start: date, end: date):
+            pairs.wait()
+            return super().history(symbol, start, end)
+
+    provider = WaitsForAnother()  # the bare ticker and five suffixes: six requests, in pairs
+    provider.add("EQQB.DE", "EUR", ranges=ranges_around(EQQB_BUYS))
+    provider.add("EQQB.MI", "EUR", ranges=ranges_around(EQQB_BUYS, spread="0.80"))
+
+    resolution = resolve_ticker("EQQB", EQQB_BUYS, "EUR", provider)
+
+    assert resolution.confidence is Confidence.AMBIGUOUS
+    assert [candidate.info.symbol for candidate in resolution.candidates] == ["EQQB.DE", "EQQB.MI"]
+
+
 def test_two_fitting_listings_are_ambiguous() -> None:
     provider = FakeProvider()
     provider.add("EQQB.DE", "EUR", ranges=ranges_around(EQQB_BUYS))

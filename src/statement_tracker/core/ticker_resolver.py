@@ -10,6 +10,7 @@ user picks), none is "unresolved" (the user searches or types a symbol).
 from __future__ import annotations
 
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -33,6 +34,8 @@ DEFAULT_TOLERANCE = Decimal("0.01")
 MAX_BUYS_CHECKED = 5
 NEAREST_DAY_WINDOW = 7
 """How many days away a trading day may be when the trade date itself has no market data."""
+CHECK_WORKERS = 4
+"""Candidate listings checked at the same time."""
 
 
 class Confidence(Enum):
@@ -139,18 +142,19 @@ def resolve_ticker(
         start = min(days) - timedelta(days=NEAREST_DAY_WINDOW + 1)
         end = max(days) + timedelta(days=NEAREST_DAY_WINDOW + 1)
 
-        for symbol, searched in candidate_symbols(ticker, suffixes, provider).items():
+        def check(symbol: str, searched: SymbolInfo | None) -> Candidate | None:
+            """How well one listing fits the purchases; None if it is not a listing at all."""
             try:
                 history = provider.history(symbol, start, end)
             except SymbolNotFoundError:
                 if searched is None:
-                    continue
+                    return None
                 # Search says the listing exists, but it has no prices around the purchases
                 # (rarely traded listings have gaps). Keep it as an option for the user.
                 try:
                     history = SymbolHistory(provider.quote(symbol).info, ())
                 except PriceUnavailableError:
-                    continue
+                    return None
             info = history.info
             if searched is not None:
                 info = replace(
@@ -172,7 +176,13 @@ def resolve_ticker(
                     for buy in evidence
                     if buy.price_per_share is not None
                 )
-            candidates.append(Candidate(info, matched, len(evidence), comparable))
+            return Candidate(info, matched, len(evidence), comparable)
+
+        # The listings are checked at the same time; their answers are used in the usual order.
+        listings = list(candidate_symbols(ticker, suffixes, provider).items())
+        with ThreadPoolExecutor(max_workers=CHECK_WORKERS) as pool:
+            checked = list(pool.map(lambda listing: check(*listing), listings))
+        candidates = [candidate for candidate in checked if candidate is not None]
 
     # Best first: listings that fit, then same-currency listings, then other currencies.
     candidates.sort(key=lambda item: (not item.is_match, not item.comparable, -item.matched))

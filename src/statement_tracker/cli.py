@@ -60,7 +60,7 @@ def report_rows(report: Report, details: bool = False) -> list[list[str]]:
     """
     currency = report.statement.currency
     header = [
-        "Index",
+        "Investment",
         f"Invested ({currency})",
         "% of Invested",
         f"Current Value ({currency} approx.)",

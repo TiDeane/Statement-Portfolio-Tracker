@@ -34,7 +34,7 @@ TOTAL_LABEL = "Total"
 _LEFT_OUT_COLOUR = "808080"
 
 HOLDINGS_HEADER = (
-    "Index",
+    "Investment",
     "Invested",
     "% of Invested",
     "Current Value",
@@ -46,6 +46,7 @@ HOLDINGS_HEADER = (
 # Headers this app wrote in earlier versions. A sheet with one of these is still ours,
 # so it is rewritten in the current layout instead of being refused.
 _EARLIER_HOLDINGS_HEADERS = (
+    ("Index", *HOLDINGS_HEADER[1:]),
     (
         "Index",
         "Invested",
@@ -196,7 +197,7 @@ class ExcelExporter:
     ) -> None:
         self.path = path
         self.index_names = dict(index_names or {})
-        """Names to show next to tickers in the Index column, e.g. "(ABCD) World fund"."""
+        """Names to show next to tickers in the Investment column, e.g. "(ABCD) World fund"."""
         self.holdings_sheet = holdings_sheet
         self.history_sheet = history_sheet
 

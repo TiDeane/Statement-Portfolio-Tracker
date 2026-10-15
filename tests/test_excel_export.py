@@ -111,6 +111,20 @@ def test_share_columns_say_what_they_are_a_share_of_and_older_headers_are_upgrad
     assert rows(path, "Current Holdings")[0] == HOLDINGS_HEADER
 
 
+def test_the_first_column_is_called_investment_and_a_sheet_calling_it_index_is_upgraded(tmp_path: Path) -> None:
+    assert HOLDINGS_HEADER[0] == "Investment"  # what each row is; an index is what some funds follow
+    path = tmp_path / "portfolio.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Current Holdings"
+    sheet.append(["Index", *HOLDINGS_HEADER[1:]])  # as this app wrote it until now
+    workbook.save(path)
+
+    ExcelExporter(path).export(valuation(), DAY_ONE)
+
+    assert rows(path, "Current Holdings")[0] == HOLDINGS_HEADER
+
+
 def test_holdings_sheet_from_an_earlier_version_is_rewritten_in_the_shorter_layout(tmp_path: Path) -> None:
     path = tmp_path / "portfolio.xlsx"
     earlier = (
@@ -129,7 +143,7 @@ def test_holdings_sheet_from_an_earlier_version_is_rewritten_in_the_shorter_layo
 
     holdings = rows(path, "Current Holdings")
     assert holdings[0] == HOLDINGS_HEADER
-    assert [row[0] for row in holdings] == ["Index", "ABCD", "WXYZ", "Total"]
+    assert [row[0] for row in holdings] == ["Investment", "ABCD", "WXYZ", "Total"]
     assert all(len(row) == len(HOLDINGS_HEADER) for row in holdings)
     assert "N" not in load_workbook(path)["Current Holdings"].column_dimensions
 
@@ -168,7 +182,7 @@ def test_holdings_sheet_is_replaced_not_appended_to(tmp_path: Path) -> None:
 
     ExcelExporter(path).export(only_abcd, DAY_TWO)
 
-    assert [row[0] for row in rows(path, "Current Holdings")] == ["Index", "ABCD", "Total"]
+    assert [row[0] for row in rows(path, "Current Holdings")] == ["Investment", "ABCD", "Total"]
 
 
 def _users_workbook(path: Path) -> None:
@@ -391,7 +405,7 @@ def test_index_column_shows_the_name_next_to_the_ticker_when_one_is_known(tmp_pa
 
     ExcelExporter(path, index_names={"ABCD": "S&P 500"}).export(valuation(), DAY_ONE)
 
-    assert [row[0] for row in rows(path, "Current Holdings")] == ["Index", "(ABCD) S&P 500", "WXYZ", "Total"]
+    assert [row[0] for row in rows(path, "Current Holdings")] == ["Investment", "(ABCD) S&P 500", "WXYZ", "Total"]
     assert load_workbook(path)["Current Holdings"].column_dimensions["A"].width > len("(ABCD) S&P 500")
 
 

@@ -44,7 +44,8 @@ def test_cli_prints_one_row_per_open_holding_for_the_sample(tmp_path: Path) -> N
 
     assert code == 0
     assert output == (
-        "Index,Invested (EUR),% of Invested,Current Value (EUR approx.),% of Current Value,Gain/Loss (EUR),% Up/Down\n"
+        "Investment,Invested (EUR),% of Invested,Current Value (EUR approx.),% of Current Value,Gain/Loss (EUR),"
+        "% Up/Down\n"
         "EQQB,541.49,100.00,589.31,100.00,47.82,8.83\n"  # 1.47328346 shares x 400
         "Total,541.49,100.00,589.31,100.00,47.82,8.83\n"
     )
@@ -66,7 +67,8 @@ def test_cli_shows_each_holdings_share_of_the_total_current_value(tmp_path: Path
     assert code == 0
     # 1001 and 201 out of 1202 invested; 1200 and 400 out of a total current value of 1600.
     assert output.splitlines() == [
-        "Index,Invested (EUR),% of Invested,Current Value (EUR approx.),% of Current Value,Gain/Loss (EUR),% Up/Down",
+        "Investment,Invested (EUR),% of Invested,Current Value (EUR approx.),% of Current Value,Gain/Loss (EUR),"
+        "% Up/Down",
         "ABCD,1001.00,83.28,1200.00,75.00,199.00,19.88",
         "WXYZ,201.00,16.72,400.00,25.00,199.00,99.00",
         "Total,1202.00,100.00,1600.00,100.00,398.00,33.11",
@@ -91,7 +93,7 @@ def test_cli_details_add_the_columns_needed_to_check_the_numbers(tmp_path: Path)
 
     assert code == 0
     assert output.splitlines() == [
-        "Index,Invested (EUR),% of Invested,Current Value (EUR approx.),% of Current Value,Gain/Loss (EUR),"
+        "Investment,Invested (EUR),% of Invested,Current Value (EUR approx.),% of Current Value,Gain/Loss (EUR),"
         "% Up/Down,Shares,Average cost (EUR),Price used (EUR),Yahoo symbol,Price time,Realized gain (EUR),"
         "Dividends (EUR)",
         "ABCD,600.60,74.93,720.00,64.29,119.40,19.88,6,100.1000,120.0000,ABCD.DE,2026-10-09T15:35+00:00,78.60,3.21",
@@ -108,7 +110,7 @@ def test_cli_table_output_is_aligned(tmp_path: Path) -> None:
     lines = output.splitlines()
     assert code == 0
     assert lines[0].split() == [
-        "Index", "Invested", "(EUR)", "%", "of", "Invested", "Current", "Value", "(EUR", "approx.)",
+        "Investment", "Invested", "(EUR)", "%", "of", "Invested", "Current", "Value", "(EUR", "approx.)",
         "%", "of", "Current", "Value", "Gain/Loss", "(EUR)", "%", "Up/Down",
     ]  # fmt: skip
     assert lines[1].split() == ["EQQB", "541.49", "100.00", "589.31", "100.00", "47.82", "8.83"]

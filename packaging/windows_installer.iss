@@ -30,6 +30,10 @@ SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\{#AppExe}
+; Named by the app while it is open (RUNNING_MUTEX in statement_tracker/__main__.py). Setup and the
+; uninstaller then ask for it to be closed first: an app left open while it is uninstalled writes
+; its settings back after they were deleted, and one left open while it is upgraded holds old files.
+AppMutex=StatementPortfolioTracker
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

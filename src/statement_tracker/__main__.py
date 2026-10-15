@@ -16,6 +16,20 @@ from pathlib import Path  # noqa: E402
 
 from statement_tracker import APP_NAME, __version__  # noqa: E402
 
+RUNNING_MUTEX = "StatementPortfolioTracker"
+"""Named while the window is open on Windows. The installer and uninstaller look for it (AppMutex in
+packaging/windows_installer.iss) and ask for the app to be closed first: an app left open while it is
+uninstalled would write its settings back after they were deleted."""
+
+
+def mark_running() -> int | None:
+    """On Windows, create the named mutex that says the app is open. Windows removes it when the app exits."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+
+    return ctypes.windll.kernel32.CreateMutexW(None, False, RUNNING_MUTEX) or None
+
 
 def _run_gui() -> int:
     from PySide6.QtWidgets import QApplication
@@ -25,6 +39,7 @@ def _run_gui() -> int:
     from statement_tracker.ui import dialogs, theme
     from statement_tracker.ui.main_window import MainWindow
 
+    mark_running()
     app = QApplication(sys.argv[:1])
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(__version__)

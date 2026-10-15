@@ -6,13 +6,14 @@ is rewritten each run; the history sheet gets one row per date.
 
 Saving rewrites the whole file. openpyxl keeps values, formulas, styles,
 conditional formatting and charts through that, but drops pictures (without
-Pillow), shapes and text boxes, so a backup copy is made before the first write
-to an existing workbook.
+Pillow), shapes and text boxes, so before the first write of each day a dated
+copy of an existing workbook is made next to it; the newest few are kept.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from collections.abc import Mapping
 from datetime import date, datetime
@@ -37,6 +38,8 @@ TYPE_A_VALUE = (
     "the Revolut app shows: the totals follow, and the app keeps it next time."
 )
 LAST_KNOWN_COMMENT = "Last known price"
+BACKUPS_KEPT = 3
+"""Days of backup copies kept next to the spreadsheet: one copy per day it was updated."""
 ENTERED_COMMENT = "Value entered by hand"
 _EARLIER_ENTERED_COMMENT = "Price per share entered by hand"
 """What the comment said in an earlier version, still recognised when a sheet is read back."""
@@ -290,9 +293,6 @@ class ExcelExporter:
                 "Choose an Excel workbook whose name ends in .xlsx (not .xls, .xlsm or .csv).",
             )
         workbook, created = self._open()
-        first_write = not created and not (
-            self.holdings_sheet in workbook.sheetnames or self.history_sheet in workbook.sheetnames
-        )
 
         holdings = self._sheet(workbook, self.holdings_sheet, HOLDINGS_HEADER, _EARLIER_HOLDINGS_HEADERS)
         history = self._sheet(workbook, self.history_sheet, HISTORY_HEADER)
@@ -310,9 +310,9 @@ class ExcelExporter:
         _style(history, _HISTORY_FORMATS)
 
         notes: list[str] = []
-        if first_write:
-            backup = self._backup()
-            notes.append(f'A backup of the spreadsheet as it was is in "{backup.name}".')
+        backup, made_now = (None, False) if created else self._backup(today)
+        if backup is not None:
+            notes.append(f'A copy of the spreadsheet as it was before today\'s first update is in "{backup.name}".')
         if valuation.total_market_value is None:
             notes.append(
                 f'Not every current value is available, so no row was written to "{self.history_sheet}" '
@@ -334,7 +334,14 @@ class ExcelExporter:
                 f'Today\'s row in "{self.history_sheet}" leaves out what has no price ({tickers}): its totals '
                 "cover the rest only, and its Net Worth and Gain vs Deposits are unavailable."
             )
-        self._save(workbook)
+        try:
+            self._save(workbook)
+        except UserFacingError:
+            if backup is not None and made_now:
+                backup.unlink(missing_ok=True)  # the file was not changed, so the copy is not needed
+            raise
+        if made_now:
+            self._drop_old_backups()
         return ExportResult(str(self.path), created, written, history_action, tuple(notes))
 
     # -- workbook handling -------------------------------------------------------
@@ -387,11 +394,39 @@ class ExcelExporter:
             )
         return sheet
 
-    def _backup(self) -> Path:
-        backup = self.path.with_name(f"{self.path.stem}_backup_before_first_update{self.path.suffix}")
-        if not backup.exists():
+    def _backup(self, today: date) -> tuple[Path, bool]:
+        """Copy the workbook to a file next to it named after today, unless today's copy exists.
+
+        That copy is the file as it was before the day's first update; later updates that day
+        keep it. Returns the copy and whether it was made now.
+        """
+        backup = self.path.with_name(f"{self.path.stem}_backup_{today.isoformat()}{self.path.suffix}")
+        if backup.exists():
+            return backup, False
+        try:
             shutil.copy2(self.path, backup)
-        return backup
+        except PermissionError as exc:
+            raise self._locked(exc) from exc
+        except OSError as exc:
+            raise UserFacingError(
+                f'A backup copy of "{self.path.name}" could not be made next to it.',
+                "Check that the folder is not read-only and has free space, then try again. Nothing was changed.",
+                details=repr(exc),
+            ) from exc
+        return backup, True
+
+    def _drop_old_backups(self) -> None:
+        for old in self.backups()[:-BACKUPS_KEPT]:
+            try:
+                old.unlink()
+            except OSError:
+                pass  # an old copy that cannot be deleted does no harm
+
+    def backups(self) -> list[Path]:
+        """This workbook's dated backup copies, oldest first."""
+        pattern = re.compile(rf"{re.escape(self.path.stem)}_backup_\d{{4}}-\d\d-\d\d{re.escape(self.path.suffix)}")
+        found = [file for file in self.path.parent.iterdir() if pattern.fullmatch(file.name) and file.is_file()]
+        return sorted(found, key=lambda file: file.name)
 
     def _locked(self, exc: Exception) -> UserFacingError:
         return UserFacingError(

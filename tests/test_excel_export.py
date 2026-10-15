@@ -212,15 +212,66 @@ def test_existing_workbook_keeps_its_own_sheet_and_gets_a_backup(tmp_path: Path)
     before = rows(path, "investimentos")
 
     result = ExcelExporter(path).export(valuation(), DAY_ONE)
-    ExcelExporter(path).export(valuation(), DAY_TWO)
 
     assert result.created is False
     assert load_workbook(path).sheetnames == ["investimentos", "Current Holdings", "Portfolio History"]
     assert rows(path, "investimentos") == before
     assert before[1][3] == "=C2/SUM(C2:C3)"  # formulas survive as formulas
-    backup = tmp_path / "mine_backup_before_first_update.xlsx"
-    assert "mine_backup_before_first_update.xlsx" in " ".join(result.notes)
+    backup = tmp_path / "mine_backup_2026-10-12.xlsx"
+    assert backup.name in " ".join(result.notes)
     assert load_workbook(backup).sheetnames == ["investimentos"]
+
+
+def test_one_backup_is_made_per_day_before_its_first_update(tmp_path: Path) -> None:
+    path = tmp_path / "mine.xlsx"
+    ExcelExporter(path).export(valuation(), DAY_ONE)  # created: nothing to back up yet
+    assert ExcelExporter(path).backups() == []
+
+    for abcd in ("121", "122", "123"):  # e.g. "Try again" and values entered, all on one day
+        result = ExcelExporter(path).export(valuation(abcd=abcd), DAY_TWO)
+
+    backups = ExcelExporter(path).backups()
+    assert [backup.name for backup in backups] == ["mine_backup_2026-10-13.xlsx"]
+    assert backups[0].name in " ".join(result.notes)
+    # The day's copy is the file as it was before that day's first update, not before the last one.
+    assert rows(backups[0], "Current Holdings")[1][3] == 1200
+
+
+def test_backups_of_the_newest_three_days_are_kept(tmp_path: Path) -> None:
+    path = tmp_path / "mine.xlsx"
+    legacy = tmp_path / "mine_backup_before_first_update.xlsx"  # made by earlier versions: never deleted
+    legacy.write_bytes(b"kept")
+    other = tmp_path / "other_backup_2020-01-01.xlsx"  # another workbook's copy
+    other.write_bytes(b"kept")
+    _users_workbook(path)
+
+    days = [date(2026, 9, 28), date(2026, 9, 30), date(2026, 10, 1), date(2026, 10, 9), date(2026, 10, 15)]
+    for day in days:
+        ExcelExporter(path).export(valuation(), day)
+
+    names = [backup.name for backup in ExcelExporter(path).backups()]
+    assert names == ["mine_backup_2026-10-01.xlsx", "mine_backup_2026-10-09.xlsx", "mine_backup_2026-10-15.xlsx"]
+    assert legacy.exists() and other.exists()
+    assert sorted(file.name for file in tmp_path.iterdir()) == sorted([path.name, legacy.name, other.name, *names])
+
+
+def test_a_failed_save_leaves_no_new_backup_and_deletes_no_old_one(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "mine.xlsx"
+    _users_workbook(path)
+    for day in (date(2026, 10, 1), date(2026, 10, 2), date(2026, 10, 3)):
+        ExcelExporter(path).export(valuation(), day)
+    kept = ExcelExporter(path).backups()
+
+    def locked(*_args: object) -> None:
+        raise PermissionError("in use")
+
+    monkeypatch.setattr("statement_tracker.core.exporters.excel.os.replace", locked)
+    with pytest.raises(UserFacingError, match="open in another program"):
+        ExcelExporter(path).export(valuation(), date(2026, 10, 4))
+    with pytest.raises(UserFacingError, match="open in another program"):
+        ExcelExporter(path).export(valuation(), date(2026, 10, 3))  # today's copy exists: it stays
+
+    assert ExcelExporter(path).backups() == kept
 
 
 def test_a_sheet_with_our_name_that_is_not_ours_is_never_overwritten(tmp_path: Path) -> None:
@@ -476,3 +527,4 @@ def test_cli_without_a_chosen_spreadsheet_only_prints_and_says_how_to_choose_one
     assert "no spreadsheet was updated" in errors
     assert "--spreadsheet FILE.xlsx" in errors
     assert [item.name for item in tmp_path.glob("*.xlsx")] == []
+

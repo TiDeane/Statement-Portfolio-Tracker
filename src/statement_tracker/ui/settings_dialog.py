@@ -1,4 +1,4 @@
-"""The settings window: the investments the app remembers, and how it matches them.
+"""The settings window: the investments the app remembers, how it matches them, and spreadsheet backups.
 
 Every change is saved at once. The only thing changed inside the table is the
 name, typed into its cell; everything else is read-only and changed with buttons.
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
@@ -33,6 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from statement_tracker.core.errors import UserFacingError
+from statement_tracker.core.exporters.excel import MAX_BACKUPS_KEPT
 from statement_tracker.price_cache import PriceCache
 from statement_tracker.settings import Settings
 from statement_tracker.ui import dialogs, theme
@@ -45,6 +47,11 @@ ASK_AGAIN_STATUS = "Asks you on the next run"
 ENTERED_PRICE_STATUS = "value entered by you"
 ALWAYS_FIRST_SETTING = "When the app cannot tell which listing an investment is, use the first one without asking"
 NOTHING_REMEMBERED = "No investments are remembered yet. They appear here after your first run."
+BACKUPS_HELP = (
+    "The first time each day that the app changes your spreadsheet, it first saves a copy of it as it was, "
+    'in the same folder, named with the date (for example "My investments_backup_2026-10-15.xlsx"). '
+    "Older copies are deleted. When set to 0, no copies are made, and copies made earlier are left as they are."
+)
 
 
 class InvestmentsTable(QTableWidget):
@@ -170,11 +177,29 @@ class SettingsDialog(QDialog):
         investments_layout.addWidget(self.always_first)
         investments_layout.addWidget(self.message_label)
 
+        self.backups = QSpinBox()
+        self.backups.setRange(0, MAX_BACKUPS_KEPT)
+        self.backups.setValue(settings.backups_kept)
+        self.backups.valueChanged.connect(self._backups_changed)
+        backups_label = QLabel("&Days of backup copies to keep:")
+        backups_label.setBuddy(self.backups)
+        backups_row = QHBoxLayout()
+        backups_row.addWidget(backups_label)
+        backups_row.addWidget(self.backups)
+        backups_row.addStretch(1)
+        backups_help = QLabel(BACKUPS_HELP)
+        backups_help.setWordWrap(True)
+        backups_box = QGroupBox("Spreadsheet backups")
+        backups_layout = QVBoxLayout(backups_box)
+        backups_layout.addLayout(backups_row)
+        backups_layout.addWidget(backups_help)
+
         close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         close.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
         layout.addWidget(investments_box, stretch=1)
+        layout.addWidget(backups_box)
         layout.addWidget(close)
         self._refresh()
 
@@ -274,6 +299,21 @@ class SettingsDialog(QDialog):
     def _always_first_toggled(self, checked: bool) -> None:
         self._settings.always_use_first_listing = checked
         self._save()
+
+    def _backups_changed(self, days: int) -> None:
+        # Saved without marking the result as changed: the next update of the spreadsheet uses it.
+        self._settings.backups_kept = days
+        try:
+            self._settings.save()
+        except OSError as exc:
+            dialogs.show_error(
+                self,
+                UserFacingError(
+                    "The change could not be saved.",
+                    "Check that there is free disk space, then try again.",
+                    details=repr(exc),
+                ),
+            )
 
     def rename_selected(self) -> None:
         """Start typing a new name in the selected investment's name cell, as a double click does."""

@@ -91,7 +91,7 @@ def update_spreadsheet(report: Report, settings: Settings, path: Path, today: da
         name = settings.index_name(holding.position.ticker)
         if name:
             names[holding.position.ticker] = name
-    exporter = ExcelExporter(path, settings.holdings_sheet, settings.history_sheet, names)
+    exporter = ExcelExporter(path, settings.holdings_sheet, settings.history_sheet, names, settings.backups_kept)
     result = exporter.export(report.valuation, today)
     # What was written, to tell values typed there later from the app's own (see values_typed_in).
     cache = PriceCache.beside(settings.path)

@@ -81,6 +81,8 @@ def stylesheet(colours: Palette) -> str:
     QLabel#badge[state="todo"] {{ color: {c.text}; }}
     QLabel#badge[state="optional"] {{ color: {c.muted}; }}
     QLabel#badge[state="ok"] {{ color: {c.good}; }}
+    QLabel#backup[state="on"] {{ color: {c.muted}; }}
+    QLabel#backup[state="off"] {{ color: {c.bad}; }}
     QLabel#status {{ font-weight: 600; }}
     QLabel#status[state="busy"] {{ color: {c.accent}; }}
     QLabel#status[state="ok"] {{ color: {c.good}; }}

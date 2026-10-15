@@ -106,6 +106,18 @@ PICK_SPREADSHEET = "Choose an Excel file you already have, or let the app create
 Outcome = tuple[Report, ExportResult | None, UserFacingError | None]
 
 
+def backup_text(spreadsheet: Path | None, days: int) -> str:
+    """What step 2 says about backup copies of ``spreadsheet``; empty when there is nothing to say."""
+    if spreadsheet is None:
+        return ""
+    if days == 0:
+        return "No backup copy will be made before it is changed: backups are turned off in Settings."
+    if not spreadsheet.exists():
+        return ""  # a new file has nothing to back up yet
+    kept = "the last day's copy is kept" if days == 1 else f"copies from the last {days} days are kept"
+    return f"Before it is changed, a backup copy of it is saved in the same folder: one a day, and {kept}."
+
+
 def default_start_folder() -> Path:
     """Return the folder file dialogs open in before the user has picked anything.
 
@@ -276,6 +288,11 @@ class MainWindow(QMainWindow):
         spreadsheet_details = QVBoxLayout(self.spreadsheet_details)
         spreadsheet_details.setContentsMargins(26, 0, 0, 0)
         spreadsheet_details.addWidget(self.spreadsheet_label)
+        self.backup_label = QLabel()
+        self.backup_label.setObjectName("backup")
+        self.backup_label.setWordWrap(True)
+        self.backup_label.setToolTip("Change this in Settings.")
+        spreadsheet_details.addWidget(self.backup_label)
         spreadsheet_details.addLayout(spreadsheet_buttons)
         spreadsheet_box = QGroupBox("Step 2 (optional): your Excel spreadsheet")
         self.spreadsheet_badge = QLabel()
@@ -587,6 +604,9 @@ class MainWindow(QMainWindow):
                 _file_text(self._spreadsheet, "It does not exist yet and will be created.")
             )
         self.spreadsheet_label.setToolTip(str(self._spreadsheet) if self._spreadsheet else "")
+        self.backup_label.setText(backup_text(self._spreadsheet, self._settings.backups_kept))
+        self.backup_label.setVisible(bool(self.backup_label.text()))
+        theme.set_state(self.backup_label, "off" if self._settings.backups_kept == 0 else "on")
         self.go_button.setText(
             "Step 3: show my investments and update my spreadsheet"
             if self._spreadsheet
@@ -612,6 +632,7 @@ class MainWindow(QMainWindow):
             changed = dialog.changed
         finally:
             dialog.deleteLater()  # a new one is made each time; this one must not linger as a child of the window
+        self._refresh()  # step 2 says whether backups are made
         if changed and self._report is not None and not self._busy():
             report = with_entered_prices(self._report, {}, self._settings, now=self._now(), remember_listings=False)
             self._show_changed(report)

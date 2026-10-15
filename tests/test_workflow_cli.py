@@ -876,3 +876,13 @@ def test_damaged_settings_file_is_explained(tmp_path: Path) -> None:
         Settings.load(settings_path)
 
     assert "saved settings could not be read" in str(error.value)
+
+
+def test_the_days_of_backups_kept_are_saved_and_kept_in_range(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    assert Settings.load(path).backups_kept == 3
+    for saved, loaded in ((0, 0), (7, 7), (-2, 0), (500, 99)):
+        settings = Settings(path)
+        settings.backups_kept = saved
+        settings.save()
+        assert Settings.load(path).backups_kept == loaded

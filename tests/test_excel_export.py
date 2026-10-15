@@ -528,3 +528,19 @@ def test_cli_without_a_chosen_spreadsheet_only_prints_and_says_how_to_choose_one
     assert "--spreadsheet FILE.xlsx" in errors
     assert [item.name for item in tmp_path.glob("*.xlsx")] == []
 
+
+def test_the_days_of_backups_kept_can_be_chosen_and_none_turns_them_off(tmp_path: Path) -> None:
+    path = tmp_path / "mine.xlsx"
+    _users_workbook(path)
+    for day in (date(2026, 10, 1), date(2026, 10, 2), date(2026, 10, 3)):
+        ExcelExporter(path, backups_kept=5).export(valuation(), day)
+    assert len(ExcelExporter(path).backups()) == 3
+
+    result = ExcelExporter(path, backups_kept=0).export(valuation(), date(2026, 10, 4))
+
+    # No copy is made, none is mentioned, and the copies made earlier stay.
+    assert len(ExcelExporter(path).backups()) == 3
+    assert "backup" not in " ".join(result.notes).lower() and "copy" not in " ".join(result.notes).lower()
+
+    ExcelExporter(path, backups_kept=1).export(valuation(), date(2026, 10, 5))
+    assert [backup.name for backup in ExcelExporter(path).backups()] == ["mine_backup_2026-10-05.xlsx"]

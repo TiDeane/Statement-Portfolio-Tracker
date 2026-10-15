@@ -11,7 +11,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from statement_tracker.core.errors import UserFacingError
-from statement_tracker.core.exporters.excel import DEFAULT_HISTORY_SHEET, DEFAULT_HOLDINGS_SHEET
+from statement_tracker.core.exporters.excel import (
+    BACKUPS_KEPT,
+    DEFAULT_HISTORY_SHEET,
+    DEFAULT_HOLDINGS_SHEET,
+    MAX_BACKUPS_KEPT,
+)
 from statement_tracker.core.ticker_resolver import DEFAULT_SUFFIXES
 
 APP_FOLDER = "StatementPortfolioTracker"
@@ -54,6 +59,8 @@ class Settings:
         self.spreadsheet_path: Path | None = None
         self.holdings_sheet: str = DEFAULT_HOLDINGS_SHEET
         self.history_sheet: str = DEFAULT_HISTORY_SHEET
+        self.backups_kept: int = BACKUPS_KEPT
+        """Days of backup copies kept next to the spreadsheet; 0 turns backups off. Set by the user."""
 
     @classmethod
     def load(cls, path: Path | None = None) -> Settings:
@@ -76,6 +83,7 @@ class Settings:
             settings.spreadsheet_path = Path(spreadsheet) if spreadsheet else None
             settings.holdings_sheet = str(raw.get("holdings_sheet", DEFAULT_HOLDINGS_SHEET))
             settings.history_sheet = str(raw.get("history_sheet", DEFAULT_HISTORY_SHEET))
+            settings.backups_kept = min(max(int(raw.get("backups_kept", BACKUPS_KEPT)), 0), MAX_BACKUPS_KEPT)
         except (OSError, ValueError, TypeError, AttributeError) as exc:
             raise UserFacingError(
                 "The app's saved settings could not be read.",
@@ -96,6 +104,7 @@ class Settings:
             "spreadsheet_path": str(self.spreadsheet_path) if self.spreadsheet_path else None,
             "holdings_sheet": self.holdings_sheet,
             "history_sheet": self.history_sheet,
+            "backups_kept": self.backups_kept,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(".tmp")

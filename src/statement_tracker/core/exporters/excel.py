@@ -39,7 +39,9 @@ TYPE_A_VALUE = (
 )
 LAST_KNOWN_COMMENT = "Last known price"
 BACKUPS_KEPT = 3
-"""Days of backup copies kept next to the spreadsheet: one copy per day it was updated."""
+"""Days of backup copies kept next to the spreadsheet unless the user chooses otherwise: one copy per
+day it was updated."""
+MAX_BACKUPS_KEPT = 99
 ENTERED_COMMENT = "Value entered by hand"
 _EARLIER_ENTERED_COMMENT = "Price per share entered by hand"
 """What the comment said in an earlier version, still recognised when a sheet is read back."""
@@ -278,8 +280,11 @@ class ExcelExporter:
         holdings_sheet: str = DEFAULT_HOLDINGS_SHEET,
         history_sheet: str = DEFAULT_HISTORY_SHEET,
         index_names: Mapping[str, str] | None = None,
+        backups_kept: int = BACKUPS_KEPT,
     ) -> None:
         self.path = path
+        self.backups_kept = max(0, backups_kept)
+        """Days of backup copies to keep. 0 makes no copy, and leaves copies made earlier alone."""
         self.index_names = dict(index_names or {})
         """Names to show next to tickers in the Investment column, e.g. "(ABCD) World fund"."""
         self.holdings_sheet = holdings_sheet
@@ -310,7 +315,7 @@ class ExcelExporter:
         _style(history, _HISTORY_FORMATS)
 
         notes: list[str] = []
-        backup, made_now = (None, False) if created else self._backup(today)
+        backup, made_now = (None, False) if created or not self.backups_kept else self._backup(today)
         if backup is not None:
             notes.append(f'A copy of the spreadsheet as it was before today\'s first update is in "{backup.name}".')
         if valuation.total_market_value is None:
@@ -416,7 +421,7 @@ class ExcelExporter:
         return backup, True
 
     def _drop_old_backups(self) -> None:
-        for old in self.backups()[:-BACKUPS_KEPT]:
+        for old in self.backups()[: -self.backups_kept]:
             try:
                 old.unlink()
             except OSError:

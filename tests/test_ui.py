@@ -15,7 +15,7 @@ QtWidgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
 from fakes import SAMPLE, FakeProvider, ranges_around, write_statement  # noqa: E402
 from PySide6.QtCore import QEvent, Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from openpyxl import load_workbook  # noqa: E402
+from openpyxl import Workbook, load_workbook  # noqa: E402
 
 from statement_tracker.core.calculator import buys_by_ticker  # noqa: E402
 from statement_tracker.core.errors import UserFacingError  # noqa: E402
@@ -1126,3 +1126,55 @@ def test_always_using_the_first_listing_is_remembered_and_shown_in_settings(
     assert dialog.always_first.isChecked()
     dialog.always_first.setChecked(False)
     assert not Settings.load(settings_path).always_use_first_listing
+
+
+def test_step_2_says_whether_a_backup_is_made_and_settings_change_it(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    new_file, existing = tmp_path / "new.xlsx", tmp_path / "mine.xlsx"
+    Workbook().save(existing)
+
+    window.set_spreadsheet(new_file)
+    assert not window.backup_label.isVisibleTo(window)  # nothing to back up yet
+    window.set_spreadsheet(existing)
+    assert window.backup_label.isVisibleTo(window)
+    assert "backup copy" in window.backup_label.text() and "last 3 days" in window.backup_label.text()
+    assert window.backup_label.property("state") == "on"
+
+    def no_backups(dialog: SettingsDialog) -> None:
+        assert dialog.backups.value() == 3
+        dialog.backups.setValue(0)
+        assert dialog.backups.text() == "0"
+
+    window.show_settings = no_backups
+    window.open_settings()
+
+    assert Settings.load(tmp_path / "settings.json").backups_kept == 0
+    assert "No backup copy will be made" in window.backup_label.text()
+    assert window.backup_label.property("state") == "off"  # shown in red
+    window.set_spreadsheet(new_file)
+    assert window.backup_label.isVisibleTo(window) and window.backup_label.property("state") == "off"
+
+    def one_day(dialog: SettingsDialog) -> None:
+        dialog.backups.setValue(1)
+
+    window.show_settings = one_day
+    window.open_settings()
+    window.set_spreadsheet(existing)
+    assert "the last day's copy is kept" in window.backup_label.text()
+
+
+def test_with_backups_turned_off_no_copy_is_made(app, tmp_path: Path) -> None:
+    settings = Settings.load(tmp_path / "settings.json")
+    settings.backups_kept = 0
+    settings.save()
+    window, errors = make_window(tmp_path, provider_with("EQQB.DE"))
+    spreadsheet = tmp_path / "mine.xlsx"
+    Workbook().save(spreadsheet)
+    window.set_statement(SAMPLE)
+    window.set_spreadsheet(spreadsheet)
+
+    run(app, window)
+
+    assert errors == []
+    assert "Your spreadsheet was updated" in window.status_label.text()
+    assert sorted(file.name for file in tmp_path.glob("*.xlsx")) == ["mine.xlsx"]

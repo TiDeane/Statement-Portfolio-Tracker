@@ -11,6 +11,7 @@ which tests replace.
 
 from __future__ import annotations
 
+import http.client
 import json
 import socket
 import ssl
@@ -35,6 +36,8 @@ from statement_tracker.core.market_data.provider import (
 CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 TIMEOUT_SECONDS = 15
+CONNECT_SECONDS = 5
+"""Longest wait for one address to accept a connection, before the next one is tried."""
 HEADERS = {
     # Yahoo turns away requests that do not look like they come from a browser.
     "User-Agent": (
@@ -67,11 +70,62 @@ def _context() -> ssl.SSLContext:
     return _ssl_context
 
 
+def connect_preferring_ipv4(
+    address: tuple[str, int], timeout: object = None, source_address: object = None, **_: object
+) -> socket.socket:
+    """Open a connection to ``address``, trying its IPv4 addresses before its IPv6 ones.
+
+    Python tries addresses in the order the system gives, IPv6 first on Windows. Where IPv6
+    is offered but its traffic stops getting through (seen on Windows, while the same
+    connection worked over IPv4), every request then waited a whole timeout per IPv6 address
+    before falling back. So IPv4 is tried first, and no address gets more than
+    CONNECT_SECONDS to answer; IPv6 stays the fallback, for a network that only has IPv6.
+    Once connected, ``timeout`` applies to waiting for the answer, as usual.
+    """
+    host, port = address
+    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    infos.sort(key=lambda info: info[0] != socket.AF_INET)  # IPv4 first, the system's order kept otherwise
+    read_timeout = timeout if isinstance(timeout, (int, float)) else None
+    connect_timeout = min(CONNECT_SECONDS, read_timeout) if read_timeout is not None else CONNECT_SECONDS
+    last_error: OSError = OSError(f"No address found for {host}.")
+    for family, kind, protocol, _, socket_address in infos:
+        connection = socket.socket(family, kind, protocol)
+        try:
+            connection.settimeout(connect_timeout)
+            connection.connect(socket_address)
+        except OSError as error:
+            connection.close()
+            last_error = error
+            continue
+        connection.settimeout(read_timeout)
+        return connection
+    raise last_error
+
+
+class _HTTPSConnection(http.client.HTTPSConnection):
+    """Python's HTTPS connection, connecting with ``connect_preferring_ipv4``."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._create_connection = connect_preferring_ipv4
+
+
+class _HTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req: urllib.request.Request) -> http.client.HTTPResponse:
+        return self.do_open(_HTTPSConnection, req, context=self._context)  # type: ignore[attr-defined]
+
+
+_opener: urllib.request.OpenerDirector | None = None
+
+
 def urllib_transport(url: str, params: Mapping[str, str]) -> tuple[int, bytes]:
     """Fetch with Python's own HTTP client. HTTP errors are returned, not raised."""
+    global _opener
+    if _opener is None:
+        _opener = urllib.request.build_opener(_HTTPSHandler(context=_context()))
     request = urllib.request.Request(f"{url}?{urllib.parse.urlencode(params)}", headers=HEADERS)
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS, context=_context()) as response:
+        with _opener.open(request, timeout=TIMEOUT_SECONDS) as response:
             return response.status, response.read()
     except urllib.error.HTTPError as error:
         return error.code, error.read()

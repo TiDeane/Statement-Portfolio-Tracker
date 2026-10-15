@@ -175,3 +175,68 @@ def test_search_failures_say_it_was_the_search() -> None:
 def test_certificates_include_certifis_bundle() -> None:
     assert isinstance(yahoo_provider._context(), ssl.SSLContext)
     assert yahoo_provider._context() is yahoo_provider._context()  # built once
+
+
+class FakeSocket:
+    """Records how a connection is attempted; refuses addresses listed in ``down``."""
+
+    attempts: list[tuple[str, float | None]] = []
+    down: set[str] = set()
+
+    def __init__(self, family, kind, protocol) -> None:  # noqa: ANN001
+        self.timeout: float | None = None
+        self.closed = False
+
+    def settimeout(self, timeout: float | None) -> None:
+        self.timeout = timeout
+
+    def connect(self, address: tuple) -> None:
+        FakeSocket.attempts.append((address[0], self.timeout))
+        if address[0] in FakeSocket.down:
+            raise TimeoutError("timed out")
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@pytest.fixture
+def two_families(monkeypatch: pytest.MonkeyPatch) -> type[FakeSocket]:
+    """Yahoo's addresses as Windows gives them, IPv6 first; connections faked."""
+    import socket
+
+    infos = [
+        (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2a00::1", 443, 0, 0)),
+        (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2a00::2", 443, 0, 0)),
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("188.0.0.1", 443)),
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("188.0.0.2", 443)),
+    ]
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: list(infos))
+    monkeypatch.setattr(socket, "socket", FakeSocket)
+    FakeSocket.attempts, FakeSocket.down = [], set()
+    return FakeSocket
+
+
+def test_ipv4_is_tried_first_so_a_broken_ipv6_costs_nothing(two_families: type[FakeSocket]) -> None:
+    connection = yahoo_provider.connect_preferring_ipv4(("query1.finance.yahoo.com", 443), 15)
+
+    # The first IPv4 address answers: IPv6 is not even tried.
+    assert two_families.attempts == [("188.0.0.1", yahoo_provider.CONNECT_SECONDS)]
+    assert connection.timeout == 15  # once connected, the usual wait for the answer
+
+
+def test_each_address_gets_a_short_wait_and_ipv6_is_the_fallback(two_families: type[FakeSocket]) -> None:
+    two_families.down = {"188.0.0.1", "188.0.0.2"}  # a network where IPv4 does not get through
+
+    connection = yahoo_provider.connect_preferring_ipv4(("query1.finance.yahoo.com", 443), 15)
+
+    assert [address for address, _ in two_families.attempts] == ["188.0.0.1", "188.0.0.2", "2a00::1"]
+    assert {timeout for _, timeout in two_families.attempts} == {yahoo_provider.CONNECT_SECONDS}
+    assert connection.timeout == 15
+
+
+def test_no_address_answering_is_an_error_saying_so(two_families: type[FakeSocket]) -> None:
+    two_families.down = {"188.0.0.1", "188.0.0.2", "2a00::1", "2a00::2"}
+
+    with pytest.raises(OSError):
+        yahoo_provider.connect_preferring_ipv4(("query1.finance.yahoo.com", 443), 15)
+    assert len(two_families.attempts) == 4

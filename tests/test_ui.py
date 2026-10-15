@@ -25,9 +25,9 @@ from statement_tracker.ui import theme  # noqa: E402
 from statement_tracker.core.models import MarketPrice  # noqa: E402
 from statement_tracker.ui.dialogs import (  # noqa: E402
     ChooseListingDialog,
-    EnterPriceDialog,
-    PriceChoice,
-    parse_price,
+    EnterValueDialog,
+    ValueChoice,
+    parse_amount,
 )
 from statement_tracker.ui.settings_dialog import ASK_AGAIN_STATUS, ENTERED_PRICE_STATUS, SettingsDialog  # noqa: E402
 from statement_tracker.ui.main_window import (  # noqa: E402
@@ -519,7 +519,7 @@ def test_an_investment_is_renamed_by_typing_in_its_cell(app, tmp_path: Path) -> 
     window.set_spreadsheet(spreadsheet)
     run(app, window)
     asked = []
-    window.ask_price = lambda *question: asked.append(question)
+    window.ask_value = lambda *question: asked.append(question)
     table = window.table
     assert table.item(0, 0).text() == "(EQQB) Nasdaq fund"
     editable = Qt.ItemFlag.ItemIsEditable
@@ -645,7 +645,7 @@ def test_prices_line_appears_only_when_a_price_is_missing(app, tmp_path: Path) -
     run(app, window)
     assert window.price_bar.isHidden()
     asked = []
-    window.ask_price = lambda *question: asked.append(question)
+    window.ask_value = lambda *question: asked.append(question)
     window.table.cellDoubleClicked.emit(0, 3)
     settle(app)
     assert asked == []  # a current price from Yahoo: nothing to enter
@@ -658,14 +658,14 @@ def test_prices_line_appears_only_when_a_price_is_missing(app, tmp_path: Path) -
     assert not offline.price_bar.isHidden()
     worth = offline.table.item(0, 3)
     assert worth.text() == "unavailable"
-    assert "Double-click to enter a price" in worth.toolTip()
+    assert "Double-click to enter its value" in worth.toolTip()
     # In red, as in the spreadsheet: missing, and a price can be entered there. Only that cell.
     assert worth.background().color().name().upper() == theme.current().missing.upper()
     assert offline.table.item(0, 1).background().style() == Qt.BrushStyle.NoBrush
     assert offline.table.item(1, 3).background().style() == Qt.BrushStyle.NoBrush  # nor the Total
 
 
-def test_entered_price_fills_in_the_table_and_the_spreadsheet(app, tmp_path: Path) -> None:
+def test_entered_value_fills_in_the_table_and_the_spreadsheet_as_typed(app, tmp_path: Path) -> None:
     window, errors = make_window(tmp_path, FakeProvider(offline=True))
     window._now = lambda: datetime(TODAY.year, TODAY.month, TODAY.day, 12).astimezone()
     spreadsheet = tmp_path / "mine.xlsx"
@@ -675,26 +675,31 @@ def test_entered_price_fills_in_the_table_and_the_spreadsheet(app, tmp_path: Pat
     asked = []
 
     def answer(choices, selected, currency):
-        asked.append(([choice.label for choice in choices], selected, currency))
-        return "EQQB", Decimal("400")
+        asked.append(([(choice.label, choice.shares) for choice in choices], selected, currency))
+        return "EQQB", Decimal("600")  # what all 1.47 shares are worth, not one share's price
 
-    window.ask_price = answer
+    window.ask_value = answer
     window.table.cellDoubleClicked.emit(1, 3)  # the Total row: nothing to enter there
     settle(app)
     assert asked == []
     window.table.cellDoubleClicked.emit(0, 3)
     settle(app)
 
-    assert asked == [(["EQQB"], "EQQB", "EUR")]
+    assert asked == [([("EQQB", Decimal("1.47328346"))], "EQQB", "EUR")]
     assert errors == []
     worth, total = window.table.item(0, 3), window.table.item(1, 3)
-    assert worth.text().endswith(f" {ENTERED_MARK}") and "Price you entered on" in worth.toolTip()
+    assert worth.text().startswith(("600.00", "600,00"))  # the number typed is the number shown
+    assert worth.text().endswith(f" {ENTERED_MARK}") and "Value you entered on" in worth.toolTip()
     assert total.text().endswith(f" {ENTERED_MARK}") and "entered yourself" in total.toolTip()
-    assert not window.price_bar.isHidden()  # the price can still be changed, or fetched again
+    assert not window.price_bar.isHidden()  # the value can still be changed, or fetched again
     sheet = load_workbook(spreadsheet)["Current Holdings"]
-    assert sheet["D2"].value == pytest.approx(589.313384)
+    assert sheet["D2"].value == pytest.approx(600)
     history = load_workbook(spreadsheet)["Portfolio History"]
     assert history.max_row == 2  # typed in today, so today's row is written
+
+    window.ask_value = lambda choices, selected, currency: ("EQQB", Decimal("123"))  # changed again
+    window.enter_value(0)
+    assert window.table.item(0, 3).text().startswith(("123.00", "123,00"))
 
 
 def test_investments_without_a_price_are_left_out_of_the_totals(app, tmp_path: Path) -> None:
@@ -721,22 +726,25 @@ def test_investments_without_a_price_are_left_out_of_the_totals(app, tmp_path: P
     assert total[1] == eqqb[1] and total[3] == eqqb[3]
 
 
-def test_enter_price_dialog_starts_from_the_price_known_and_returns_the_one_typed(app) -> None:
+def test_enter_value_dialog_starts_from_the_value_known_and_returns_the_one_typed(app) -> None:
     last_known = MarketPrice(
-        Decimal("498.1"), "BBBB.DE", "EUR", as_of=datetime(2026, 10, 3, 17, 30, tzinfo=UTC), last_known=True
+        Decimal("100"), "BBBB.DE", "EUR", as_of=datetime(2026, 10, 3, 17, 30, tzinfo=UTC), last_known=True
     )
-    choices = [PriceChoice("AAAA", "(AAAA) First fund", None), PriceChoice("BBBB", "(BBBB) Second fund", last_known)]
-    dialog = EnterPriceDialog(choices, "BBBB", "EUR")
+    choices = [
+        ValueChoice("AAAA", "(AAAA) First fund", Decimal("3"), None),
+        ValueChoice("BBBB", "(BBBB) Second fund", Decimal("2.5"), last_known),
+    ]
+    dialog = EnterValueDialog(choices, "BBBB", "EUR")
 
     assert dialog.investment.isVisibleTo(dialog) and dialog.investment.currentData() == "BBBB"
-    assert parse_price(dialog.price.text()) == Decimal("498.1")
+    assert parse_amount(dialog.value.text()) == Decimal("250")  # 2.5 shares at 100: the whole value
     assert dialog.use_button.isEnabled()
 
     dialog.investment.setCurrentIndex(0)
-    assert dialog.price.text() == "" and not dialog.use_button.isEnabled()
-    dialog.price.setText("abc")
+    assert dialog.value.text() == "" and not dialog.use_button.isEnabled()
+    dialog.value.setText("abc")
     assert not dialog.use_button.isEnabled() and dialog.entered() is None
-    dialog.price.setText("512,34")
+    dialog.value.setText("512,34")
     assert dialog.use_button.isEnabled()
     assert dialog.entered() == ("AAAA", Decimal("512.34"))
 
@@ -755,8 +763,8 @@ def test_investments_without_a_price_are_named_as_a_sentence() -> None:
         ("abc", None), ("1.2.3", None), ("12 EUR", None), ("NaN", None),
     ],
 )  # fmt: skip
-def test_typed_prices_are_read_with_a_comma_or_a_full_stop(text: str, price: str | None) -> None:
-    assert parse_price(text) == (Decimal(price) if price else None)
+def test_typed_amounts_are_read_with_a_comma_or_a_full_stop(text: str, price: str | None) -> None:
+    assert parse_amount(text) == (Decimal(price) if price else None)
 
 
 def test_settings_rename_choose_again_and_forget_an_investment(app, tmp_path: Path) -> None:
@@ -856,8 +864,8 @@ def test_forgetting_in_settings_shows_at_once_in_the_result(app, tmp_path: Path)
     run(app, window)
     provider.offline = True
     run(app, window)  # Yahoo unreachable: the last price fetched
-    window.ask_price = lambda choices, selected, currency: ("EQQB", Decimal("450"))
-    window.enter_price(0)
+    window.ask_value = lambda choices, selected, currency: ("EQQB", Decimal("450"))
+    window.enter_value(0)
     assert window.table.item(0, 3).text().endswith(ENTERED_MARK)
 
     def forget_everything(dialog: SettingsDialog) -> None:

@@ -376,7 +376,7 @@ def _assemble(
             if entered is not None:
                 prices[ticker] = entered
                 notes.append(
-                    f"{ticker}: no Yahoo listing is used for it, so the price you entered on {_day(entered)} is used."
+                    f"{ticker}: no Yahoo listing is used for it, so the value you entered on {_day(entered)} is used."
                 )
             else:
                 unavailable[ticker] = lookups.unmatched[ticker]
@@ -393,7 +393,7 @@ def _assemble(
             # A price typed in is newer than the last one fetched: fetching one drops it.
             if entered is not None:
                 prices[ticker] = entered
-                notes.append(f"{ticker}: {exc} The price you entered on {_day(entered)} is used instead.")
+                notes.append(f"{ticker}: {exc} The value you entered on {_day(entered)} is used instead.")
                 continue
             last_known = cache.last_known(symbol, currency) if symbol else None
             if last_known is None:
@@ -413,7 +413,7 @@ def _assemble(
             cache.forget_entered(ticker)
             if ticker in entered_now:
                 notes.append(
-                    f"{ticker}: Yahoo has a current price for {symbol}, so it is used instead of the price you entered."
+                    f"{ticker}: Yahoo has a current price for {symbol}, so it is used instead of the value you entered."
                 )
         if price.as_of is not None and now - price.as_of > STALE_PRICE_AGE:
             notes.append(

@@ -42,7 +42,7 @@ NAME_COLUMN = 1
 NAME_TIP = "Double-click a name to change it. Leave it empty to use the fund's name from Yahoo Finance."
 YAHOO_NAME_TIP = "The fund's name from Yahoo Finance. Double-click to use your own name instead."
 ASK_AGAIN_STATUS = "Asks you on the next run"
-ENTERED_PRICE_STATUS = "price entered by you"
+ENTERED_PRICE_STATUS = "value entered by you"
 ALWAYS_FIRST_SETTING = "When the app cannot tell which listing an investment is, use the first one without asking"
 NOTHING_REMEMBERED = "No investments are remembered yet. They appear here after your first run."
 
@@ -91,7 +91,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self._settings = settings
         self._prices = PriceCache.beside(settings.path)
-        """The prices typed in, which forgetting an investment removes too."""
+        """The values typed in (kept as prices per share), which forgetting an investment removes too."""
         self.changed = False
         """True once anything was changed here, so that the window shows its result again."""
         self._filling = False
@@ -325,7 +325,7 @@ class SettingsDialog(QDialog):
             return
         if not self.confirm(
             f"Forget {ticker}?\n\nThe app will match it to a listing again on the next run, asking you if it "
-            "cannot tell. The name you gave it and the price you entered for it are removed."
+            "cannot tell. The name you gave it and the value you entered for it are removed."
         ):
             return
         self._settings.forget(ticker)
@@ -339,7 +339,7 @@ class SettingsDialog(QDialog):
         count = len(self._tickers())
         if not count or not self.confirm(
             f"Forget {'your one investment' if count == 1 else f'all {count} investments'}?\n\n"
-            "Their listings, the names you gave them and the prices you entered are removed. The app matches "
+            "Their listings, the names you gave them and the values you entered are removed. The app matches "
             "them again on the next run, asking you when it cannot tell.\n\n"
             "Your spreadsheet choice and the last prices fetched from Yahoo Finance are kept."
         ):

@@ -101,11 +101,11 @@ The **Settings** button lists the investments the app remembers.
 Select an investment to:
 
 - **Choose the listing on the next run**: nothing changes right away. The next time you press the green button, the app shows you the list of listings for it again to pick from. Until then, the current one is kept.
-- **Forget** it: the app matches it again on the next run, as on the first day. The name you gave it and any price you entered for it are removed too.
+- **Forget** it: the app matches it again on the next run, as on the first day. The name you gave it and any value you entered for it are removed too.
 
 **Forget all...** does the same for every investment at once. Your spreadsheet choice and the last prices fetched from Yahoo Finance are kept.
 
-The list also shows investments you entered a price for, even if the app never matched them to a listing, so that you can forget those prices too.
+The list also shows investments you entered a value for, even if the app never matched them to a listing, so that you can forget those values too.
 
 Settings also has the switch **When the app cannot tell which listing an investment is, use the first one without asking**.
 
@@ -124,7 +124,7 @@ The last row is the total. Investments you have sold completely are not listed.
 
 **To rename an investment**, double-click its name in the table (or select it and press F2) and type the name you want. Enter saves it, Esc cancels. The name is remembered and also written to your spreadsheet, straight away. Leave it empty to go back to the fund's name from Yahoo Finance. Settings has the same option.
 
-**"unavailable"** means the app could not get a current price for that investment. Its row is shown in grey, with "not in total" in the percentage columns, and the Total and the percentages cover the other investments only. The app never guesses a value for it. Its **Worth now** cell is shown in red: you can enter a price there yourself (see below).
+**"unavailable"** means the app could not get a current price for that investment. Its row is shown in grey, with "not in total" in the percentage columns, and the Total and the percentages cover the other investments only. The app never guesses a value for it. Its **Worth now** cell is shown in red: you can enter its value there yourself (see below).
 
 **A value marked with \*** uses the last price the app fetched on an earlier day, because Yahoo Finance could not be reached this time. Point at the value to see the date of that price. The Total is marked too, since it includes that value. Try again later for up-to-date values. An investment the app has never fetched a price for is shown as unavailable instead.
 
@@ -133,9 +133,9 @@ The last row is the total. Investments you have sold completely are not listed.
 When Yahoo Finance has no current price for an investment, a line appears under the table with two buttons:
 
 - **Try again** fetches the prices again, as the green button does.
-- **Enter a price...** lets you type in the price of one share yourself, for example the one shown in the Revolut app. You can also double-click the investment's row in the table, anywhere but its name, which double-clicking renames. The app adds everything up again straight away and updates your spreadsheet, without fetching anything.
+- **Enter its value...** lets you type in what the investment is worth now yourself, all your shares together, as the Revolut app shows it. The number you type is the number shown in **Worth now**. You can also double-click the investment's row in the table, anywhere but its name, which double-clicking renames. The app adds everything up again straight away and updates your spreadsheet, without fetching anything.
 
-A value worked out from a price you entered is marked **(your price)**, and so is the Total. The app keeps that price for the next times, so you don't have to type it again, and uses it whenever Yahoo Finance has no price for that investment. As soon as Yahoo Finance has one again, the app uses Yahoo's and forgets yours. To change a price you entered, double-click its value in **Worth now**; to remove it, use **Forget** in Settings.
+A value you entered is marked **(your value)**, and so is the Total. The app keeps it for the next times, so you don't have to type it again (if you buy or sell shares, it follows them), and uses it whenever Yahoo Finance has no price for that investment. As soon as Yahoo Finance has one again, the app uses Yahoo's and forgets yours. To change a value you entered, double-click it in **Worth now**; to remove it, use **Forget** in Settings.
 
 ## Your Excel spreadsheet
 
@@ -146,7 +146,7 @@ If you chose a spreadsheet, the app creates two sheets (or updates them if they 
 
 A value that uses the last price from an earlier day has a comment (a small red corner in Excel) saying from when. On those runs no row is written to **Portfolio History**, because that row would be dated today.
 
-A value that uses a price you entered has a comment saying so and on which day. A price you entered today counts as today's, so the day's row is written. A price you entered on an earlier day does not, and then no row is written, as above.
+A value you entered has a comment saying so and on which day. A value you entered today counts as today's, so the day's row is written. One you entered on an earlier day does not, and then no row is written, as above.
 
 An investment without a price keeps its row in **Current Holdings**, in grey, with "not in total" and a comment, and the Total covers the rest. The day's row in **Portfolio History** is still written for the rest, with Net Worth and Gain vs Deposits shown as unavailable, so the history can dip on a day an investment is left out. Entering its price yourself avoids that.
 
@@ -178,7 +178,7 @@ Everything happens on your computer. There are no accounts, and the app does not
 
 The only information that leaves your computer are the codes of your investments and dates, sent to Yahoo Finance to look up prices. Your amounts and your statement file are never sent anywhere.
 
-The app keeps its settings (your confirmed investments and where your spreadsheet is), the last price it fetched for each fund, and any prices you entered, in your user folder: on Windows under `%LOCALAPPDATA%\StatementPortfolioTracker`. Those are prices per share; none of your amounts are kept. Together they take a few kilobytes. To remove them, delete that folder.
+The app keeps its settings (your confirmed investments and where your spreadsheet is), the last price it fetched for each fund, and any values you entered, in your user folder: on Windows under `%LOCALAPPDATA%\StatementPortfolioTracker`. Those are kept as prices per share; none of the amounts in your statement are kept. Together they take a few kilobytes. To remove them, delete that folder.
 
 ## Known limitations
 

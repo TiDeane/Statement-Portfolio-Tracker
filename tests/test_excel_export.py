@@ -341,7 +341,7 @@ def test_price_entered_today_is_written_with_a_comment_and_counts_for_history(tm
     assert [row[3] for row in computed(path, "Current Holdings")[2:]] == [400, 1600]
     assert sheet["D2"].comment is None
     assert "entered by hand on 2026-10-13" in sheet["D3"].comment.text
-    assert "Includes prices entered by hand" in sheet["D4"].comment.text
+    assert "Includes values entered by hand" in sheet["D4"].comment.text
     assert result.history == "added"
     assert rows(path, "Portfolio History")[1][2] == 1600
 
@@ -355,7 +355,7 @@ def test_price_entered_on_an_earlier_day_leaves_history_alone(tmp_path: Path) ->
 
     assert result.history == "skipped"
     assert len(rows(path, "Portfolio History")) == 1
-    assert "a price you entered on an earlier day, so no row was written" in " ".join(result.notes)
+    assert "were entered by you on an earlier day, so no row was written" in " ".join(result.notes)
 
 
 def test_workbook_open_in_excel_gives_a_friendly_message(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

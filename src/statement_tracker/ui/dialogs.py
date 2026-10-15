@@ -226,8 +226,8 @@ def ask_listing(parent: QWidget | None, resolution: Resolution) -> tuple[str | N
     return None, False
 
 
-def parse_price(text: str) -> Decimal | None:
-    """Read a price typed in as people write it: 512.34, 512,34, 1,234.56 or 1.234,56.
+def parse_amount(text: str) -> Decimal | None:
+    """Read an amount typed in as people write it: 512.34, 512,34, 1,234.56 or 1.234,56.
 
     Of a comma and a full stop, the last one is the decimal point and the other separates
     thousands; either one alone is the decimal point. Returns None unless it is above zero.
@@ -247,24 +247,26 @@ def parse_price(text: str) -> Decimal | None:
 
 
 @dataclass(frozen=True)
-class PriceChoice:
-    """An investment the user may type a price in for."""
+class ValueChoice:
+    """An investment the user may type its current value in for."""
 
     ticker: str
     label: str
     """How the investment is shown, e.g. "(ABCD) World fund"."""
+    shares: Decimal
     price: MarketPrice | None
-    """The price used now (last known or typed in before), or None if there is none."""
+    """The price per share used now (last known or typed in before), or None if there is none."""
 
 
-class EnterPriceDialog(QDialog):
-    """Ask for the price of one share of an investment that Yahoo has no current price for."""
+class EnterValueDialog(QDialog):
+    """Ask what an investment that Yahoo has no current price for is worth now: the whole holding,
+    as the Revolut app shows it and as the table shows it, not the price of one share."""
 
     def __init__(
-        self, choices: Sequence[PriceChoice], selected: str, currency: str, parent: QWidget | None = None
+        self, choices: Sequence[ValueChoice], selected: str, currency: str, parent: QWidget | None = None
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Enter a price")
+        self.setWindowTitle("Enter its value")
         self.setMinimumWidth(460)
         self._choices = list(choices)
         self._currency = currency
@@ -272,8 +274,8 @@ class EnterPriceDialog(QDialog):
         layout = QVBoxLayout(self)
 
         intro = QLabel(
-            f"Type the current price of one share, in {currency}. You can find it in the Revolut app, "
-            "on the investment's page."
+            f"Type what this investment is worth now, all your shares together, in {currency}. "
+            "The Revolut app shows it on the investment's page."
         )
         intro.setWordWrap(True)
         layout.addWidget(intro)
@@ -289,27 +291,27 @@ class EnterPriceDialog(QDialog):
         layout.addWidget(self.investment)
         layout.addWidget(self._name)
 
-        self.price = QLineEdit()
-        self.price.setPlaceholderText("Price of one share, e.g. 512.34")
-        self.price.textChanged.connect(self._update_button)
-        price_row = QHBoxLayout()
-        price_row.addWidget(self.price, stretch=1)
-        price_row.addWidget(QLabel(currency))
-        layout.addLayout(price_row)
+        self.value = QLineEdit()
+        self.value.setPlaceholderText("What it is worth now, e.g. 1234.56")
+        self.value.textChanged.connect(self._update_button)
+        value_row = QHBoxLayout()
+        value_row.addWidget(self.value, stretch=1)
+        value_row.addWidget(QLabel(currency))
+        layout.addLayout(value_row)
 
         self._current = QLabel()
         self._current.setObjectName("notes")
         self._current.setWordWrap(True)
         layout.addWidget(self._current)
         kept = QLabel(
-            "The app keeps this price for the next times too, and uses it until Yahoo Finance has a price "
-            "for this investment again."
+            "The app keeps it for the next times too, following any shares you buy or sell, and uses it "
+            "until Yahoo Finance has a price for this investment again."
         )
         kept.setObjectName("notes")
         kept.setWordWrap(True)
         layout.addWidget(kept)
 
-        self.use_button = QPushButton("Use this price")
+        self.use_button = QPushButton("Use this value")
         self.use_button.setObjectName("primary")  # the coloured main action, styled in ui/theme.py
         self.use_button.setDefault(True)
         self.use_button.clicked.connect(self.accept)
@@ -324,26 +326,29 @@ class EnterPriceDialog(QDialog):
         self.investment.currentIndexChanged.connect(self._show_choice)
         self._show_choice()
 
-    def _choice(self) -> PriceChoice:
+    def _choice(self) -> ValueChoice:
         return self._choices[max(0, self.investment.currentIndex())]
 
     def _show_choice(self) -> None:
-        """Show what is known about the chosen investment's price, and start from it."""
+        """Show what is known about the chosen investment's value, and start from it."""
         choice = self._choice()
         self._name.setText(f"<b>{html.escape(choice.label)}</b>")
         price = choice.price
-        self.price.setText(self._number(price.price) if price is not None else "")
-        if price is None:
-            self._current.setText("There is no price for it at the moment.")
+        value = price.price * choice.shares if price is not None else None
+        self.value.setText(self._number(value) if value is not None else "")
+        if price is None or value is None:
+            self._current.setText("There is no value for it at the moment.")
         else:
-            shown = f"{self._number(price.price)} {self._currency}"
+            shown = f"{self._number(value)} {self._currency}"
             when = self._day(price)
             if price.entered:
                 self._current.setText(f"You entered {shown} on {when}.")
             else:
-                self._current.setText(f"The last price fetched from Yahoo Finance is {shown}, from {when}.")
-        self.price.selectAll()
-        self.price.setFocus()
+                self._current.setText(
+                    f"At the last price fetched from Yahoo Finance, from {when}, it is worth {shown}."
+                )
+        self.value.selectAll()
+        self.value.setFocus()
         self._update_button()
 
     def _day(self, price: MarketPrice) -> str:
@@ -353,25 +358,24 @@ class EnterPriceDialog(QDialog):
         return self._locale.toString(QDate(day.year, day.month, day.day), QLocale.FormatType.LongFormat)
 
     def _number(self, value: Decimal) -> str:
-        """A price as this computer writes numbers, with 2 to 4 decimals and no thousands separator."""
-        places = min(max(-value.normalize().as_tuple().exponent, 2), 4)
-        shown = self._locale.toString(float(value), "f", places)
+        """An amount as this computer writes numbers, with 2 decimals and no thousands separator."""
+        shown = self._locale.toString(float(value), "f", 2)
         return shown.replace(self._locale.groupSeparator(), "")
 
     def _update_button(self) -> None:
-        self.use_button.setEnabled(parse_price(self.price.text()) is not None)
+        self.use_button.setEnabled(parse_amount(self.value.text()) is not None)
 
     def entered(self) -> tuple[str, Decimal] | None:
-        """The chosen investment's ticker and the price typed in, or None if it is not a price."""
-        price = parse_price(self.price.text())
-        return (self._choice().ticker, price) if price is not None else None
+        """The chosen investment's ticker and the value typed in, or None if it is not an amount."""
+        value = parse_amount(self.value.text())
+        return (self._choice().ticker, value) if value is not None else None
 
 
-def ask_price(
-    parent: QWidget | None, choices: Sequence[PriceChoice], selected: str, currency: str
+def ask_value(
+    parent: QWidget | None, choices: Sequence[ValueChoice], selected: str, currency: str
 ) -> tuple[str, Decimal] | None:
-    """Open the dialog. Returns the investment's ticker and the price typed in, or None if cancelled."""
-    dialog = EnterPriceDialog(choices, selected, currency, parent)
+    """Open the dialog. Returns the investment's ticker and the value typed in, or None if cancelled."""
+    dialog = EnterValueDialog(choices, selected, currency, parent)
     try:
         if dialog.exec() == QDialog.DialogCode.Accepted:
             return dialog.entered()

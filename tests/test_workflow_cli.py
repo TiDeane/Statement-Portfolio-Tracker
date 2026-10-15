@@ -419,7 +419,7 @@ def test_entered_price_values_an_investment_yahoo_does_not_have_without_fetching
     assert entered.valuation.total_market_value == Decimal(1600)
     assert entered.valuation.uses_entered_prices
     assert not any("WXYZ: current value unavailable" in note for note in entered.notes)
-    assert any(note.startswith("WXYZ: no Yahoo listing is used for it, so the price you entered on") for note in entered.notes)
+    assert any(note.startswith("WXYZ: no Yahoo listing is used for it, so the value you entered on") for note in entered.notes)
 
     # Kept for the next run: Yahoo still has nothing for WXYZ.
     again = build_report(statement, abcd_only(), Settings.load(settings_path))
@@ -437,7 +437,7 @@ def test_entered_price_is_used_ahead_of_the_last_known_one_and_dropped_once_yaho
     price = entered.valuation.holdings[0].price
     assert price.entered and not price.last_known and price.price == Decimal("450")
     assert price.symbol == "EQQB.DE"
-    assert any("Prices could not be fetched (offline). The price you entered on" in note for note in entered.notes)
+    assert any("Prices could not be fetched (offline). The value you entered on" in note for note in entered.notes)
     assert build_report(SAMPLE, FakeProvider(offline=True), Settings.load(settings_path)).valuation.holdings[0].price.entered
 
     online = build_report(SAMPLE, sample_provider(), Settings.load(settings_path))
@@ -541,7 +541,7 @@ def test_cli_price_is_used_when_yahoo_has_none(tmp_path: Path) -> None:
     assert wxyz.startswith("WXYZ,201.00,16.72,400.00,25.00,199.00,99.00,4,50.2500,100.0000,none,")
     assert "(entered by hand)" in wxyz
     assert output.splitlines()[3].startswith("Total,1202.00,100.00,1600.00,")
-    assert "the price you entered on" in errors
+    assert "the value you entered on" in errors
 
 
 def test_cli_price_is_not_used_when_yahoo_has_one(tmp_path: Path) -> None:
@@ -551,7 +551,7 @@ def test_cli_price_is_not_used_when_yahoo_has_one(tmp_path: Path) -> None:
 
     assert code == 0
     assert output.splitlines()[1] == "EQQB,541.49,100.00,589.31,100.00,47.82,8.83"
-    assert "Yahoo has a current price for EQQB.DE, so it is used instead of the price you entered" in errors
+    assert "Yahoo has a current price for EQQB.DE, so it is used instead of the value you entered" in errors
 
 
 @pytest.mark.parametrize("price", ["abc", "0", "-5", "1,5", "NaN"])

@@ -37,7 +37,9 @@ TYPE_A_VALUE = (
     "the Revolut app shows: the totals follow, and the app keeps it next time."
 )
 LAST_KNOWN_COMMENT = "Last known price"
-ENTERED_COMMENT = "Price per share entered by hand"
+ENTERED_COMMENT = "Value entered by hand"
+_EARLIER_ENTERED_COMMENT = "Price per share entered by hand"
+"""What the comment said in an earlier version, still recognised when a sheet is read back."""
 _LEFT_OUT_COLOUR = "808080"
 _TYPE_HERE_COLOUR = "FFC7CE"
 """Light red, Excel's own "Bad" cell colour: the value is missing and can be typed in."""
@@ -227,6 +229,7 @@ MISSING, ENTERED, LAST_KNOWN = "missing", "entered", "last known"
 _COMMENT_KINDS = (
     (MISSING_COMMENT, MISSING),
     (ENTERED_COMMENT, ENTERED),
+    (_EARLIER_ENTERED_COMMENT, ENTERED),
     (LAST_KNOWN_COMMENT, LAST_KNOWN),
 )
 
@@ -322,7 +325,7 @@ class ExcelExporter:
             )
         elif not current:
             notes.append(
-                "Some values use a price you entered on an earlier day, so no row was written to "
+                "Some values were entered by you on an earlier day, so no row was written to "
                 f'"{self.history_sheet}" this time. Existing history was not changed.'
             )
         elif valuation.left_out:
@@ -507,7 +510,7 @@ class ExcelExporter:
             if valuation.uses_last_known_prices:
                 total_notes.append("Includes last known prices from an earlier day, so this total is not up to date.")
             if valuation.uses_entered_prices:
-                total_notes.append("Includes prices entered by hand.")
+                total_notes.append("Includes values entered by hand.")
             if total_notes:
                 sheet.cell(row=total, column=_VALUE_COLUMN).comment = _comment(" ".join(total_notes))
         return len(valuation.holdings), shown

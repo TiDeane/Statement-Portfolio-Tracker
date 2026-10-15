@@ -84,10 +84,10 @@ RENAME_TIP = "Double-click to change the name shown, here and in the spreadsheet
 WORTH_COLUMN = 3
 GAIN_COLUMN = 5
 LAST_KNOWN_MARK = "*"
-ENTERED_MARK = "(your price)"
+ENTERED_MARK = "(your value)"
 """Words, not a symbol: a small sign next to an amount is easily read as a plus."""
 MISSING_PRICES = "Yahoo Finance has no current price for {}."
-DOUBLE_CLICK_TO_ENTER = "Double-click to enter a price yourself."
+DOUBLE_CLICK_TO_ENTER = "Double-click to enter its value yourself."
 LEFT_OUT_TIP = f"No current price, so it is left out of the totals. {DOUBLE_CLICK_TO_ENTER}"
 WINDOW_WIDTH = 1000
 MIN_WINDOW_WIDTH = 720
@@ -199,8 +199,8 @@ class MainWindow(QMainWindow):
             self, error, can_retry=True
         )
         self.show_settings: Callable[[SettingsDialog], object] = lambda dialog: dialog.exec()
-        self.ask_price: Callable[[list[dialogs.PriceChoice], str, str], tuple[str, Decimal] | None] = (
-            lambda choices, selected, currency: dialogs.ask_price(self, choices, selected, currency)
+        self.ask_value: Callable[[list[dialogs.ValueChoice], str, str], tuple[str, Decimal] | None] = (
+            lambda choices, selected, currency: dialogs.ask_value(self, choices, selected, currency)
         )
         self._last_run: tuple[Path | None, date] = (None, today())
         self.progressed.connect(self._show_progress)
@@ -313,14 +313,14 @@ class MainWindow(QMainWindow):
         self.retry_button = QPushButton("T&ry again")
         self.retry_button.setToolTip("Fetch the prices from Yahoo Finance again.")
         self.retry_button.clicked.connect(self.start)
-        self.enter_price_button = QPushButton("&Enter a price...")
-        self.enter_price_button.setToolTip("Type in the current price of an investment yourself.")
-        self.enter_price_button.clicked.connect(lambda: self.enter_price())
+        self.enter_value_button = QPushButton("&Enter its value...")
+        self.enter_value_button.setToolTip("Type in what an investment is worth now yourself.")
+        self.enter_value_button.clicked.connect(lambda: self.enter_value())
         price_bar = QHBoxLayout(self.price_bar)
         price_bar.setContentsMargins(0, 0, 0, 0)
         price_bar.addWidget(self.price_bar_label, stretch=1)
         price_bar.addWidget(self.retry_button)
-        price_bar.addWidget(self.enter_price_button)
+        price_bar.addWidget(self.enter_value_button)
         self.price_bar.setVisible(False)
 
         self.settings_button = QPushButton("Se&ttings")
@@ -558,7 +558,7 @@ class MainWindow(QMainWindow):
         self.settings_button.setEnabled(not self._busy())  # a run reads and saves the same settings
         self.back_button.setEnabled(not self._busy())
         self.retry_button.setEnabled(self._statement is not None and not waiting_for_file and not self._busy())
-        self.enter_price_button.setEnabled(not self._busy())
+        self.enter_value_button.setEnabled(not self._busy())
 
     def open_settings(self) -> None:
         """Show the settings window. A result on show is worked out again if anything was changed there,
@@ -669,7 +669,7 @@ class MainWindow(QMainWindow):
         if column == NAME_COLUMN:
             return  # the name is being edited in its cell
         # Opened once the double-click itself is over, not from inside its handling.
-        QTimer.singleShot(0, self, lambda: self.enter_price(row))
+        QTimer.singleShot(0, self, lambda: self.enter_value(row))
 
     def rename(self, ticker: str, name: str) -> None:
         """Show ``name`` next to ``ticker`` from now on, here and in the spreadsheet. An empty name goes
@@ -685,11 +685,12 @@ class MainWindow(QMainWindow):
         if self._report is not None and not self._busy():
             self._show_changed(self._report)
 
-    def enter_price(self, row: int | None = None) -> None:
-        """Let the user type in the price of an investment Yahoo has no current price for.
+    def enter_value(self, row: int | None = None) -> None:
+        """Let the user type in what an investment Yahoo has no current price for is worth now.
 
-        ``row`` is the table row asked about, if any. The result and the spreadsheet are
-        worked out again with that price, without fetching anything.
+        ``row`` is the table row asked about, if any. The value is the whole holding's, as the
+        table shows it; it is kept as a price per share, so that it follows the shares held.
+        The result and the spreadsheet are worked out again, without fetching anything.
         """
         report = self._report
         if report is None or self._busy():
@@ -698,17 +699,21 @@ class MainWindow(QMainWindow):
         if row is not None and not (0 <= row < len(holdings) and needs_price(holdings[row])):
             return  # the Total row, or an investment with a current price
         choices = [
-            dialogs.PriceChoice(ticker, display_name(self._settings, ticker), holding.price)
+            dialogs.ValueChoice(
+                ticker, display_name(self._settings, ticker), holding.position.shares, holding.price
+            )
             for holding in holdings
             if needs_price(holding) and (ticker := holding.position.ticker)
         ]
         if not choices:
             return
         selected = holdings[row].position.ticker if row is not None else choices[0].ticker
-        answer = self.ask_price(choices, selected, report.statement.currency)
+        answer = self.ask_value(choices, selected, report.statement.currency)
         if answer is None:
             return
-        ticker, price = answer
+        ticker, value = answer
+        shares = next(choice.shares for choice in choices if choice.ticker == ticker)
+        price = value / shares
         self._show_changed(with_entered_prices(report, {ticker: price}, self._settings, now=self._now()))
 
     def _show_changed(self, report: Report) -> None:
@@ -794,7 +799,9 @@ class MainWindow(QMainWindow):
             return LAST_KNOWN_MARK, f"{tip} {DOUBLE_CLICK_TO_ENTER}"
         if price.entered:
             when = f" on {self._long_date(price.as_of.astimezone().date())}" if price.as_of else ""
-            return ENTERED_MARK, f"Price you entered{when}, used until Yahoo Finance has one. Double-click to change it."
+            return ENTERED_MARK, (
+                f"Value you entered{when}, used until Yahoo Finance has a price. Double-click to change it."
+            )
         return "", None
 
     def _set_headers(self) -> None:
@@ -858,7 +865,7 @@ class MainWindow(QMainWindow):
                     total_tips.append("Includes last known prices from an earlier day, so this total is not up to date.")
                 if valuation.uses_entered_prices:
                     total_marks.append(ENTERED_MARK)
-                    total_tips.append("Includes prices you entered yourself.")
+                    total_tips.append("Includes values you entered yourself.")
             worth_marks.append((" ".join(total_marks), " ".join(total_tips) or None))
 
         colours = theme.current()

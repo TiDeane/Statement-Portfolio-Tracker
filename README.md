@@ -23,12 +23,15 @@ The app reads the account statement CSV file you export from the Revolut app. It
   - [Try again](#try-again)
   - [Enter its value yourself](#enter-its-value-yourself)
   - [How long your value is kept](#how-long-your-value-is-kept)
-- [Settings](#settings)
 - [Your Excel spreadsheet](#your-excel-spreadsheet)
-  - [What the app writes](#what-the-app-writes)
-  - [Before you choose an existing spreadsheet](#before-you-choose-an-existing-spreadsheet)
-  - [When no history row is written](#when-no-history-row-is-written)
+  - [New or existing spreadsheet](#new-or-existing-spreadsheet)
+  - [The Current Holdings sheet](#the-current-holdings-sheet)
+  - [The Portfolio History sheet](#the-portfolio-history-sheet)
+  - [Backup copies](#backup-copies)
   - [Using Google Sheets](#using-google-sheets)
+- [Settings](#settings)
+  - [Your investments](#your-investments)
+  - [Spreadsheet backups](#spreadsheet-backups)
 - [Privacy](#privacy)
 - [Known limitations](#known-limitations)
 - [Report a problem](#report-a-problem)
@@ -112,7 +115,7 @@ Revolut may move these menus in newer versions of its app.
 ## Use the app
 
 1. **Step 1: your Revolut statement.** Click **Choose statement file...** and pick the CSV file, or drag the file onto the window.
-2. **Step 2 (optional): your Excel spreadsheet.** Choose **Don't use a spreadsheet** to only see the results in the window, or **Update my Excel spreadsheet** to also write them into Excel. With the second, two buttons appear: **Choose my spreadsheet...** to use an Excel file you already have, or **Create a new one...**. You can also drag an Excel file onto the window. The app remembers your choice for next time, and you can change it at any point. Before choosing an existing spreadsheet, read [what the app keeps in it](#before-you-choose-an-existing-spreadsheet).
+2. **Step 2 (optional): your Excel spreadsheet.** Choose **Don't use a spreadsheet** to only see the results in the window, or **Update my Excel spreadsheet** to also write them into Excel. With the second, two buttons appear: **Choose my spreadsheet...** to use an Excel file you already have, or **Create a new one...**. You can also drag an Excel file onto the window. The app remembers your choice for next time, and you can change it at any point. Before choosing an existing spreadsheet, read [New or existing spreadsheet](#new-or-existing-spreadsheet).
 3. **Step 3.** Click the green button. The window turns to a page with your investments: a progress bar first shows how far the app is while it fetches prices, which takes a few seconds, then the table appears. With many investments, scroll the table to see them all.
 
 **← Back to the steps** takes you back to choose other files. Pressed while the prices are still being fetched, it stops: nothing of that run is saved, and you can start again.
@@ -164,52 +167,77 @@ When any of these is in the table, a line under it names the investments Yahoo F
 
 **In the app:** press **Enter its value...**, or double-click the investment's row in the table, anywhere but its name (double-clicking the name renames it). Type what the investment is worth now, all your shares together, as the Revolut app shows it. The number you type is the number shown in **Worth now**. The app adds everything up again straight away and updates your spreadsheet, without fetching anything.
 
-**In the spreadsheet:** type the investment's current value over "unavailable" in its **Current Value** cell, which is shown in red, as the same cell is in the app. The row turns black and its percentages, the gain and the Total row update straight away, in Excel or Google Sheets. The next time you press the green button, the app picks up the value you typed and keeps it, as if you had entered it in the app.
+**In the spreadsheet:** type the investment's current value over "unavailable" in its red **Current Value** cell. The next time you press the green button, the app picks it up and keeps it, as if you had entered it in the app. See [The Current Holdings sheet](#the-current-holdings-sheet).
 
 ### How long your value is kept
 
 The app keeps a value you entered for the next times, so you don't have to type it again (if you buy or sell shares, it follows them), and uses it whenever Yahoo Finance has no price for that investment. As soon as Yahoo Finance has one again, the app uses Yahoo's and forgets yours. To change a value you entered, double-click it in **Worth now**; to remove it, use **Forget** in [Settings](#settings).
 
-## Settings
-
-The **Settings** button lists the investments the app remembers, including any you entered a value for even if the app never matched them to a listing. Select one to:
-
-- **Rename** it: double-click its name (or press **Rename**) and type the name to show next to its code in the table and the spreadsheet. Enter saves it, Esc cancels. Leave it empty to go back to the fund's name from Yahoo Finance, which is shown in grey.
-- **Choose the listing on the next run**: nothing changes right away. The next time you press the green button, the app shows you the list of listings for it again to pick from. Until then, the current one is kept.
-- **Forget** it: the app matches it again on the next run, as on the first day. The name you gave it and any value you entered for it are removed too.
-
-**Forget all...** does the same for every investment at once. Your spreadsheet choice and the last prices fetched from Yahoo Finance are kept.
-
-Settings also has the switch **When the app cannot tell which listing an investment is, use the first one without asking** (see [If the app asks you to confirm an investment](#if-the-app-asks-you-to-confirm-an-investment)).
-
 ## Your Excel spreadsheet
 
-### What the app writes
+If you chose a spreadsheet in step 2, each run writes your results into two sheets of it, **Current Holdings** and **Portfolio History**, creating them the first time. Close the file in Excel before you press the green button: the app cannot save a file that Excel has open, and tells you if that happens.
 
-If you chose a spreadsheet, the app creates two sheets (or updates them if they already exist), writing:
+### New or existing spreadsheet
 
-- **Current Holdings**: one row per investment and a Total row, rewritten each time.
-- **Portfolio History**: one row per day you run the app, so you can see your totals over time. Running twice on the same day updates that day's row; older rows are never changed.
+**Create a new one...** makes an Excel file with only the app's two sheets. This is the safest choice.
 
-A value that uses the last price from an earlier day has a comment (a small red corner in Excel) saying from when. A value you entered has a comment saying so and on which day. An investment without a price keeps its row in **Current Holdings**, in grey, with "not in total" and a comment, and the Total covers the rest.
+**Choose my spreadsheet...** adds the two sheets to an Excel file you already have. Your own sheets in it are not changed, but to save the file the app has to write all of it again. Values, formulas, colours, colour rules and charts in your sheets are kept. **Pictures, shapes and text boxes are not**: they disappear from the saved file. If your spreadsheet has any of those, create a new one instead. If a sheet of yours is already called "Current Holdings" or "Portfolio History", the app stops without changing anything; rename that sheet in Excel first.
 
-Your own sheets in that file are left exactly as they are. Before the app changes an existing spreadsheet for the first time, it saves a copy next to it named `<your file>_backup_before_first_update.xlsx`.
+Before changing an existing file, the app saves a [backup copy](#backup-copies) of it. Step 2 says whether it will: in grey when it will, in red when backups are turned off.
 
-### Before you choose an existing spreadsheet
+### The Current Holdings sheet
 
-The app only changes its own two sheets, but to save them it has to write the whole file again. Values, formulas, colours, colour rules and charts in your own sheets are kept. **Pictures, shapes and text boxes are not**: they disappear from the saved file. If your spreadsheet has any of those, let the app create a separate new spreadsheet instead.
+One row per investment you still hold, and a **Total** row. The whole sheet is rewritten on every run, so keep your own notes in another sheet.
 
-The backup copy mentioned above is created in case something of yours does go missing.
+| Column | Meaning |
+|---|---|
+| Investment | The fund's code in brackets and its name, for example "(ABCD) World fund". To change the name, [rename it](#renaming-an-investment). |
+| Invested | What you paid for what you still hold, fees included. |
+| % of Invested | How much of all the money you invested went into this one. |
+| Current Value | What it is worth now ("Worth now" in the app). |
+| % of Current Value | How much of all your investments this one is, by what they are worth now. |
+| % Up/Down | How much it has gone up or down since you bought it. |
+| Dividends | The dividends it has paid you. |
+| Currency | The currency of the amounts, the same as your statement's. |
 
-### When no history row is written
+The percentages and the Total row are Excel formulas worked out from **Current Value** and **Invested**, so they follow if you change a value.
 
-A row in **Portfolio History** is dated today, so it is only written when its values are today's. No row is written, and existing rows are left unchanged, when:
+Some cells say more:
+
+- **"unavailable"**, in red, in **Current Value**: the app had no current price for it. Its row is grey with "not in total", and the Total covers the other investments. You can type its value over "unavailable": the row turns black and the percentages and the Total follow at once. The next time you press the green button, the app keeps the value you typed, as if you had [entered it in the app](#enter-its-value-yourself).
+- **A comment** (a small red corner in Excel; point at it to read it) on a value that uses the last price from an earlier day says from when; on a value you entered, it says on which day. The Total has one too when it includes such a value.
+
+### The Portfolio History sheet
+
+One row per day you run the app, so you can follow your totals over time. Running again on the same day updates that day's row; rows from earlier days are never changed.
+
+| Column | Meaning |
+|---|---|
+| Date | The day of the run. |
+| Total Cost Basis | What you paid for what you still hold, in total ("Invested" in the app). |
+| Total Market Value | What it is all worth now ("Worth now" in the app). |
+| Unrealized PnL | Your gain or loss on what you still hold: market value minus cost basis. |
+| Realized PnL | Your gain or loss on what you have sold. |
+| ROI % | Unrealized PnL as a percentage of the cost basis. |
+| Net Worth | Market value plus the cash left in your Revolut investment account, worked out from the statement. |
+| Net Deposits | All the money you have put into the account. |
+| Gain vs Deposits | Net worth minus net deposits: how much you are up or down overall. |
+
+A row is dated today, so it is only written when its values are today's. No row is written, and existing rows are left unchanged, when:
 
 - a value uses the last price from an earlier day (marked \*), because Yahoo Finance could not be reached;
 - a value you entered was entered on an earlier day (one you entered today counts as today's);
 - no investment has a price at all.
 
 When only some investments have no price, the day's row is still written for the rest, with Net Worth and Gain vs Deposits shown as unavailable. The history can therefore dip on a day an investment is left out; entering its value yourself avoids that.
+
+### Backup copies
+
+The first time each day that the app changes an existing spreadsheet, it first saves a copy of it as it was, in the same folder, named with the date, for example `My investments_backup_2026-10-15.xlsx`. Later changes that day (**Try again**, values you enter) keep that copy, so it is always the file as it was before you started that day.
+
+The copies from the three most recent days you used the app are kept, and older ones are deleted. You can choose how many days, or turn backups off, in [Settings](#spreadsheet-backups).
+
+To go back, open a copy and save it under your spreadsheet's name. If something of yours went missing (a picture, for example), get it back from a copy soon: once the app has been used on as many more days as copies are kept, the last copy that still had it is deleted.
 
 ### Using Google Sheets
 
@@ -222,6 +250,24 @@ Google Sheets can open and edit Excel files kept in Google Drive, so you can use
 After each run, Drive uploads the updated file within a few moments; reload the page in your browser to see the new values. Close the file in Google Sheets before you press the green button, so that your edits and the app's don't overwrite each other.
 
 The file stays an Excel file. **File > Save as Google Sheets** makes a separate copy, which the app does not update.
+
+## Settings
+
+### Your investments
+
+The **Settings** button lists the investments the app remembers, including any you entered a value for even if the app never matched them to a listing. Select one to:
+
+- **Rename** it: double-click its name (or press **Rename**) and type the name to show next to its code in the table and the spreadsheet. Enter saves it, Esc cancels. Leave it empty to go back to the fund's name from Yahoo Finance, which is shown in grey.
+- **Choose the listing on the next run**: nothing changes right away. The next time you press the green button, the app shows you the list of listings for it again to pick from. Until then, the current one is kept.
+- **Forget** it: the app matches it again on the next run, as on the first day. The name you gave it and any value you entered for it are removed too.
+
+**Forget all...** does the same for every investment at once. Your spreadsheet choice and the last prices fetched from Yahoo Finance are kept.
+
+The switch **When the app cannot tell which listing an investment is, use the first one without asking** is explained in [If the app asks you to confirm an investment](#if-the-app-asks-you-to-confirm-an-investment).
+
+### Spreadsheet backups
+
+**Days of backup copies to keep** sets how many days of [backup copies](#backup-copies) of your spreadsheet are kept; 3 unless you change it. When set to **0**, no copies are made, and step 2 says so in red; copies made earlier are left where they are.
 
 ## Privacy
 

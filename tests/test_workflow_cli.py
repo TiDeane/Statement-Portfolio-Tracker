@@ -472,6 +472,52 @@ def test_a_value_typed_into_the_spreadsheet_is_kept_like_an_entered_price(tmp_pa
     assert output.splitlines()[2].startswith("WXYZ,201.00,16.72,408.00,")
 
 
+@pytest.mark.parametrize("entered_in", ["the app", "the spreadsheet"])
+def test_a_value_entered_for_a_listing_not_found_gives_way_once_the_listing_is_found(
+    tmp_path: Path, entered_in: str
+) -> None:
+    from statement_tracker.price_cache import PriceCache
+    from statement_tracker.workflow import update_spreadsheet
+
+    settings_path, sheet = tmp_path / "settings.json", tmp_path / "mine.xlsx"
+    statement = write_statement(tmp_path, *TWO_HOLDINGS)
+    args = (str(statement), "--symbol", "ABCD=ABCD.DE", "--spreadsheet", str(sheet))
+
+    # 1. A run in which WXYZ's listing is not found: unavailable.
+    code, output, _ = run_cli(*args, provider=abcd_only(), settings=settings_path)
+    assert output.splitlines()[2].startswith("WXYZ,201.00,not in total,unavailable,")
+
+    # 2. A value is written for it: 404 for its 4 shares.
+    if entered_in == "the app":
+        report = build_report(statement, abcd_only(), Settings.load(settings_path))
+        report = with_entered_prices(report, {"WXYZ": Decimal("101")}, Settings.load(settings_path))
+        update_spreadsheet(report, Settings.load(settings_path), sheet, date.today())  # as the window does
+    else:
+        workbook = load_workbook(sheet)
+        workbook["Current Holdings"]["D3"] = 404
+        workbook.save(sheet)
+    code, output, _ = run_cli(*args, provider=abcd_only(), settings=settings_path)
+    assert output.splitlines()[2].startswith("WXYZ,201.00,16.72,404.00,")  # used while nothing better exists
+
+    # 3. A later run in which the app finds WXYZ's listing by itself: its purchase fits the prices.
+    found = abcd_only()
+    found.add("WXYZ.DE", "EUR", price="102", ranges={date(2025, 1, 20): (Decimal("49"), Decimal("51"))})
+    code, output, errors = run_cli(*args, provider=found, settings=settings_path)
+
+    # 4. Yahoo's price replaces the value written: in the result, the spreadsheet and what is kept.
+    assert code == 0
+    assert "WXYZ was matched to WXYZ.DE" in errors
+    assert output.splitlines()[2].startswith("WXYZ,201.00,16.72,408.00,")
+    cell = load_workbook(sheet)["Current Holdings"]["D3"]
+    assert cell.value == 408 and cell.comment is None
+    assert PriceCache.beside(settings_path).entered_tickers() == set()
+
+    # Gone for good: should Yahoo fail later, the last price it gave is used, not the old value.
+    report = build_report(statement, FakeProvider(offline=True), Settings.load(settings_path))
+    wxyz = report.valuation.holdings[1]
+    assert wxyz.price.last_known and not wxyz.price.entered and wxyz.market_value == 408
+
+
 def test_values_the_app_wrote_itself_are_not_taken_for_typed_ones(tmp_path: Path) -> None:
     settings_path, sheet = tmp_path / "settings.json", tmp_path / "mine.xlsx"
     args = (str(SAMPLE), "--spreadsheet", str(sheet))

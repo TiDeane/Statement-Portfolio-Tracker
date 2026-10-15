@@ -6,6 +6,35 @@ The app reads the account statement CSV file you export from the Revolut app. It
 
 > **Unofficial.** This app is not made by, affiliated with or endorsed by Revolut. It is not financial advice. Prices are read from Yahoo Finance's public web pages, which is unofficial; they may be delayed or wrong, and Yahoo's terms apply to them. Check important numbers against your Revolut app.
 
+## Contents
+
+- [Install](#install)
+  - [Option 1: install with the `.exe` (Windows 10 and 11)](#option-1-install-with-the-exe-windows-10-and-11)
+    - [macOS](#macos)
+  - [Option 2: run from a zip of the project](#option-2-run-from-a-zip-of-the-project)
+- [Get your statement from Revolut](#get-your-statement-from-revolut)
+- [Use the app](#use-the-app)
+  - [If the app asks you to confirm an investment](#if-the-app-asks-you-to-confirm-an-investment)
+- [Read the result](#read-the-result)
+  - [The columns](#the-columns)
+  - [Renaming an investment](#renaming-an-investment)
+- [When a price is missing](#when-a-price-is-missing)
+  - [What you see](#what-you-see)
+  - [Try again](#try-again)
+  - [Enter its value yourself](#enter-its-value-yourself)
+  - [How long your value is kept](#how-long-your-value-is-kept)
+- [Settings](#settings)
+- [Your Excel spreadsheet](#your-excel-spreadsheet)
+  - [What the app writes](#what-the-app-writes)
+  - [Before you choose an existing spreadsheet](#before-you-choose-an-existing-spreadsheet)
+  - [When no history row is written](#when-no-history-row-is-written)
+  - [Using Google Sheets](#using-google-sheets)
+- [Privacy](#privacy)
+- [Known limitations](#known-limitations)
+- [Report a problem](#report-a-problem)
+- [For developers](#for-developers)
+- [Licence](#licence)
+
 ## Install
 
 There are two ways to get the app. Most people want the first.
@@ -83,37 +112,24 @@ Revolut may move these menus in newer versions of its app.
 ## Use the app
 
 1. **Step 1: your Revolut statement.** Click **Choose statement file...** and pick the CSV file, or drag the file onto the window.
-2. **Step 2 (optional): your Excel spreadsheet.** Choose **Don't use a spreadsheet** to only see the results in the window, or **Update my Excel spreadsheet** to also write them into Excel. With the second, two buttons appear: **Choose my spreadsheet...** to use an Excel file you already have, or **Create a new one...**. You can also drag an Excel file onto the window. The app remembers your choice for next time, and you can change it at any point.
-3. **Step 3.** Click the green button. The window turns to a page with your investments: a progress bar first shows how far the app is while it fetches prices, which takes a few seconds, then the table appears. With many investments, scroll the table to see them all. **← Back to the steps** takes you back to choose other files. Pressed while the prices are still being fetched, it stops: nothing of that run is saved, and you can start again.
+2. **Step 2 (optional): your Excel spreadsheet.** Choose **Don't use a spreadsheet** to only see the results in the window, or **Update my Excel spreadsheet** to also write them into Excel. With the second, two buttons appear: **Choose my spreadsheet...** to use an Excel file you already have, or **Create a new one...**. You can also drag an Excel file onto the window. The app remembers your choice for next time, and you can change it at any point. Before choosing an existing spreadsheet, read [what the app keeps in it](#before-you-choose-an-existing-spreadsheet).
+3. **Step 3.** Click the green button. The window turns to a page with your investments: a progress bar first shows how far the app is while it fetches prices, which takes a few seconds, then the table appears. With many investments, scroll the table to see them all.
+
+**← Back to the steps** takes you back to choose other files. Pressed while the prices are still being fetched, it stops: nothing of that run is saved, and you can start again.
 
 ### If the app asks you to confirm an investment
 
-Many funds are traded on several stock exchanges under the same code. When the app cannot tell which one is yours, it shows a short list. They are usually the same fund at almost the same price, so pick the one whose name and currency match what you see in Revolut. The app remembers your answer and does not ask again. If you are unsure, **Skip this investment** leaves it without a current value; nothing is guessed. If you picked the wrong one, see Settings below.
+Many funds are traded on several stock exchanges under the same code. When the app cannot tell which one is yours, it shows a short list. They are usually the same fund at almost the same price, so pick the one whose name and currency match what you see in Revolut. The app remembers your answer and does not ask again. If you are unsure, **Skip this investment** leaves it without a current value; nothing is guessed. If you picked the wrong one, see [Settings](#settings).
 
 If you don't want to be asked at all, press **Always choose the first option**. The app uses the first listing for this investment, and from then on whenever it cannot tell by itself. When several listings fit your purchases, the first one fits best. When none fits (the app says it "could not tell for sure"), the first one is only the first found, so check in Settings, under "Listing used", that it is your fund. You can turn this off in Settings.
 
-### Settings
-
-The **Settings** button lists the investments the app remembers.
-
-- **Rename** one: double-click its name (or select it and press **Rename**) and type the name to show next to its code in the table and the spreadsheet. Enter saves it, Esc cancels. Leave it empty to go back to the fund's name from Yahoo Finance, which is shown in grey.
-
-Select an investment to:
-
-- **Choose the listing on the next run**: nothing changes right away. The next time you press the green button, the app shows you the list of listings for it again to pick from. Until then, the current one is kept.
-- **Forget** it: the app matches it again on the next run, as on the first day. The name you gave it and any value you entered for it are removed too.
-
-**Forget all...** does the same for every investment at once. Your spreadsheet choice and the last prices fetched from Yahoo Finance are kept.
-
-The list also shows investments you entered a value for, even if the app never matched them to a listing, so that you can forget those values too.
-
-Settings also has the switch **When the app cannot tell which listing an investment is, use the first one without asking**.
-
 ## Read the result
+
+### The columns
 
 | Column | Meaning |
 |---|---|
-| Investment | The fund or share, shown as its code and name. Double-click the name to change it; see below. |
+| Investment | The fund or share, shown as its code and name. |
 | Invested | What you paid for what you still hold, fees included. |
 | % of invested | How much of all the money you invested went into this one. |
 | Worth now | What it would be worth at the latest price. Approximate. |
@@ -122,43 +138,78 @@ Settings also has the switch **When the app cannot tell which listing an investm
 
 The last row is the total. Investments you have sold completely are not listed.
 
-**To rename an investment**, double-click its name in the table (or select it and press F2) and type the name you want. Enter saves it, Esc cancels. The name is remembered and also written to your spreadsheet, straight away. Leave it empty to go back to the fund's name from Yahoo Finance. Settings has the same option.
+A value shown as "unavailable", in red, or marked with **\*** or **(your value)**, is explained in [When a price is missing](#when-a-price-is-missing).
 
-**"unavailable"** means the app could not get a current price for that investment. Its row is shown in grey, with "not in total" in the percentage columns, and the Total and the percentages cover the other investments only. The app never guesses a value for it. Its **Worth now** cell is shown in red: you can enter its value there yourself (see below).
+### Renaming an investment
 
-**A value marked with \*** uses the last price the app fetched on an earlier day, because Yahoo Finance could not be reached this time. Point at the value to see the date of that price. The Total is marked too, since it includes that value. Try again later for up-to-date values. An investment the app has never fetched a price for is shown as unavailable instead.
+Double-click an investment's name in the table (or select it and press F2) and type the name you want. Enter saves it, Esc cancels. The name is remembered and also written to your spreadsheet, straight away. Leave it empty to go back to the fund's name from Yahoo Finance. You can also rename an investment in [Settings](#settings).
 
-### When a price is missing
+## When a price is missing
 
-When Yahoo Finance has no current price for an investment, a line appears under the table with two buttons:
+### What you see
 
-- **Try again** fetches the prices again, as the green button does.
-- **Enter its value...** lets you type in what the investment is worth now yourself, all your shares together, as the Revolut app shows it. The number you type is the number shown in **Worth now**. You can also double-click the investment's row in the table, anywhere but its name, which double-clicking renames. The app adds everything up again straight away and updates your spreadsheet, without fetching anything.
+**"unavailable"** means the app could not get a current price for that investment. Its row is shown in grey, with "not in total" in the percentage columns, and the Total and the percentages cover the other investments only. The app never guesses a value for it. Its **Worth now** cell is shown in red: you can [enter its value there yourself](#enter-its-value-yourself).
 
-A value you entered is marked **(your value)**, and so is the Total. The app keeps it for the next times, so you don't have to type it again (if you buy or sell shares, it follows them), and uses it whenever Yahoo Finance has no price for that investment. As soon as Yahoo Finance has one again, the app uses Yahoo's and forgets yours. To change a value you entered, double-click it in **Worth now**; to remove it, use **Forget** in Settings.
+**A value marked with \*** uses the last price the app fetched on an earlier day, because Yahoo Finance could not be reached this time. Point at the value to see the date of that price. The Total is marked too, since it includes that value. An investment the app has never fetched a price for is shown as unavailable instead.
+
+**A value marked (your value)** is one you entered yourself; see below. The Total is marked too.
+
+When any of these is in the table, a line under it names the investments Yahoo Finance has no current price for, with two buttons: **Try again** and **Enter its value...**.
+
+### Try again
+
+**Try again** fetches the prices again, as the green button does. Use it for values marked with \* once you are back online.
+
+### Enter its value yourself
+
+**In the app:** press **Enter its value...**, or double-click the investment's row in the table, anywhere but its name (double-clicking the name renames it). Type what the investment is worth now, all your shares together, as the Revolut app shows it. The number you type is the number shown in **Worth now**. The app adds everything up again straight away and updates your spreadsheet, without fetching anything.
+
+**In the spreadsheet:** type the investment's current value over "unavailable" in its **Current Value** cell, which is shown in red, as the same cell is in the app. The row turns black and its percentages, the gain and the Total row update straight away, in Excel or Google Sheets. The next time you press the green button, the app picks up the value you typed and keeps it, as if you had entered it in the app.
+
+### How long your value is kept
+
+The app keeps a value you entered for the next times, so you don't have to type it again (if you buy or sell shares, it follows them), and uses it whenever Yahoo Finance has no price for that investment. As soon as Yahoo Finance has one again, the app uses Yahoo's and forgets yours. To change a value you entered, double-click it in **Worth now**; to remove it, use **Forget** in [Settings](#settings).
+
+## Settings
+
+The **Settings** button lists the investments the app remembers, including any you entered a value for even if the app never matched them to a listing. Select one to:
+
+- **Rename** it: double-click its name (or press **Rename**) and type the name to show next to its code in the table and the spreadsheet. Enter saves it, Esc cancels. Leave it empty to go back to the fund's name from Yahoo Finance, which is shown in grey.
+- **Choose the listing on the next run**: nothing changes right away. The next time you press the green button, the app shows you the list of listings for it again to pick from. Until then, the current one is kept.
+- **Forget** it: the app matches it again on the next run, as on the first day. The name you gave it and any value you entered for it are removed too.
+
+**Forget all...** does the same for every investment at once. Your spreadsheet choice and the last prices fetched from Yahoo Finance are kept.
+
+Settings also has the switch **When the app cannot tell which listing an investment is, use the first one without asking** (see [If the app asks you to confirm an investment](#if-the-app-asks-you-to-confirm-an-investment)).
 
 ## Your Excel spreadsheet
+
+### What the app writes
 
 If you chose a spreadsheet, the app creates two sheets (or updates them if they already exist), writing:
 
 - **Current Holdings**: one row per investment and a Total row, rewritten each time.
 - **Portfolio History**: one row per day you run the app, so you can see your totals over time. Running twice on the same day updates that day's row; older rows are never changed.
 
-A value that uses the last price from an earlier day has a comment (a small red corner in Excel) saying from when. On those runs no row is written to **Portfolio History**, because that row would be dated today.
-
-A value you entered has a comment saying so and on which day. A value you entered today counts as today's, so the day's row is written. One you entered on an earlier day does not, and then no row is written, as above.
-
-An investment without a price keeps its row in **Current Holdings**, in grey, with "not in total" and a comment, and the Total covers the rest. The day's row in **Portfolio History** is still written for the rest, with Net Worth and Gain vs Deposits shown as unavailable, so the history can dip on a day an investment is left out. Entering its price yourself avoids that.
-
-**You can also fill in a missing value in the spreadsheet itself.** Type the investment's current value (what the whole investment is worth now, as the Revolut app shows it) over "unavailable" in its **Current Value** cell, which is shown in red to say a value can be typed there, as the same cell is in the app. The row turns black and its percentages, the gain and the Total row update straight away, in Excel or Google Sheets. The next time you press the green button, the app picks up the value you typed and keeps it, like a price entered in the app: it is marked as yours, and used until Yahoo Finance has a price again.
+A value that uses the last price from an earlier day has a comment (a small red corner in Excel) saying from when. A value you entered has a comment saying so and on which day. An investment without a price keeps its row in **Current Holdings**, in grey, with "not in total" and a comment, and the Total covers the rest.
 
 Your own sheets in that file are left exactly as they are. Before the app changes an existing spreadsheet for the first time, it saves a copy next to it named `<your file>_backup_before_first_update.xlsx`.
 
-### IMPORTANT NOTE
+### Before you choose an existing spreadsheet
 
 The app only changes its own two sheets, but to save them it has to write the whole file again. Values, formulas, colours, colour rules and charts in your own sheets are kept. **Pictures, shapes and text boxes are not**: they disappear from the saved file. If your spreadsheet has any of those, let the app create a separate new spreadsheet instead.
 
 The backup copy mentioned above is created in case something of yours does go missing.
+
+### When no history row is written
+
+A row in **Portfolio History** is dated today, so it is only written when its values are today's. No row is written, and existing rows are left unchanged, when:
+
+- a value uses the last price from an earlier day (marked \*), because Yahoo Finance could not be reached;
+- a value you entered was entered on an earlier day (one you entered today counts as today's);
+- no investment has a price at all.
+
+When only some investments have no price, the day's row is still written for the rest, with Net Worth and Gain vs Deposits shown as unavailable. The history can therefore dip on a day an investment is left out; entering its value yourself avoids that.
 
 ### Using Google Sheets
 
@@ -185,7 +236,7 @@ The app keeps its settings (your confirmed investments and where your spreadshee
 - Only Revolut's stock statement in CSV format is supported, and only the "All time" range.
 - The statement must be in a single currency. Statements with trades in more than one currency, or with a currency conversion, are not supported yet and are rejected with an explanation.
 - Only these kinds of entries are understood: cash top-ups, market buys, market sells and dividends. Anything else (for example a stock split or a withdrawal) stops the app with a message naming the row, so that it never shows numbers built on a guess. Please report it if this happens to you.
-- Prices need an internet connection. Without one, the app uses the last prices it fetched, marked with \*, or shows values as unavailable if it has never fetched them. You can then enter prices yourself.
+- Prices need an internet connection. Without one, the app uses the last prices it fetched, marked with \*, or shows values as unavailable if it has never fetched them. You can then [enter values yourself](#enter-its-value-yourself).
 - The figures are simple: what you paid against what it is worth now. There are no tax calculations and no time-weighted returns.
 - The app is in English only. It does not update itself; new versions are on the Releases page.
 

@@ -37,6 +37,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
+[InstallDelete]
+; Remove the previous version's libraries before copying the new ones. Files a newer build no
+; longer has would otherwise stay behind and be found by the new one: a leftover half of numpy,
+; from a build that still had it, made openpyxl fail to load. The folder holds only the program;
+; settings and saved prices are kept in the user's settings folder, elsewhere.
+Type: filesandordirs; Name: "{app}\_internal"
+
 [Files]
 Source: "..\dist\StatementPortfolioTracker\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 

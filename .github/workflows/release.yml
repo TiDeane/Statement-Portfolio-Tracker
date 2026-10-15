@@ -102,9 +102,15 @@ jobs:
         run: |
           $setup = Get-ChildItem dist\*-windows-x64-setup.exe | Select-Object -First 1
           $target = Join-Path $env:RUNNER_TEMP 'installed-app'
+          # As if an older version were installed there: a library it had and this build has not.
+          # Left behind, the app would import that half package (it once broke openpyxl).
+          $stale = Join-Path $target '_internal\numpy'
+          New-Item -ItemType Directory -Force $stale | Out-Null
+          Set-Content (Join-Path $stale 'left_from_older_version.txt') 'stale'
           $install = Start-Process $setup.FullName -Wait -PassThru -ArgumentList `
             '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', "/DIR=$target"
           if ($install.ExitCode -ne 0) { throw "Installer exited with code $($install.ExitCode)" }
+          if (Test-Path $stale) { throw "The installer left an older version's files in $stale" }
           python packaging/smoke_check.py `
             --exe "$target\StatementPortfolioTracker.exe" `
             --sample samples/revolut_sample.csv `

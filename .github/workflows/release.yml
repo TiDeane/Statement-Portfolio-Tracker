@@ -121,6 +121,24 @@ jobs:
             --report "dist\build-report-${{ matrix.label }}.md"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Uninstall and check that the app's saved data goes too (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP 'installed-app'
+          # Where the app keeps its settings and prices (platformdirs' local folder on Windows).
+          $saved = Join-Path $env:LOCALAPPDATA 'StatementPortfolioTracker'
+          New-Item -ItemType Directory -Force $saved | Out-Null
+          Set-Content (Join-Path $saved 'settings.json') '{}'
+          Set-Content (Join-Path $saved 'last_prices.json') '{}'
+          Start-Process (Join-Path $target 'unins000.exe') -Wait -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
+          # The uninstaller hands over to a copy of itself and returns early: wait for it to finish.
+          for ($second = 0; $second -lt 120 -and ((Test-Path $saved) -or (Test-Path "$target\_internal")); $second++) {
+            Start-Sleep -Seconds 1
+          }
+          if (Test-Path "$target\_internal") { throw "The uninstaller left the app's files in $target" }
+          if (Test-Path $saved) { throw "The uninstaller left the app's saved data in $saved" }
+
       # ------------------------------------------------------------------ macOS
       - name: Build macOS disk image
         if: runner.os == 'macOS'

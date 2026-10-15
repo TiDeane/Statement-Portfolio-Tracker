@@ -61,7 +61,7 @@ If the warning appears, it is only for the installer, not each time you start th
 
 If Windows says the app was blocked by **Smart App Control** and offers no "Run anyway", the app cannot be installed on that computer for now. Smart App Control only allows signed apps, and this one is not signed yet. Option 2 still works there.
 
-To remove the app, use **Settings > Apps > Installed apps** like any other program.
+To remove the app, use **Settings > Apps > Installed apps** like any other program. This also deletes what the app remembers: your settings, the listings and names of your investments, and the values you entered. Your spreadsheets and their backup copies are kept. Installing a newer version over the old one keeps everything.
 
 #### macOS
 
@@ -275,7 +275,7 @@ Everything happens on your computer. There are no accounts, and the app does not
 
 The only information that leaves your computer are the codes of your investments and dates, sent to Yahoo Finance to look up prices. Your amounts and your statement file are never sent anywhere.
 
-The app keeps its settings (your confirmed investments and where your spreadsheet is), the last price it fetched for each fund, and any values you entered, in your user folder: on Windows under `%LOCALAPPDATA%\StatementPortfolioTracker`. Those are kept as prices per share; none of the amounts in your statement are kept. Together they take a few kilobytes. To remove them, delete that folder.
+The app keeps its settings (your confirmed investments and where your spreadsheet is), the last price it fetched for each fund, and any values you entered, in your user folder: `%LOCALAPPDATA%\StatementPortfolioTracker` on Windows, `~/Library/Application Support/StatementPortfolioTracker` on macOS and `~/.config/StatementPortfolioTracker` on Linux. Those are kept as prices per share; none of the amounts in your statement are kept. Together they take a few kilobytes. Uninstalling the app on Windows deletes that folder; otherwise (macOS, or running from the source), delete it yourself.
 
 ## Known limitations
 

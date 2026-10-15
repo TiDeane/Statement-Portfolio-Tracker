@@ -44,6 +44,13 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; settings and saved prices are kept in the user's settings folder, elsewhere.
 Type: filesandordirs; Name: "{app}\_internal"
 
+[UninstallDelete]
+; What the app saved for the user: settings.json (listings, names, spreadsheet choice) and
+; last_prices.json (last prices, values entered). Must match statement_tracker.settings.APP_FOLDER
+; under platformdirs' local (not roaming) folder. Installing over an older version does not run
+; the uninstaller, so upgrades keep it. Spreadsheets and their backups are the user's and stay.
+Type: filesandordirs; Name: "{localappdata}\StatementPortfolioTracker"
+
 [Files]
 Source: "..\dist\StatementPortfolioTracker\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 

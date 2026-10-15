@@ -1,7 +1,7 @@
 """The UI-free pipeline and the command line, with a mocked provider and a temporary settings file."""
 
 import io
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -612,6 +612,42 @@ def test_progress_is_reported_for_each_investment(tmp_path: Path) -> None:
         (3, 3, "Adding everything up..."),
     ]
     assert provider.prepared == 1
+
+
+def test_each_listing_to_find_is_a_step_of_the_progress_too(tmp_path: Path) -> None:
+    provider = FakeProvider()
+    provider.add("ABCD.DE", "EUR", price="120", ranges={date(2025, 1, 6): (Decimal("99"), Decimal("101"))})
+    provider.add("WXYZ.DE", "EUR", price="100", ranges={date(2025, 1, 20): (Decimal("49"), Decimal("51"))})
+    seen: list[tuple[int, int, str]] = []
+
+    build_report(
+        write_statement(tmp_path, *TWO_HOLDINGS),
+        provider,
+        Settings.load(tmp_path / "settings.json"),
+        progress=lambda done, total, text: seen.append((done, total, text)),
+    )
+
+    # Getting ready, two listings to find, two prices: five steps, each one moving the bar.
+    assert seen == [
+        (0, 0, "Reading your statement..."),
+        (0, 5, "Getting ready to look up prices..."),
+        (1, 5, "Finding the stock exchange listing of ABCD..."),
+        (2, 5, "Finding the stock exchange listing of WXYZ..."),
+        (3, 5, "Getting the current prices (0 of 2)..."),
+        (4, 5, "Getting the current prices (1 of 2)..."),
+        (5, 5, "Getting the current prices (2 of 2)..."),
+        (5, 5, "Adding everything up..."),
+    ]
+
+    # Next time both listings are known: only the prices are left to count.
+    seen.clear()
+    build_report(
+        write_statement(tmp_path, *TWO_HOLDINGS),
+        provider,
+        Settings.load(tmp_path / "settings.json"),
+        progress=lambda done, total, text: seen.append((done, total, text)),
+    )
+    assert [total for _, total, _ in seen[1:]] == [3] * 5
 
 
 def test_prices_are_fetched_at_the_same_time(tmp_path: Path) -> None:

@@ -66,7 +66,6 @@ from statement_tracker.workflow import (
     build_report,
     display_name,
     needs_price,
-    price_steps,
     update_spreadsheet,
     values_typed_in,
     with_entered_prices,
@@ -585,9 +584,11 @@ class MainWindow(QMainWindow):
         statement, spreadsheet, today = self._statement, self._spreadsheet, self._today()
         self._last_run = (spreadsheet, today)
         extra_steps = 1 if spreadsheet else 0  # updating the spreadsheet comes after the prices
+        steps_of_the_run = [0]  # the run's own total, once known, for the spreadsheet step after it
 
         def progress(done: int, total: int, text: str) -> None:
             # Called on the background thread; the signal carries it to the window's thread.
+            steps_of_the_run[0] = total
             self.progressed.emit(done, total + extra_steps if total else 0, text)
 
         def work() -> Outcome:
@@ -603,7 +604,7 @@ class MainWindow(QMainWindow):
             )
             if spreadsheet is None:
                 return report, None, None
-            steps = price_steps(len(report.valuation.holdings))
+            steps = steps_of_the_run[0]
             self.progressed.emit(steps, steps + 1, "Updating your spreadsheet...")
             try:
                 return report, update_spreadsheet(report, self._settings, spreadsheet, today), None

@@ -47,9 +47,10 @@ class Report:
     """What was fetched, so that ``with_entered_prices`` can work the report out again."""
 
 
-def price_steps(holdings: int) -> int:
-    """Progress steps for pricing ``holdings`` investments: getting ready, then one per investment."""
-    return holdings + 1 if holdings else 0
+def progress_steps(to_match: int, holdings: int) -> int:
+    """Progress steps for pricing ``holdings`` investments: getting ready, then one per listing to
+    find (``to_match`` of them), then one per price."""
+    return 1 + to_match + holdings if holdings else 0
 
 
 def display_name(settings: Settings, ticker: str) -> str:
@@ -169,7 +170,18 @@ def build_report(
     settings_changed = False
 
     positions = portfolio.open_positions
-    steps = price_steps(len(positions))
+
+    def asks_again(ticker: str) -> bool:
+        """The user asked to choose this listing again: show the choice even if matching is sure."""
+        return ticker in settings.ask_again and ticker not in overrides and chooser is not None
+
+    def known_symbol(ticker: str) -> str | None:
+        saved = settings.ticker_choices.get(ticker)
+        return overrides.get(ticker) or (saved.symbol if saved and not asks_again(ticker) else None)
+
+    # Each listing to find is a step of the progress bar, as each price is.
+    to_match = [position.ticker for position in positions if known_symbol(position.ticker) is None]
+    steps = progress_steps(len(to_match), len(positions))
     if positions:
         report_progress(0, steps, "Getting ready to look up prices...")
         provider.prepare()
@@ -183,14 +195,14 @@ def build_report(
         ticker = position.ticker
         notes = ticker_notes[ticker]
         saved = settings.ticker_choices.get(ticker)
-        # The user asked to choose this listing again: show the choice even if matching is sure.
-        asking_again = ticker in settings.ask_again and ticker not in overrides and chooser is not None
-        symbol: str | None = overrides.get(ticker) or (saved.symbol if saved and not asking_again else None)
+        asking_again = asks_again(ticker)
+        symbol = known_symbol(ticker)
         user_chose = ticker in overrides
 
         try:
             if symbol is None:
-                report_progress(0, steps, f"Finding the stock exchange listing of {ticker}...")
+                matched = to_match.index(ticker)  # listings found so far, after getting ready
+                report_progress(1 + matched, steps, f"Finding the stock exchange listing of {ticker}...")
                 resolution = resolve_ticker(
                     ticker, buys.get(ticker, []), statement.currency, provider, settings.suffixes
                 )
@@ -231,8 +243,11 @@ def build_report(
 
     # 2. Fetch every price at the same time, then each exchange rate needed, once.
     def prices_progress(done: int, total: int) -> None:
-        # The bar goes from "getting ready" (step 0) to all prices in (the last step).
-        report_progress(1 + done * (steps - 1) // total, steps, f"Getting the current prices ({done} of {total})...")
+        # After getting ready and finding the listings, the bar goes on to all prices in (the last step).
+        before = 1 + len(to_match)
+        report_progress(
+            before + done * (steps - before) // total, steps, f"Getting the current prices ({done} of {total})..."
+        )
 
     quotes = _fetch_quotes(provider, {symbol for symbol, _ in decided.values()}, prices_progress)
     rates = _fetch_rates(provider, quotes.values(), statement.currency)

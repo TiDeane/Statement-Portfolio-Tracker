@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import html
 import sys
+import threading
 import traceback
 from collections.abc import Callable
 from datetime import UTC, date, datetime
@@ -168,6 +169,10 @@ class _NameDelegate(QStyledItemDelegate):
         QTimer.singleShot(0, self._window, lambda: self._window.rename(ticker, name))
 
 
+class RunStopped(Exception):
+    """Ends a run the user stopped with "Back to the steps", at its next step."""
+
+
 class MainWindow(QMainWindow):
     """Two pages in one window: the three steps, then the result table."""
 
@@ -196,6 +201,10 @@ class MainWindow(QMainWindow):
         self._set_aside_spreadsheet: Path | None = None
         """The file used before "Don't use a spreadsheet" was chosen, restored if the user changes their mind."""
         self._tasks: list[Task] = []
+        self._running: tuple[Task, threading.Event] | None = None
+        """The run going on, and how to stop it."""
+        self._stopped: list[Task] = []
+        """Runs stopped by the user that the thread pool has not finished yet: kept alive until then."""
         self._locale = QLocale()
         self.ask_listing: Callable[[Resolution], str | None] = self._ask_listing
         self.show_error: Callable[[UserFacingError], object] = lambda error: dialogs.show_error(self, error)
@@ -404,9 +413,28 @@ class MainWindow(QMainWindow):
     # -- pages -------------------------------------------------------------------
 
     def show_steps(self) -> None:
-        """Go back to the three steps. Step 3 fetches the prices again and shows the result page."""
-        if not self._busy():
-            self.pages.setCurrentWidget(self.steps_page)
+        """Go back to the three steps. Step 3 fetches the prices again and shows the result page.
+
+        While step 3 is running, this stops it first: nothing of that run is saved.
+        """
+        if self._busy():
+            self.stop_run()
+        self.pages.setCurrentWidget(self.steps_page)
+
+    def stop_run(self) -> None:
+        """Stop the run going on. It ends at its next step, before saving settings, prices or the
+        spreadsheet; whatever it was still waiting for from Yahoo is thrown away when it comes."""
+        if self._running is None or not self._busy():
+            return
+        task, stop = self._running
+        stop.set()
+        self._stopped.append(task)  # the thread pool still runs it until that next step: kept until then
+        self._done()
+        self._status("Stopped. Nothing was saved.", "ok")
+
+    def _forget_task(self, task: Task) -> None:
+        if task in self._stopped:
+            self._stopped.remove(task)
 
     def _show_result_page(self) -> None:
         self.pages.setCurrentWidget(self.result_page)
@@ -499,8 +527,10 @@ class MainWindow(QMainWindow):
         event.acceptProposedAction()
 
     def drop_file(self, path: Path) -> None:
-        """A dropped Excel file is the spreadsheet; any other file is the statement. The steps are shown."""
-        self.show_steps()
+        """A dropped Excel file is the spreadsheet; any other file is the statement. The steps are shown,
+        unless step 3 is running: a file dropped then does not stop it (only "Back to the steps" does)."""
+        if not self._busy():
+            self.show_steps()
         if path.suffix.lower() == ".xlsx":
             self.set_spreadsheet(path)
         else:
@@ -565,7 +595,11 @@ class MainWindow(QMainWindow):
         # With "Update my Excel spreadsheet" chosen but no file yet, there is nothing to update: wait for one.
         self.go_button.setEnabled(self._statement is not None and not waiting_for_file and not self._busy())
         self.settings_button.setEnabled(not self._busy())  # a run reads and saves the same settings
-        self.back_button.setEnabled(not self._busy())
+        self.back_button.setToolTip(
+            "Stop fetching and go back to the steps. Nothing of this run is saved."
+            if self._busy()
+            else "Choose another statement or spreadsheet, or start again."
+        )
         self.retry_button.setEnabled(self._statement is not None and not waiting_for_file and not self._busy())
         self.enter_value_button.setEnabled(not self._busy())
 
@@ -595,9 +629,13 @@ class MainWindow(QMainWindow):
         self._last_run = (spreadsheet, today)
         extra_steps = 1 if spreadsheet else 0  # updating the spreadsheet comes after the prices
         steps_of_the_run = [0]  # the run's own total, once known, for the spreadsheet step after it
+        stop = threading.Event()  # set by "Back to the steps" while the run is going
 
         def progress(done: int, total: int, text: str) -> None:
-            # Called on the background thread; the signal carries it to the window's thread.
+            # Called on the background thread at each step: where a stopped run ends, before it
+            # saves anything. The signal carries the rest to the window's thread.
+            if stop.is_set():
+                raise RunStopped
             steps_of_the_run[0] = total
             self.progressed.emit(done, total + extra_steps if total else 0, text)
 
@@ -615,16 +653,20 @@ class MainWindow(QMainWindow):
             if spreadsheet is None:
                 return report, None, None
             steps = steps_of_the_run[0]
-            self.progressed.emit(steps, steps + 1, "Updating your spreadsheet...")
+            progress(steps, steps, "Updating your spreadsheet...")  # the last point a run can be stopped at
             try:
                 return report, update_spreadsheet(report, self._settings, spreadsheet, today), None
             except UserFacingError as error:
                 return report, None, error
 
         task = Task(work)
-        task.signals.finished.connect(self._finished)
-        task.signals.failed.connect(self._failed)
+        # A stopped run's result, if it still comes, is not this window's to show any more.
+        task.signals.finished.connect(lambda outcome: self._finished(outcome) if task in self._tasks else None)
+        task.signals.failed.connect(lambda error: self._failed(error) if task in self._tasks else None)
+        task.signals.finished.connect(lambda _: self._forget_task(task))
+        task.signals.failed.connect(lambda _: self._forget_task(task))
         self._tasks.append(task)
+        self._running = (task, stop)
         # The result page shows the progress, then the result. What an earlier run showed is cleared.
         self.table.setVisible(False)
         self._filler.setVisible(True)

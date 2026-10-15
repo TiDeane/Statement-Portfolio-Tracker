@@ -326,9 +326,9 @@ def test_the_result_has_its_own_page_in_the_same_window(app, tmp_path: Path) -> 
     assert window.pages.currentWidget() is window.steps_page
     window.go_button.click()  # step 3 again: back to the result page
     assert window.pages.currentWidget() is window.result_page
-    assert not window.back_button.isEnabled()  # not while the prices are being fetched
+    assert window.back_button.isEnabled() and "Stop" in window.back_button.toolTip()  # it stops a run
     run(app, window)
-    assert window.back_button.isEnabled()
+    assert window.back_button.isEnabled() and "Stop" not in window.back_button.toolTip()
 
     # A file dropped on the result page is taken by the steps, which are shown again.
     window.drop_file(tmp_path / "mine.xlsx")
@@ -993,6 +993,50 @@ def test_while_a_listing_is_asked_the_status_says_the_app_waits_for_the_user(app
     assert shown_while_asked == [waiting_for_you("EQQB")]
     assert "Waiting for you" in shown_while_asked[0] and "EQQB" in shown_while_asked[0]
     assert window.status_label.text() == "Done. Your investments are shown below."
+
+
+def test_back_to_the_steps_stops_a_run_without_saving_anything(app, tmp_path: Path) -> None:
+    import threading
+
+    let_go = threading.Event()
+
+    class Slow(FakeProvider):
+        """Yahoo taking its time: each price waits until the test lets it go."""
+
+        def quote(self, symbol: str):
+            let_go.wait(10)
+            return super().quote(symbol)
+
+    provider = Slow()
+    provider.add("EQQB.DE", "EUR", price="400", ranges=ranges_around(EQQB_BUYS), name="Nasdaq fund")
+    window, errors = make_window(tmp_path, provider)
+    spreadsheet = tmp_path / "mine.xlsx"
+    window.set_statement(SAMPLE)
+    window.set_spreadsheet(spreadsheet)
+    window.start()
+    deadline = time.monotonic() + 10
+    while "current prices" not in window.status_label.text() and time.monotonic() < deadline:
+        app.processEvents()  # until the run waits for the price
+        time.sleep(0.01)
+
+    window.back_button.click()
+
+    assert window.pages.currentWidget() is window.steps_page
+    assert not window._busy() and window.go_button.isEnabled()  # a new run can start at once
+    let_go.set()  # the price comes after all
+    deadline = time.monotonic() + 10
+    while window._stopped and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(0.01)
+    settle(app)
+    assert window._stopped == []  # the stopped run has ended
+    assert window._report is None and errors == []  # and nothing of it is shown
+    assert not spreadsheet.exists()  # nor written
+    assert Settings.load(tmp_path / "settings.json").ticker_choices == {}  # nor saved
+    assert not (tmp_path / "last_prices.json").exists()
+
+    run(app, window)  # step 3 again, to the end this time
+    assert window.pages.currentWidget() is window.result_page and spreadsheet.exists()
 
 
 def test_listing_dialog_returns_the_selection_or_the_typed_symbol(app) -> None:

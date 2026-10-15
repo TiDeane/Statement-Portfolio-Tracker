@@ -126,6 +126,11 @@ def _file_text(path: Path, remark: str = "") -> str:
     return "<br>".join(lines)
 
 
+def waiting_for_you(ticker: str) -> str:
+    """The status line while a run waits for the user to confirm a listing."""
+    return f'Waiting for you: confirm which listing {ticker} is, in the "Confirm your investment" window.'
+
+
 def _listed(names: list[str]) -> str:
     """Join names as a sentence does: "A", "A and B", "A, B and C"."""
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
@@ -203,7 +208,7 @@ class MainWindow(QMainWindow):
         )
         self._last_run: tuple[Path | None, date] = (None, today())
         self.progressed.connect(self._show_progress)
-        self._bridge = QuestionBridge(lambda resolution: self.ask_listing(resolution), self)
+        self._bridge = QuestionBridge(self._ask_during_run, self)
 
         self.setWindowTitle(APP_NAME)
         self.setAcceptDrops(True)
@@ -424,6 +429,11 @@ class MainWindow(QMainWindow):
             self._settings.spreadsheet_path = path
             self._save_settings()
         self._refresh()
+
+    def _ask_during_run(self, resolution: Resolution) -> str | None:
+        """Ask which listing a ticker is, saying meanwhile that the run waits for the user, not for Yahoo."""
+        self._status(waiting_for_you(resolution.ticker), "busy")
+        return self.ask_listing(resolution)
 
     def _ask_listing(self, resolution: Resolution) -> str | None:
         """Ask which listing a ticker is. "Always choose the first option" is saved at once.

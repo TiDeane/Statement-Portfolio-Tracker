@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
-from PySide6.QtCore import QDate, QLocale
+from PySide6.QtCore import QDate, QLocale, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -221,6 +221,8 @@ def ask_listing(parent: QWidget | None, resolution: Resolution) -> tuple[str | N
     """Open the dialog. Returns the chosen Yahoo symbol (None if skipped) and whether the
     user asked to always use the first listing from now on (only when they did not skip)."""
     dialog = ChooseListingDialog(resolution, parent)
+    # In front and with the focus, once open: the run waits for it, so it must not sit unseen behind the window.
+    QTimer.singleShot(0, dialog, lambda: (dialog.raise_(), dialog.activateWindow()))
     if dialog.exec() == QDialog.DialogCode.Accepted:
         return dialog.chosen_symbol(), dialog.always_use_first()
     return None, False

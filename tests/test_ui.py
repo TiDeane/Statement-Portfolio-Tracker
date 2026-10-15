@@ -36,6 +36,7 @@ from statement_tracker.ui.main_window import (  # noqa: E402
     MIN_WINDOW_WIDTH,
     MainWindow,
     default_start_folder,
+    waiting_for_you,
 )
 
 EQQB_BUYS = buys_by_ticker(load_statement(SAMPLE))["EQQB"]
@@ -975,6 +976,23 @@ def test_progress_bar_counts_each_investment_and_the_spreadsheet(app, tmp_path: 
     assert [done for done, total, _ in seen if total] == sorted(done for done, total, _ in seen if total)
     assert window.progress_bar.isHidden()  # hidden again once finished
     assert window.progress_bar.format() == "%p%"
+
+
+def test_while_a_listing_is_asked_the_status_says_the_app_waits_for_the_user(app, tmp_path: Path) -> None:
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE", "EQQB.MI"))  # two listings fit: it asks
+    shown_while_asked: list[str] = []
+
+    def answer(resolution):
+        shown_while_asked.append(window.status_label.text())
+        return "EQQB.DE"
+
+    window.ask_listing = answer
+    window.set_statement(SAMPLE)
+    run(app, window)
+
+    assert shown_while_asked == [waiting_for_you("EQQB")]
+    assert "Waiting for you" in shown_while_asked[0] and "EQQB" in shown_while_asked[0]
+    assert window.status_label.text() == "Done. Your investments are shown below."
 
 
 def test_listing_dialog_returns_the_selection_or_the_typed_symbol(app) -> None:

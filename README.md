@@ -111,7 +111,7 @@ Settings also has the switch **When the app cannot tell which listing an investm
 
 | Column | Meaning |
 |---|---|
-| Investment | The fund or share, shown as its code and name. |
+| Investment | The fund or share, shown as its code and name. Double-click the name to change it; see below. |
 | Invested | What you paid for what you still hold, fees included. |
 | % of invested | How much of all the money you invested went into this one. |
 | Worth now | What it would be worth at the latest price. Approximate. |
@@ -119,6 +119,8 @@ Settings also has the switch **When the app cannot tell which listing an investm
 | Gain or loss | Worth now minus invested. |
 
 The last row is the total. Investments you have sold completely are not listed.
+
+**To rename an investment**, double-click its name in the table (or select it and press F2) and type the name you want. Enter saves it, Esc cancels. The name is remembered and also written to your spreadsheet, straight away. Leave it empty to go back to the fund's name from Yahoo Finance. Settings has the same option.
 
 **"unavailable"** means the app could not get a current price for that investment. Its row is shown in grey, with "not in total" in the percentage columns, and the Total and the percentages cover the other investments only. The app never guesses a value for it.
 
@@ -129,9 +131,9 @@ The last row is the total. Investments you have sold completely are not listed.
 When Yahoo Finance has no current price for an investment, a line appears under the table with two buttons:
 
 - **Try again** fetches the prices again, as the green button does.
-- **Enter a price...** lets you type in the price of one share yourself, for example the one shown in the Revolut app. You can also double-click the investment in the table. The app adds everything up again straight away and updates your spreadsheet, without fetching anything.
+- **Enter a price...** lets you type in the price of one share yourself, for example the one shown in the Revolut app. You can also double-click the investment's row in the table, anywhere but its name, which double-clicking renames. The app adds everything up again straight away and updates your spreadsheet, without fetching anything.
 
-A value worked out from a price you entered is marked **(your price)**, and so is the Total. The app keeps that price for the next times, so you don't have to type it again, and uses it whenever Yahoo Finance has no price for that investment. As soon as Yahoo Finance has one again, the app uses Yahoo's and forgets yours. To change a price you entered, double-click the investment.
+A value worked out from a price you entered is marked **(your price)**, and so is the Total. The app keeps that price for the next times, so you don't have to type it again, and uses it whenever Yahoo Finance has no price for that investment. As soon as Yahoo Finance has one again, the app uses Yahoo's and forgets yours. To change a price you entered, double-click its value in **Worth now**.
 
 ## Your Excel spreadsheet
 

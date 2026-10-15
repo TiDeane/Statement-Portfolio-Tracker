@@ -511,6 +511,41 @@ def test_locked_spreadsheet_still_shows_the_investments(app, tmp_path: Path, mon
     assert "spreadsheet was not updated" in window.status_label.text()
 
 
+def test_an_investment_is_renamed_by_typing_in_its_cell(app, tmp_path: Path) -> None:
+    window, errors = make_window(tmp_path, provider_with("EQQB.DE"))
+    spreadsheet = tmp_path / "mine.xlsx"
+    window.show()
+    window.set_statement(SAMPLE)
+    window.set_spreadsheet(spreadsheet)
+    run(app, window)
+    asked = []
+    window.ask_price = lambda *question: asked.append(question)
+    table = window.table
+    assert table.item(0, 0).text() == "(EQQB) Nasdaq fund"
+    editable = Qt.ItemFlag.ItemIsEditable
+    assert table.item(0, 0).flags() & editable  # the name...
+    assert not table.item(0, 3).flags() & editable and not table.item(1, 0).flags() & editable  # ...and nothing else
+
+    def type_name(shown: str, typed: str) -> None:
+        table.editItem(table.item(0, 0))  # what double-clicking does
+        editor = table.findChild(QtWidgets.QLineEdit)
+        assert editor.text() == shown  # the name alone, without the ticker
+        editor.setText(typed)
+        QTest.keyClick(editor, Qt.Key.Key_Return)
+        settle(app)
+
+    type_name("Nasdaq fund", " Tech fund ")
+
+    assert table.item(0, 0).text() == "(EQQB) Tech fund"
+    assert Settings.load(tmp_path / "settings.json").index_names == {"EQQB": "Tech fund"}
+    assert load_workbook(spreadsheet)["Current Holdings"]["A2"].value == "(EQQB) Tech fund"
+    assert asked == [] and errors == []  # no price was asked for, nothing went wrong
+
+    type_name("Tech fund", "")  # empty: back to the name from Yahoo
+    assert table.item(0, 0).text() == "(EQQB) Nasdaq fund"
+    assert Settings.load(tmp_path / "settings.json").index_names == {}
+
+
 def test_packaging_smoke_test_reads_the_sample_and_writes_a_spreadsheet(app, tmp_path: Path) -> None:
     import json
 

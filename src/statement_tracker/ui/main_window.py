@@ -13,7 +13,18 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QLocale, QStandardPaths, Qt, QThreadPool, QTimer, Signal
+import shiboken6
+from PySide6.QtCore import (
+    QAbstractItemModel,
+    QDate,
+    QLocale,
+    QModelIndex,
+    QStandardPaths,
+    Qt,
+    QThreadPool,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import QBrush, QCloseEvent, QColor, QDragEnterEvent, QDropEvent, QFont, QResizeEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -24,6 +35,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QProgressBar,
     QPushButton,
@@ -31,6 +43,8 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QStackedWidget,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -62,6 +76,10 @@ NOT_IN_TOTAL = "not in total"
 NO_STATEMENT = "No file chosen yet. You can also drag the file onto this window."
 
 TABLE_HEADERS = ["Investment", "Invested", "% of invested", "Worth now", "% of worth now", "Gain or loss"]
+NAME_COLUMN = 0
+TICKER_ROLE = Qt.ItemDataRole.UserRole
+"""Where an investment cell keeps its ticker, for renaming."""
+RENAME_TIP = "Double-click to change the name shown, here and in the spreadsheet."
 WORTH_COLUMN = 3
 GAIN_COLUMN = 5
 LAST_KNOWN_MARK = "*"
@@ -117,6 +135,32 @@ def _default_provider() -> PriceProvider:
     from statement_tracker.core.market_data.yahoo_provider import YahooProvider
 
     return YahooProvider()
+
+
+class _NameDelegate(QStyledItemDelegate):
+    """Edits an investment's name in its cell: the name alone, not the "(TICKER)" shown before it.
+
+    Enter saves it through ``MainWindow.rename``, which redraws the table; Esc cancels.
+    """
+
+    def __init__(self, window: MainWindow) -> None:
+        super().__init__(window)
+        self._window = window
+
+    def createEditor(self, parent: QWidget, option: QStyleOptionViewItem, index: QModelIndex) -> QWidget:
+        editor = QLineEdit(parent)
+        editor.setPlaceholderText("Leave empty to use the name from Yahoo Finance")
+        return editor
+
+    def setEditorData(self, editor: QWidget, index: QModelIndex) -> None:
+        editor.setText(self._window._settings.index_name(index.data(TICKER_ROLE)) or "")  # type: ignore[attr-defined]
+
+    def setModelData(self, editor: QWidget, model: QAbstractItemModel, index: QModelIndex) -> None:
+        if not shiboken6.isValid(self._window):
+            return  # the window was closed with the editor open: nothing to save it into
+        ticker, name = index.data(TICKER_ROLE), editor.text()  # type: ignore[attr-defined]
+        # The table is redrawn once the editor has closed, not while it is closing.
+        QTimer.singleShot(0, self._window, lambda: self._window.rename(ticker, name))
 
 
 class MainWindow(QMainWindow):
@@ -247,7 +291,10 @@ class MainWindow(QMainWindow):
 
         # Result
         self.table = QTableWidget(0, len(TABLE_HEADERS))
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed
+        )
+        self.table.setItemDelegateForColumn(NAME_COLUMN, _NameDelegate(self))
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(36)
@@ -606,8 +653,24 @@ class MainWindow(QMainWindow):
         self._show_outcome(report, exported, export_error)
 
     def _cell_double_clicked(self, row: int, column: int) -> None:
+        if column == NAME_COLUMN:
+            return  # the name is being edited in its cell
         # Opened once the double-click itself is over, not from inside its handling.
         QTimer.singleShot(0, self, lambda: self.enter_price(row))
+
+    def rename(self, ticker: str, name: str) -> None:
+        """Show ``name`` next to ``ticker`` from now on, here and in the spreadsheet. An empty name goes
+        back to the fund's name from Yahoo Finance. The spreadsheet of the last run is written again."""
+        name = name.strip()
+        if name == (self._settings.index_name(ticker) or ""):
+            return  # nothing changed
+        if name:
+            self._settings.index_names[ticker] = name
+        else:
+            self._settings.index_names.pop(ticker, None)
+        self._save_settings()
+        if self._report is not None and not self._busy():
+            self._show_changed(self._report)
 
     def enter_price(self, row: int | None = None) -> None:
         """Let the user type in the price of an investment Yahoo has no current price for.
@@ -633,7 +696,10 @@ class MainWindow(QMainWindow):
         if answer is None:
             return
         ticker, price = answer
-        report = with_entered_prices(report, {ticker: price}, self._settings, now=self._now())
+        self._show_changed(with_entered_prices(report, {ticker: price}, self._settings, now=self._now()))
+
+    def _show_changed(self, report: Report) -> None:
+        """Show ``report`` again after a change made here, and write it to the last run's spreadsheet."""
         spreadsheet, today = self._last_run[0], self._today()
         self._last_run = (spreadsheet, today)
         exported, export_error = None, None
@@ -722,7 +788,7 @@ class MainWindow(QMainWindow):
         """Column order follows the spreadsheet: each percentage sits next to the amount it is a share of."""
         self.table.setHorizontalHeaderLabels(TABLE_HEADERS)
         tooltips = (
-            "The fund or share you hold.",
+            f"The fund or share you hold. {RENAME_TIP}",
             "What you paid for what you still hold, fees included.",
             "How much of all the money you invested went into this one.",
             "What it would be worth at the latest price from Yahoo Finance. Approximate.",
@@ -789,6 +855,12 @@ class MainWindow(QMainWindow):
             for column, text in enumerate(texts):
                 mark, tip = worth_marks[row_number] if column == WORTH_COLUMN else ("", None)
                 item = QTableWidgetItem(f"{text} {mark}" if mark else text)
+                if column == NAME_COLUMN and not is_total:
+                    # Only the name can be changed, by typing in its cell (see _NameDelegate).
+                    item.setData(TICKER_ROLE, valuation.holdings[row_number].position.ticker)
+                    item.setToolTip(RENAME_TIP)
+                else:
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 if tip:
                     item.setToolTip(tip)
                 if column:

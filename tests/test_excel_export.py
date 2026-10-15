@@ -6,13 +6,19 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from fakes import FakeProvider, statement_from, write_statement
+from fakes import FakeProvider, computed, statement_from, write_statement
 from openpyxl import Workbook, load_workbook
 
 from statement_tracker import cli
 from statement_tracker.core.calculator import compute_portfolio, value_portfolio
 from statement_tracker.core.errors import UserFacingError
-from statement_tracker.core.exporters.excel import HISTORY_HEADER, HOLDINGS_HEADER, ExcelExporter
+from statement_tracker.core.exporters.excel import (
+    HISTORY_HEADER,
+    HOLDINGS_HEADER,
+    MISSING,
+    ExcelExporter,
+    typed_values,
+)
 from statement_tracker.core.models import MarketPrice, PortfolioValuation
 from statement_tracker.settings import Settings
 
@@ -37,6 +43,10 @@ def rows(path: Path, sheet: str) -> list[tuple]:
     return [tuple(row) for row in load_workbook(path)[sheet].iter_rows(values_only=True)]
 
 
+def approx(number: float) -> object:
+    return pytest.approx(number, abs=1e-6)
+
+
 def test_missing_workbook_is_created_with_both_sheets(tmp_path: Path) -> None:
     path = tmp_path / "portfolio.xlsx"
 
@@ -44,17 +54,17 @@ def test_missing_workbook_is_created_with_both_sheets(tmp_path: Path) -> None:
 
     assert (result.created, result.holdings_written, result.history) == (True, 2, "added")
     assert load_workbook(path).sheetnames == ["Current Holdings", "Portfolio History"]
-    holdings = rows(path, "Current Holdings")
-    assert holdings[0] == HOLDINGS_HEADER
-    # "Current %" is a formula: the row's current value divided by the Total row's.
-    # Other percentages are stored the Excel way: 83.28% is 0.8328.
-    # Columns: Index, Invested, % of Invested, Current Value, % of Current Value, % Up/Down, Dividends, Currency.
-    assert holdings[1] == (
-        "ABCD", 1001, pytest.approx(0.832779, abs=1e-6), 1200, "=D2/D$4", pytest.approx(0.198801, abs=1e-6), 0, "EUR",
-    )  # fmt: skip
-    assert (holdings[2][0], holdings[2][1], holdings[2][3], holdings[2][4]) == ("WXYZ", 201, 400, "=D3/D$4")
-    assert holdings[3] == ("Total", 1202, 1, 1600, "=D4/D$4", pytest.approx(0.331115, abs=1e-6), 0, "EUR")
+    holdings = computed(path, "Current Holdings")
+    assert tuple(holdings[0]) == HOLDINGS_HEADER
+    # Everything worked out from the values is a formula; percentages are stored the Excel way (83.28% is 0.8328).
+    # Columns: Investment, Invested, % of Invested, Current Value, % of Current Value, % Up/Down, Dividends, Currency.
+    assert holdings[1] == [
+        "ABCD", 1001, approx(0.832779), 1200, approx(0.75), approx(0.198801), 0, "EUR",
+    ]  # fmt: skip
+    assert holdings[2][:5] == ["WXYZ", 201, approx(0.167221), 400, approx(0.25)]
+    assert holdings[3] == ["Total", 1202, 1, 1600, 1, approx(0.331115), 0, "EUR"]
     assert len(holdings) == 4
+    assert rows(path, "Current Holdings")[1][3] == 1200  # the values themselves are numbers, which can be typed over
     history = rows(path, "Portfolio History")
     assert history[0] == HISTORY_HEADER
     assert history[1][0].date() == DAY_ONE
@@ -234,10 +244,10 @@ def test_without_any_price_unavailable_is_written_and_history_is_left_alone(tmp_
 
     result = ExcelExporter(path).export(valuation(abcd=None, wxyz=None), DAY_TWO)
 
-    holdings = rows(path, "Current Holdings")
+    holdings = computed(path, "Current Holdings")
     assert result.history == "skipped"
-    assert (holdings[1][0], holdings[1][3], holdings[1][4]) == ("ABCD", "unavailable", "unavailable")
-    assert holdings[3][:5] == ("Total", 1202, 1, "unavailable", "unavailable")
+    assert holdings[1][:6] == ["ABCD", 1001, approx(0.832779), "unavailable", "unavailable", "unavailable"]
+    assert holdings[3][:6] == ["Total", 1202, 1, "unavailable", "unavailable", "unavailable"]
     assert len(rows(path, "Portfolio History")) == 2
     assert "no row was written" in " ".join(result.notes)
 
@@ -256,7 +266,7 @@ def test_last_known_price_is_written_with_a_comment_and_leaves_history_alone(tmp
     result = ExcelExporter(path).export(value_portfolio(portfolio, prices), DAY_TWO)
 
     sheet = load_workbook(path)["Current Holdings"]
-    assert (sheet["D2"].value, sheet["D3"].value, sheet["D4"].value) == (1200, 400, 1600)
+    assert [row[3] for row in computed(path, "Current Holdings")[1:]] == [1200, 400, 1600]
     assert sheet["D2"].comment is None
     assert "Last known price, from 2026-10-09" in sheet["D3"].comment.text
     assert "not up to date" in sheet["D4"].comment.text
@@ -277,18 +287,41 @@ def test_left_out_investment_is_greyed_and_the_total_and_history_cover_the_rest(
 
     result = ExcelExporter(path).export(value_portfolio(portfolio, prices), DAY_ONE)
 
-    holdings = rows(path, "Current Holdings")
-    assert holdings[1][:5] == ("ABCD", 1001, 1, 1200, "=D2/D$4")
-    assert holdings[2][:5] == ("WXYZ", 201, "not in total", "unavailable", "not in total")
-    assert holdings[3][:6] == ("Total", 1001, 1, 1200, "=D4/D$4", pytest.approx(0.198801, abs=1e-6))
+    holdings = computed(path, "Current Holdings")
+    assert holdings[1][:5] == ["ABCD", 1001, 1, 1200, 1]
+    assert holdings[2][:6] == ["WXYZ", 201, "not in total", "unavailable", "not in total", "unavailable"]
+    assert holdings[3][:6] == ["Total", 1001, 1, 1200, 1, approx(0.198801)]
     sheet = load_workbook(path)["Current Holdings"]
-    assert sheet["A3"].font.color.rgb.endswith("808080") and sheet["A2"].font.color is None
-    assert "left out of the Total" in sheet["D3"].comment.text
+    # While a row has no value, Excel itself shows it in grey, with its Current Value cell in red
+    # to say a value can be typed there: rules, not fixed colours, so typing a value undoes them.
+    rules = {str(cells.sqref): cells.rules[0] for cells in sheet.conditional_formatting}
+    assert set(rules) == {"A2:H3", "D2:D3"}
+    assert rules["A2:H3"].formula == ["NOT(ISNUMBER($D2))"] and rules["A2:H3"].dxf.font.color.rgb.endswith("808080")
+    assert rules["D2:D3"].formula == ["NOT(ISNUMBER($D2))"] and rules["D2:D3"].dxf.fill.fgColor.rgb.endswith("FFC7CE")
+    assert rules["D2:D3"].priority < rules["A2:H3"].priority  # its dark red text wins over the row's grey
+    assert "type this investment's current value here" in sheet["D3"].comment.text
     assert result.history == "added"
     history = rows(path, "Portfolio History")[1]
     assert history[1:4] == (1001, 1200, 199)
     assert (history[6], history[8]) == ("unavailable", "unavailable")  # net worth needs every value
     assert "leaves out what has no price (WXYZ)" in " ".join(result.notes)
+
+
+def test_a_value_typed_into_the_sheet_updates_its_totals_and_is_read_back(tmp_path: Path) -> None:
+    path = tmp_path / "portfolio.xlsx"
+    portfolio = compute_portfolio(statement_from(*LINES))
+    ExcelExporter(path).export(value_portfolio(portfolio, {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}), DAY_ONE)
+    assert typed_values(path) == {}  # "unavailable" is not a value
+
+    # The user types WXYZ's current value over "unavailable", as in Excel.
+    workbook = load_workbook(path)
+    workbook["Current Holdings"]["D3"] = 400
+    workbook.save(path)
+
+    holdings = computed(path, "Current Holdings")
+    assert holdings[2][:6] == ["WXYZ", 201, approx(0.167221), 400, approx(0.25), approx(0.990050)]
+    assert holdings[3][:6] == ["Total", 1202, 1, 1600, 1, approx(0.331115)]  # everything follows
+    assert typed_values(path) == {"WXYZ": (Decimal(400), MISSING)}  # and the app finds it next time
 
 
 def entered_on(day: date) -> MarketPrice:
@@ -305,7 +338,7 @@ def test_price_entered_today_is_written_with_a_comment_and_counts_for_history(tm
     result = ExcelExporter(path).export(value_portfolio(portfolio, prices), DAY_TWO)
 
     sheet = load_workbook(path)["Current Holdings"]
-    assert (sheet["D3"].value, sheet["D4"].value) == (400, 1600)
+    assert [row[3] for row in computed(path, "Current Holdings")[2:]] == [400, 1600]
     assert sheet["D2"].comment is None
     assert "entered by hand on 2026-10-13" in sheet["D3"].comment.text
     assert "Includes prices entered by hand" in sheet["D4"].comment.text

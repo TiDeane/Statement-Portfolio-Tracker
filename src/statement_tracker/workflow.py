@@ -14,7 +14,7 @@ from pathlib import Path
 
 from statement_tracker.core.calculator import buys_by_ticker, compute_portfolio, value_portfolio
 from statement_tracker.core.exporters.base import ExportResult
-from statement_tracker.core.exporters.excel import ExcelExporter
+from statement_tracker.core.exporters.excel import MISSING, ExcelExporter, typed_values
 from statement_tracker.core.market_data.pricing import RateBook, exchange_pair, price_in_currency
 from statement_tracker.core.market_data.provider import PriceProvider, PriceUnavailableError, Quote, SymbolInfo
 from statement_tracker.core.models import HoldingValuation, MarketPrice, Portfolio, PortfolioValuation, Statement
@@ -25,6 +25,9 @@ from statement_tracker.settings import Settings, TickerChoice
 
 STALE_PRICE_AGE = timedelta(days=5)
 """A latest price older than this (longer than a holiday weekend) is pointed out to the user."""
+
+TYPED_VALUE_TOLERANCE = Decimal("0.01")
+"""A value read back from the spreadsheet this close to what the app wrote there is the app's own."""
 
 Progress = Callable[[int, int, str], None]
 """Told how far the work is: steps done, steps in total (0 while unknown), and a short description."""
@@ -55,6 +58,31 @@ def display_name(settings: Settings, ticker: str) -> str:
     return f"({ticker}) {name}" if name else ticker
 
 
+def values_typed_in(settings: Settings, path: Path | None) -> tuple[dict[str, Decimal], datetime | None]:
+    """Read the current values the user typed into the spreadsheet where the app had no current price.
+
+    A value counts only if it differs from what the app itself last wrote in that cell: an old
+    value left in a sheet the app could not update (open in Excel, say), or one whose price was
+    forgotten in Settings, is not taken for a new one. When it is not known what the app last
+    wrote, only values typed over "unavailable" count. Returns them by ticker, with when the file
+    was last saved, taken as when they were typed. Nothing if there is no spreadsheet yet.
+    """
+    if path is None or not path.exists():
+        return {}, None
+    saved = datetime.fromtimestamp(path.stat().st_mtime, UTC)
+    written = PriceCache.beside(settings.path).written(path)
+    typed = {}
+    for ticker, (value, kind) in typed_values(path, settings.holdings_sheet).items():
+        if written is None:
+            new = kind == MISSING
+        else:
+            before = written.get(ticker)
+            new = before is None or abs(before - value) >= TYPED_VALUE_TOLERANCE
+        if new:
+            typed[ticker] = value
+    return typed, saved
+
+
 def update_spreadsheet(report: Report, settings: Settings, path: Path, today: date) -> ExportResult:
     """Write the report to the Excel workbook at ``path`` and remember that workbook."""
     names = {}
@@ -64,6 +92,10 @@ def update_spreadsheet(report: Report, settings: Settings, path: Path, today: da
             names[holding.position.ticker] = name
     exporter = ExcelExporter(path, settings.holdings_sheet, settings.history_sheet, names)
     result = exporter.export(report.valuation, today)
+    # What was written, to tell values typed there later from the app's own (see values_typed_in).
+    cache = PriceCache.beside(settings.path)
+    cache.wrote(path, {holding.position.ticker: holding.market_value for holding in report.valuation.holdings})
+    cache.save()
     if settings.spreadsheet_path != path:
         settings.spreadsheet_path = path
         settings.save()
@@ -94,6 +126,8 @@ def build_report(
     progress: Progress | None = None,
     price_cache: PriceCache | None = None,
     entered_prices: Mapping[str, Decimal] | None = None,
+    typed_values: Mapping[str, Decimal] | None = None,
+    typed_at: datetime | None = None,
 ) -> Report:
     """Load a statement and value its open positions at current prices.
 
@@ -110,6 +144,10 @@ def build_report(
     prices the user typed in. They are kept like those given to ``with_entered_prices``:
     used, ahead of last known prices, whenever Yahoo has no price for the ticker, and
     dropped as soon as Yahoo has one.
+
+    ``typed_values`` (ticker -> current value of the whole holding) were typed into the
+    spreadsheet by the user, at ``typed_at``: see ``values_typed_in``. They are kept as
+    entered prices too, where Yahoo has no price, unless one was entered here since.
 
     ``progress`` is called as work advances with (steps done, steps in total,
     what is happening now). The total is 0 until the statement has been read.
@@ -211,6 +249,21 @@ def build_report(
             general_notes.append(
                 f"{ticker} is not an investment you still hold, so the price entered for it was not used."
             )
+
+    # Current values the user typed into the spreadsheet (see values_typed_in): kept the same way, as
+    # a price per share, where Yahoo still has no price. A value entered here since the file was last
+    # saved is newer, and stays.
+    shares = {position.ticker: position.shares for position in positions}
+    typed_at = typed_at or now
+    for ticker, value in (typed_values or {}).items():
+        symbol = decided.get(ticker, (None, False))[0]
+        fresh = symbol is not None and isinstance(quotes.get(symbol), Quote)
+        if ticker not in shares or ticker in entered_now or fresh:
+            continue
+        newer = cache.entered(ticker, statement.currency)
+        if newer is not None and newer.as_of is not None and newer.as_of >= typed_at:
+            continue
+        cache.enter(ticker, value / shares[ticker], statement.currency, typed_at)
 
     # 3. Use them in statement order, exactly as one ticker at a time would.
     report_progress(steps, steps, "Adding everything up...")

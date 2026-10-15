@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -34,6 +35,7 @@ class PriceCache:
         self.path = path
         self._entries: dict[str, dict[str, Any]] = {}
         self._entered: dict[str, dict[str, Any]] = {}
+        self._written: dict[str, dict[str, Any]] = {}
         self._changed = False
 
     @classmethod
@@ -49,6 +51,7 @@ class PriceCache:
             data = json.loads(path.read_text(encoding="utf-8"))
             cache._entries = _read(data.get("prices"))
             cache._entered = _read(data.get("entered"))
+            cache._written = _read(data.get("written"))
         except (OSError, ValueError, AttributeError):
             pass
         return cache
@@ -110,6 +113,24 @@ class PriceCache:
         if self._entered.pop(ticker, None) is not None:
             self._changed = True
 
+    def wrote(self, spreadsheet: Path, values: Mapping[str, Decimal | None]) -> None:
+        """Keep the current values just written to ``spreadsheet``, by ticker (None for "unavailable"),
+        so that values typed there later can be told from the app's own."""
+        self._written[str(spreadsheet)] = {
+            ticker: None if value is None else str(value) for ticker, value in values.items()
+        }
+        self._changed = True
+
+    def written(self, spreadsheet: Path) -> dict[str, Decimal | None] | None:
+        """The values last written to ``spreadsheet``, or None if it is not known what they were."""
+        record = self._written.get(str(spreadsheet))
+        if record is None:
+            return None
+        try:
+            return {str(ticker): None if value is None else Decimal(str(value)) for ticker, value in record.items()}
+        except (InvalidOperation, AttributeError):
+            return None
+
     def save(self) -> None:
         """Write the prices if any changed, replacing the file in one step. Failures are ignored."""
         if not self._changed:
@@ -117,6 +138,8 @@ class PriceCache:
         data: dict[str, Any] = {"prices": dict(sorted(self._entries.items()))}
         if self._entered:
             data["entered"] = dict(sorted(self._entered.items()))
+        if self._written:
+            data["written"] = dict(sorted(self._written.items()))
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             temporary = self.path.with_suffix(".tmp")

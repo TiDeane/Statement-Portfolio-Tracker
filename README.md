@@ -122,7 +122,7 @@ The last row is the total. Investments you have sold completely are not listed.
 
 **To rename an investment**, double-click its name in the table (or select it and press F2) and type the name you want. Enter saves it, Esc cancels. The name is remembered and also written to your spreadsheet, straight away. Leave it empty to go back to the fund's name from Yahoo Finance. Settings has the same option.
 
-**"unavailable"** means the app could not get a current price for that investment. Its row is shown in grey, with "not in total" in the percentage columns, and the Total and the percentages cover the other investments only. The app never guesses a value for it.
+**"unavailable"** means the app could not get a current price for that investment. Its row is shown in grey, with "not in total" in the percentage columns, and the Total and the percentages cover the other investments only. The app never guesses a value for it. Its **Worth now** cell is shown in red: you can enter a price there yourself (see below).
 
 **A value marked with \*** uses the last price the app fetched on an earlier day, because Yahoo Finance could not be reached this time. Point at the value to see the date of that price. The Total is marked too, since it includes that value. Try again later for up-to-date values. An investment the app has never fetched a price for is shown as unavailable instead.
 
@@ -147,6 +147,8 @@ A value that uses the last price from an earlier day has a comment (a small red 
 A value that uses a price you entered has a comment saying so and on which day. A price you entered today counts as today's, so the day's row is written. A price you entered on an earlier day does not, and then no row is written, as above.
 
 An investment without a price keeps its row in **Current Holdings**, in grey, with "not in total" and a comment, and the Total covers the rest. The day's row in **Portfolio History** is still written for the rest, with Net Worth and Gain vs Deposits shown as unavailable, so the history can dip on a day an investment is left out. Entering its price yourself avoids that.
+
+**You can also fill in a missing value in the spreadsheet itself.** Type the investment's current value (what the whole investment is worth now, as the Revolut app shows it) over "unavailable" in its **Current Value** cell, which is shown in red to say a value can be typed there, as the same cell is in the app. The row turns black and its percentages, the gain and the Total row update straight away, in Excel or Google Sheets. The next time you press the green button, the app picks up the value you typed and keeps it, like a price entered in the app: it is marked as yours, and used until Yahoo Finance has a price again.
 
 Your own sheets in that file are left exactly as they are. Before the app changes an existing spreadsheet for the first time, it saves a copy next to it named `<your file>_backup_before_first_update.xlsx`.
 

@@ -28,6 +28,8 @@ class Palette:
     table_header: str
     good: str
     bad: str
+    missing: str
+    """Behind a value that is missing and can be typed in: a light red, as in the spreadsheet."""
 
 
 LIGHT = Palette(
@@ -42,6 +44,7 @@ LIGHT = Palette(
     table_header="#E1F1E7",
     good="#1B7F4F",
     bad="#C0392B",
+    missing="#FFC7CE",  # Excel's own light red ("Bad" cell style), as in the spreadsheet
 )
 DARK = Palette(
     background="#15171C",
@@ -55,6 +58,7 @@ DARK = Palette(
     table_header="#1D3328",
     good="#4CC38A",
     bad="#FF7B72",
+    missing="#5A2A2E",  # a dark red that keeps the text readable
 )
 
 _current = LIGHT

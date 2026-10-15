@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from fakes import SAMPLE, FakeProvider, ranges_around, write_statement
+from openpyxl import load_workbook
 
 from statement_tracker import cli
 from statement_tracker.core.calculator import buys_by_ticker
@@ -16,7 +17,7 @@ from statement_tracker.core.market_data.provider import PriceUnavailableError, Q
 from statement_tracker.core.parser import load_statement
 from statement_tracker.core.ticker_resolver import resolve_ticker
 from statement_tracker.settings import Settings, TickerChoice
-from statement_tracker.workflow import build_report, with_entered_prices
+from statement_tracker.workflow import build_report, values_typed_in, with_entered_prices
 
 EQQB_BUYS = buys_by_ticker(load_statement(SAMPLE))["EQQB"]
 
@@ -444,6 +445,68 @@ def test_entered_price_is_used_ahead_of_the_last_known_one_and_dropped_once_yaho
     # Dropped: the next offline run goes back to the last price fetched.
     later = build_report(SAMPLE, FakeProvider(offline=True), Settings.load(settings_path))
     assert later.valuation.holdings[0].price.last_known
+
+
+def test_a_value_typed_into_the_spreadsheet_is_kept_like_an_entered_price(tmp_path: Path) -> None:
+    settings_path, sheet = tmp_path / "settings.json", tmp_path / "mine.xlsx"
+    statement = write_statement(tmp_path, *TWO_HOLDINGS)
+    args = (str(statement), "--symbol", "ABCD=ABCD.DE", "--spreadsheet", str(sheet))
+    run_cli(*args, provider=abcd_only(), settings=settings_path)  # WXYZ: "unavailable" in the sheet
+    workbook = load_workbook(sheet)
+    workbook["Current Holdings"]["D3"] = 404  # typed by the user: the value of 4 shares
+    workbook.save(sheet)
+
+    code, output, _ = run_cli(*args, provider=abcd_only(), settings=settings_path)
+
+    assert code == 0
+    assert output.splitlines()[2] == "WXYZ,201.00,16.72,404.00,25.19,203.00,101.00"  # 404 of 1604
+    assert load_workbook(sheet)["Current Holdings"]["D3"].value == 404
+    assert "entered by hand" in load_workbook(sheet)["Current Holdings"]["D3"].comment.text
+
+    # Kept for the next runs, whatever the sheet says, until Yahoo has a price for WXYZ.
+    again = build_report(statement, abcd_only(), Settings.load(settings_path))
+    assert again.valuation.holdings[1].price.entered and again.valuation.holdings[1].market_value == 404
+    with_yahoo = abcd_only()
+    with_yahoo.add("WXYZ.DE", "EUR", price="102")
+    code, output, _ = run_cli(*args, "--symbol", "WXYZ=WXYZ.DE", provider=with_yahoo, settings=settings_path)
+    assert output.splitlines()[2].startswith("WXYZ,201.00,16.72,408.00,")
+
+
+def test_values_the_app_wrote_itself_are_not_taken_for_typed_ones(tmp_path: Path) -> None:
+    settings_path, sheet = tmp_path / "settings.json", tmp_path / "mine.xlsx"
+    args = (str(SAMPLE), "--spreadsheet", str(sheet))
+    run_cli(*args, provider=sample_provider(), settings=settings_path)  # last known: 400 a share
+    run_cli(*args, provider=FakeProvider(offline=True), settings=settings_path)  # written with its comment
+    assert "Last known price" in load_workbook(sheet)["Current Holdings"]["D2"].comment.text
+
+    # The value the app wrote comes back from the sheet as a float, and is not taken for a typed one.
+    assert values_typed_in(Settings.load(settings_path), sheet)[0] == {}
+    report = build_report(SAMPLE, FakeProvider(offline=True), Settings.load(settings_path))
+    assert report.valuation.holdings[0].price.last_known
+
+    # Typed over it, a different value is.
+    workbook = load_workbook(sheet)
+    workbook["Current Holdings"]["D2"] = 700
+    workbook.save(sheet)
+    assert values_typed_in(Settings.load(settings_path), sheet)[0] == {"EQQB": Decimal(700)}
+
+
+def test_a_spreadsheet_left_behind_does_not_undo_a_newer_value(tmp_path: Path) -> None:
+    settings_path, sheet = tmp_path / "settings.json", tmp_path / "mine.xlsx"
+    statement = write_statement(tmp_path, *TWO_HOLDINGS)
+    args = (str(statement), "--symbol", "ABCD=ABCD.DE", "--spreadsheet", str(sheet))
+    run_cli(*args, "--price", "WXYZ=100", provider=abcd_only(), settings=settings_path)
+    assert load_workbook(sheet)["Current Holdings"]["D3"].value == 400
+
+    # A newer value, entered while the spreadsheet could not be updated (open in Excel, say).
+    run_cli(*args, "--no-spreadsheet", "--price", "WXYZ=50", provider=abcd_only(), settings=settings_path)
+    assert load_workbook(sheet)["Current Holdings"]["D3"].value == 400  # the sheet still has the old one
+
+    code, output, _ = run_cli(*args, provider=abcd_only(), settings=settings_path)
+
+    assert code == 0
+    assert output.splitlines()[2].startswith("WXYZ,201.00,16.72,200.00,")  # the newer value, not the sheet's
+    assert load_workbook(sheet)["Current Holdings"]["D3"].value == 200
 
 
 def test_cli_price_is_used_when_yahoo_has_none(tmp_path: Path) -> None:

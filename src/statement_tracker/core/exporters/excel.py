@@ -31,7 +31,18 @@ DEFAULT_HISTORY_SHEET = "Portfolio History"
 UNAVAILABLE = "unavailable"
 NOT_IN_TOTAL = "not in total"
 TOTAL_LABEL = "Total"
+MISSING_COMMENT = "No current price from Yahoo"
+TYPE_A_VALUE = (
+    f"{MISSING_COMMENT}. You can type this investment's current value here, for example the one "
+    "the Revolut app shows: the totals follow, and the app keeps it next time."
+)
+LAST_KNOWN_COMMENT = "Last known price"
+ENTERED_COMMENT = "Price per share entered by hand"
 _LEFT_OUT_COLOUR = "808080"
+_TYPE_HERE_COLOUR = "FFC7CE"
+"""Light red, Excel's own "Bad" cell colour: the value is missing and can be typed in."""
+_TYPE_HERE_TEXT_COLOUR = "9C0006"
+"""The dark red text Excel puts on that colour."""
 
 HOLDINGS_HEADER = (
     "Investment",
@@ -91,6 +102,7 @@ _PERCENT_FORMAT = "0.00%"
 _DATE_FORMAT = "yyyy-mm-dd"
 # Column number -> number format. Columns not listed keep Excel's general format.
 _VALUE_COLUMN = HOLDINGS_HEADER.index("Current Value") + 1
+_LAST_COLUMN = chr(ord("A") + len(HOLDINGS_HEADER) - 1)
 _HOLDINGS_FORMATS = {
     2: _MONEY_FORMAT,
     3: _PERCENT_FORMAT,
@@ -142,12 +154,17 @@ def _shown_length(value: Any, number_format: str | None) -> int:
 
 
 def _style(
-    sheet: Any, formats: dict[int, str], bold_last_row: bool = False, grey_rows: frozenset[int] = frozenset()
+    sheet: Any,
+    formats: dict[int, str],
+    bold_last_row: bool = False,
+    shown: Mapping[tuple[int, int], Any] | None = None,
 ) -> None:
     """Coloured bold header, black outline on every cell, number formats, columns wide enough for their text.
 
-    ``grey_rows`` are written in grey: rows left out of the Total.
+    ``shown`` gives, by (row, column), what a formula cell shows, so that the column is sized by
+    that rather than by the formula's text.
     """
+    shown = shown or {}
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import column_index_from_string, get_column_letter
 
@@ -170,11 +187,9 @@ def _style(
             else:
                 if number_format:
                     cell.number_format = number_format
-                cell.font = Font(
-                    bold=bold_last_row and row == sheet.max_row, color=_LEFT_OUT_COLOUR if row in grey_rows else None
-                )
+                cell.font = Font(bold=bold_last_row and row == sheet.max_row)
                 cell.alignment = Alignment(vertical="center")
-                widest = max(widest, _shown_length(cell.value, number_format))
+                widest = max(widest, _shown_length(shown.get((row, column), cell.value), number_format))
         sheet.column_dimensions[get_column_letter(column)].width = widest + 3
     for row in range(1, sheet.max_row + 1):
         sheet.row_dimensions[row].height = _HEADER_ROW_HEIGHT if row == 1 else _ROW_HEIGHT
@@ -183,6 +198,69 @@ def _style(
         if column_index_from_string(letter) > sheet.max_column:
             del sheet.column_dimensions[letter]
     sheet.freeze_panes = "A2"
+
+
+def _mark_missing_values(sheet: Any, last_row: int) -> None:
+    """Show, in Excel itself, each investment row without a current value: in grey, as it is left out
+    of the totals, and with its Current Value cell filled in red, to say a value can be typed there.
+    Typing one makes the row look like the others again. Replaces the formatting rules of this sheet."""
+    from openpyxl.formatting.formatting import ConditionalFormattingList
+    from openpyxl.formatting.rule import FormulaRule
+    from openpyxl.styles import Font, PatternFill
+
+    sheet.conditional_formatting = ConditionalFormattingList()  # the app's sheet: no rules but its own
+    if last_row < 2:
+        return
+    missing = "NOT(ISNUMBER($D2))"
+    # Added first, so that it comes first for Excel: its text colour wins over the row's grey.
+    fill = PatternFill(fill_type="solid", start_color=_TYPE_HERE_COLOUR, end_color=_TYPE_HERE_COLOUR)
+    sheet.conditional_formatting.add(
+        f"D2:D{last_row}", FormulaRule(formula=[missing], fill=fill, font=Font(color=_TYPE_HERE_TEXT_COLOUR))
+    )
+    sheet.conditional_formatting.add(
+        f"A2:{_LAST_COLUMN}{last_row}", FormulaRule(formula=[missing], font=Font(color=_LEFT_OUT_COLOUR))
+    )
+
+
+MISSING, ENTERED, LAST_KNOWN = "missing", "entered", "last known"
+"""What the app had written in a Current Value cell it commented on, as ``typed_values`` reports it."""
+_COMMENT_KINDS = (
+    (MISSING_COMMENT, MISSING),
+    (ENTERED_COMMENT, ENTERED),
+    (LAST_KNOWN_COMMENT, LAST_KNOWN),
+)
+
+
+def typed_values(path: Path, holdings_sheet: str = DEFAULT_HOLDINGS_SHEET) -> dict[str, tuple[Decimal, str]]:
+    """Return, by ticker, the current values found in the app's holdings sheet where the app left a
+    comment, with what the app had written there: MISSING ("unavailable", so any number there was
+    typed by the user), ENTERED (a price the user entered) or LAST_KNOWN (an earlier price).
+
+    For the last two the number may be the app's own; the caller tells them apart. A file that
+    cannot be read gives nothing: this must never stop a run.
+    """
+    from openpyxl import load_workbook
+
+    try:
+        workbook = load_workbook(path)
+    except Exception:
+        return {}
+    if holdings_sheet not in workbook.sheetnames:
+        return {}
+    sheet = workbook[holdings_sheet]
+    found: dict[str, tuple[Decimal, str]] = {}
+    for row in range(2, sheet.max_row + 1):
+        label, cell = sheet.cell(row=row, column=1).value, sheet.cell(row=row, column=_VALUE_COLUMN)
+        if not isinstance(label, str) or label == TOTAL_LABEL or cell.comment is None:
+            continue
+        # Excel may put the author's name before the text, so the text is looked for, not matched.
+        kind = next((kind for marker, kind in _COMMENT_KINDS if marker in (cell.comment.text or "")), None)
+        value = cell.value
+        if kind and isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+            # The first column reads "(TICKER) Name", or the ticker alone.
+            ticker = label[1 : label.index(")")] if label.startswith("(") and ")" in label else label
+            found[ticker.strip()] = (Decimal(str(value)), kind)
+    return found
 
 
 class ExcelExporter:
@@ -219,13 +297,13 @@ class ExcelExporter:
             for name in [name for name in workbook.sheetnames if name not in (self.holdings_sheet, self.history_sheet)]:
                 del workbook[name]
 
-        written = self._write_holdings(holdings, valuation)
+        written, shown = self._write_holdings(holdings, valuation)
         # A history row is dated today, so it is only written when every value is today's: a price
         # typed in today counts, a last known one or one typed in on an earlier day does not.
         current = valuation.prices_are_from(today)
         history_action = self._write_history(history, valuation, today) if current else "skipped"
-        grey_rows = frozenset(row for row, holding in enumerate(valuation.holdings, start=2) if not holding.in_totals)
-        _style(holdings, _HOLDINGS_FORMATS, bold_last_row=written > 0, grey_rows=grey_rows)
+        _style(holdings, _HOLDINGS_FORMATS, bold_last_row=written > 0, shown=shown)
+        _mark_missing_values(holdings, written + 1)
         _style(history, _HISTORY_FORMATS)
 
         notes: list[str] = []
@@ -338,76 +416,92 @@ class ExcelExporter:
 
     # -- sheet contents ----------------------------------------------------------
 
-    def _write_holdings(self, sheet: Any, valuation: PortfolioValuation) -> int:
-        """Rewrite the whole table. The sheet itself stays, so formulas pointing at it keep working."""
+    def _write_holdings(self, sheet: Any, valuation: PortfolioValuation) -> tuple[int, dict[tuple[int, int], Any]]:
+        """Rewrite the whole table. The sheet itself stays, so formulas pointing at it keep working.
+
+        The Current Value of each investment is a number, or "unavailable" for the user to type a
+        value over. Everything worked out from those values is an Excel formula, so the shares, the
+        gains and the Total row follow what is typed, as the app's own table does: an investment
+        without a value is left out of the totals. Returns the rows written, and for each formula
+        cell the value it shows now, to size the columns by.
+        """
         if sheet.max_column > len(HOLDINGS_HEADER):
             sheet.delete_cols(len(HOLDINGS_HEADER) + 1, sheet.max_column - len(HOLDINGS_HEADER))
         sheet.delete_rows(1, sheet.max_row)
         rows: list[list[Any]] = [list(HOLDINGS_HEADER)]
+        shown: dict[tuple[int, int], Any] = {}
         currency = valuation.portfolio.currency
-        # "Current %" is a formula, as in the user's own sheet: the row's current value divided by
-        # the Total row's. Without a total there is nothing to divide by, so it says unavailable.
-        total_row = len(valuation.holdings) + 2
-        has_total = valuation.total_market_value is not None and valuation.total_market_value > 0
+        total = len(valuation.holdings) + 2
+        values = f"D2:D{total - 1}"
+        # With no value at all, nothing is left out: the totals are simply unavailable.
+        none_yet = f"COUNT({values})=0"
+
+        def in_totals(column: str) -> str:
+            """The sum of ``column`` over the investments the totals cover."""
+            span = f"{column}2:{column}{total - 1}"
+            return f"IF({none_yet},SUM({span}),SUMPRODUCT({span},--ISNUMBER({values})))"
+
         for row, holding in enumerate(valuation.holdings, start=2):
             position = holding.position
             name = self.index_names.get(position.ticker)
-            if not holding.in_totals:
-                share_of_invested, share_of_value = NOT_IN_TOTAL, NOT_IN_TOTAL
-            else:
-                share_of_invested = _percent(holding.invested_percent)
-                share_of_value = f"=D{row}/D${total_row}" if has_total else UNAVAILABLE
             rows.append(
                 [
                     f"({position.ticker}) {name}" if name else position.ticker,
                     position.cost_basis,
-                    share_of_invested,
+                    f'=IF(OR(ISNUMBER(D{row}),{none_yet}),B{row}/B${total},"{NOT_IN_TOTAL}")',
                     _cell(holding.market_value),
-                    share_of_value,
-                    _percent(holding.percent_change),
+                    f'=IF(ISNUMBER(D{row}),D{row}/D${total},IF({none_yet},"{UNAVAILABLE}","{NOT_IN_TOTAL}"))',
+                    f'=IF(ISNUMBER(D{row}),D{row}/B{row}-1,"{UNAVAILABLE}")',
                     position.dividends,
                     currency,
                 ]
             )
+            shown[row, 3] = _percent(holding.invested_percent) if holding.in_totals else NOT_IN_TOTAL
+            shown[row, 5] = _percent(holding.allocation_percent) if holding.in_totals else NOT_IN_TOTAL
+            shown[row, 6] = _percent(holding.percent_change)
         if valuation.holdings:
             invested = valuation.invested_in_totals
             unrealized = valuation.unrealized_pnl
             rows.append(
                 [
                     TOTAL_LABEL,
-                    invested,
-                    _percent(_HUNDRED if invested > 0 else None),
-                    _cell(valuation.total_market_value),
-                    f"=D{total_row}/D${total_row}" if has_total else UNAVAILABLE,
-                    _cell(unrealized / invested if unrealized is not None and invested > 0 else None),
-                    sum(
-                        (holding.position.dividends for holding in valuation.holdings if holding.in_totals), Decimal(0)
-                    ),
+                    f"={in_totals('B')}",
+                    f'=IF(B{total}>0,1,"{UNAVAILABLE}")',
+                    f'=IF({none_yet},"{UNAVAILABLE}",SUM({values}))',
+                    f'=IF(ISNUMBER(D{total}),1,"{UNAVAILABLE}")',
+                    f'=IF(ISNUMBER(D{total}),D{total}/B{total}-1,"{UNAVAILABLE}")',
+                    f"={in_totals('G')}",
                     currency,
                 ]
             )
-        for row_number, values in enumerate(rows, start=1):
-            for column, value in enumerate(values, start=1):
+            shown[total, 2] = invested
+            shown[total, 3] = _percent(_HUNDRED if invested > 0 else None)
+            shown[total, 4] = _cell(valuation.total_market_value)
+            shown[total, 5] = _percent(_HUNDRED if valuation.total_market_value else None)
+            shown[total, 6] = _cell(unrealized / invested if unrealized is not None and invested > 0 else None)
+            shown[total, 7] = sum(
+                (holding.position.dividends for holding in valuation.holdings if holding.in_totals), Decimal(0)
+            )
+        for row_number, row_values in enumerate(rows, start=1):
+            for column, value in enumerate(row_values, start=1):
                 sheet.cell(row=row_number, column=column, value=value)
 
         # A value at a price from an earlier run, or at one the user typed in, gets a comment (Excel
-        # shows a red corner) saying which and from when.
+        # shows a red corner) saying which and from when. A missing one says it can be typed in.
         for row, holding in enumerate(valuation.holdings, start=2):
             price = holding.price
             if price is not None and price.last_known:
                 day = price.as_of.date().isoformat() if price.as_of else "an earlier day"
                 sheet.cell(row=row, column=_VALUE_COLUMN).comment = _comment(
-                    f"Last known price, from {day}. Yahoo could not be reached when this was written."
+                    f"{LAST_KNOWN_COMMENT}, from {day}. Yahoo could not be reached when this was written."
                 )
             elif price is not None and price.entered:
                 day = price.as_of.astimezone().date().isoformat() if price.as_of else "an earlier day"
                 sheet.cell(row=row, column=_VALUE_COLUMN).comment = _comment(
-                    f"Price per share entered by hand on {day}, not from Yahoo."
+                    f"{ENTERED_COMMENT} on {day}, not from Yahoo."
                 )
-            elif not holding.in_totals:
-                sheet.cell(row=row, column=_VALUE_COLUMN).comment = _comment(
-                    "No current price, so this investment is left out of the Total."
-                )
+            elif price is None:
+                sheet.cell(row=row, column=_VALUE_COLUMN).comment = _comment(TYPE_A_VALUE)
         if valuation.total_market_value is not None:
             total_notes = []
             if valuation.uses_last_known_prices:
@@ -415,8 +509,8 @@ class ExcelExporter:
             if valuation.uses_entered_prices:
                 total_notes.append("Includes prices entered by hand.")
             if total_notes:
-                sheet.cell(row=total_row, column=_VALUE_COLUMN).comment = _comment(" ".join(total_notes))
-        return len(valuation.holdings)
+                sheet.cell(row=total, column=_VALUE_COLUMN).comment = _comment(" ".join(total_notes))
+        return len(valuation.holdings), shown
 
     def _write_history(self, sheet: Any, valuation: PortfolioValuation, today: date) -> str:
         """Add today's row, or update it if today already has one. Other rows are never touched."""

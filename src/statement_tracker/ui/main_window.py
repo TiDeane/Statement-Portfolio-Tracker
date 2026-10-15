@@ -68,6 +68,7 @@ from statement_tracker.workflow import (
     needs_price,
     price_steps,
     update_spreadsheet,
+    values_typed_in,
     with_entered_prices,
 )
 
@@ -585,8 +586,15 @@ class MainWindow(QMainWindow):
             self.progressed.emit(done, total + extra_steps if total else 0, text)
 
         def work() -> Outcome:
+            typed, typed_at = values_typed_in(self._settings, spreadsheet)
             report = build_report(
-                statement, self._provider_factory(), self._settings, chooser=self._bridge, progress=progress
+                statement,
+                self._provider_factory(),
+                self._settings,
+                chooser=self._bridge,
+                progress=progress,
+                typed_values=typed,
+                typed_at=typed_at,
             )
             if spreadsheet is None:
                 return report, None, None
@@ -870,6 +878,10 @@ class MainWindow(QMainWindow):
                     item.setForeground(QBrush(QColor(colours.good if gain > 0 else colours.bad)))
                 elif text in (UNAVAILABLE, NOT_IN_TOTAL) or row_number in left_out_rows:
                     item.setForeground(QBrush(QColor(colours.muted)))
+                if column == WORTH_COLUMN and not is_total and valuation.holdings[row_number].price is None:
+                    # In red, as in the spreadsheet: the value is missing, and a price can be entered here.
+                    item.setBackground(QBrush(QColor(colours.missing)))
+                    item.setForeground(QBrush(QColor(colours.text)))
                 if is_total:
                     font = QFont(item.font())
                     font.setBold(True)

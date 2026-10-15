@@ -24,7 +24,7 @@ from statement_tracker.core.market_data.provider import PriceProvider
 from statement_tracker.core.models import MarketPrice
 from statement_tracker.core.ticker_resolver import Confidence, Resolution
 from statement_tracker.settings import Settings
-from statement_tracker.workflow import Chooser, Report, build_report, update_spreadsheet
+from statement_tracker.workflow import Chooser, Report, build_report, update_spreadsheet, values_typed_in
 
 UNAVAILABLE = "unavailable"
 NOT_IN_TOTAL = "not in total"
@@ -279,6 +279,9 @@ def main(
 
             provider = YahooProvider()
         interactive = not args.no_prompt and sys.stdin is not None and sys.stdin.isatty()
+        # Current values typed into the workbook this run updates, where it had no price.
+        workbook = None if args.no_spreadsheet else (args.spreadsheet or settings.spreadsheet_path)
+        typed, typed_at = values_typed_in(settings, workbook.expanduser().resolve() if workbook else None)
         report = build_report(
             args.statement,
             provider,
@@ -287,6 +290,8 @@ def main(
             symbol_overrides=overrides,
             ignore_unknown_types=args.ignore_unknown_types,
             entered_prices=entered,
+            typed_values=typed,
+            typed_at=typed_at,
         )
     except UserFacingError as error:
         print(f"{error.what_happened}\n{error.what_to_do}", file=errors)

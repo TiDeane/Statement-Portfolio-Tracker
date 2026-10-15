@@ -546,6 +546,24 @@ def test_an_investment_is_renamed_by_typing_in_its_cell(app, tmp_path: Path) -> 
     assert Settings.load(tmp_path / "settings.json").index_names == {}
 
 
+def test_a_value_typed_into_the_spreadsheet_is_used_on_the_next_run(app, tmp_path: Path) -> None:
+    window, errors = make_window(tmp_path, FakeProvider(offline=True))
+    spreadsheet = tmp_path / "mine.xlsx"
+    window.set_statement(SAMPLE)
+    window.set_spreadsheet(spreadsheet)
+    run(app, window)
+    assert window.table.item(0, 3).text() == "unavailable"
+    workbook = load_workbook(spreadsheet)
+    workbook["Current Holdings"]["D2"] = 600  # typed by the user over "unavailable"
+    workbook.save(spreadsheet)
+
+    run(app, window)
+
+    assert errors == []
+    assert window.table.item(0, 3).text().endswith(ENTERED_MARK)
+    assert "600" in window.table.item(0, 3).text()
+
+
 def test_packaging_smoke_test_reads_the_sample_and_writes_a_spreadsheet(app, tmp_path: Path) -> None:
     import json
 
@@ -631,14 +649,20 @@ def test_prices_line_appears_only_when_a_price_is_missing(app, tmp_path: Path) -
     window.table.cellDoubleClicked.emit(0, 3)
     settle(app)
     assert asked == []  # a current price from Yahoo: nothing to enter
+    assert window.table.item(0, 3).background().style() == Qt.BrushStyle.NoBrush
 
     (tmp_path / "other").mkdir()  # no last known price there
     offline, _ = make_window(tmp_path / "other", FakeProvider(offline=True))
     offline.set_statement(SAMPLE)
     run(app, offline)
     assert not offline.price_bar.isHidden()
-    assert offline.table.item(0, 3).text() == "unavailable"
-    assert "Double-click to enter a price" in offline.table.item(0, 3).toolTip()
+    worth = offline.table.item(0, 3)
+    assert worth.text() == "unavailable"
+    assert "Double-click to enter a price" in worth.toolTip()
+    # In red, as in the spreadsheet: missing, and a price can be entered there. Only that cell.
+    assert worth.background().color().name().upper() == theme.current().missing.upper()
+    assert offline.table.item(0, 1).background().style() == Qt.BrushStyle.NoBrush
+    assert offline.table.item(1, 3).background().style() == Qt.BrushStyle.NoBrush  # nor the Total
 
 
 def test_entered_price_fills_in_the_table_and_the_spreadsheet(app, tmp_path: Path) -> None:

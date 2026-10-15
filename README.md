@@ -101,9 +101,11 @@ The **Settings** button lists the investments the app remembers.
 Select an investment to:
 
 - **Choose the listing on the next run**: nothing changes right away. The next time you press the green button, the app shows you the list of listings for it again to pick from. Until then, the current one is kept.
-- **Forget** it: the app matches it again on the next run, as on the first day.
+- **Forget** it: the app matches it again on the next run, as on the first day. The name you gave it and any price you entered for it are removed too.
 
-**Forget all...** does the same for every investment at once. Your spreadsheet choice and the last known prices are kept.
+**Forget all...** does the same for every investment at once. Your spreadsheet choice and the last prices fetched from Yahoo Finance are kept.
+
+The list also shows investments you entered a price for, even if the app never matched them to a listing, so that you can forget those prices too.
 
 Settings also has the switch **When the app cannot tell which listing an investment is, use the first one without asking**.
 
@@ -133,7 +135,7 @@ When Yahoo Finance has no current price for an investment, a line appears under 
 - **Try again** fetches the prices again, as the green button does.
 - **Enter a price...** lets you type in the price of one share yourself, for example the one shown in the Revolut app. You can also double-click the investment's row in the table, anywhere but its name, which double-clicking renames. The app adds everything up again straight away and updates your spreadsheet, without fetching anything.
 
-A value worked out from a price you entered is marked **(your price)**, and so is the Total. The app keeps that price for the next times, so you don't have to type it again, and uses it whenever Yahoo Finance has no price for that investment. As soon as Yahoo Finance has one again, the app uses Yahoo's and forgets yours. To change a price you entered, double-click its value in **Worth now**.
+A value worked out from a price you entered is marked **(your price)**, and so is the Total. The app keeps that price for the next times, so you don't have to type it again, and uses it whenever Yahoo Finance has no price for that investment. As soon as Yahoo Finance has one again, the app uses Yahoo's and forgets yours. To change a price you entered, double-click its value in **Worth now**; to remove it, use **Forget** in Settings.
 
 ## Your Excel spreadsheet
 

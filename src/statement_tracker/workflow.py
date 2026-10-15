@@ -297,11 +297,15 @@ def with_entered_prices(
     *,
     now: datetime | None = None,
     price_cache: PriceCache | None = None,
+    remember_listings: bool = True,
 ) -> Report:
     """Value ``report`` again with prices per share the user typed in, without contacting Yahoo.
 
     The prices (ticker -> price in the statement currency) are kept for later runs, and are
-    used whenever Yahoo has no price for that investment, until it has one again.
+    used whenever Yahoo has no price for that investment, until it has one again. With no
+    prices, the report is simply worked out again from what is kept now, for instance after
+    a price was forgotten; ``remember_listings=False`` then keeps it from saving again the
+    listings of investments that were just forgotten.
     """
     if report.lookups is None:
         raise ValueError("This report was not made by build_report, so it cannot be worked out again.")
@@ -310,7 +314,7 @@ def with_entered_prices(
     currency = report.statement.currency
     for ticker, price in entered.items():
         cache.enter(ticker, price, currency, now)
-    new_report, remembered = _assemble(report.lookups, settings, cache, now, set(entered))
+    new_report, remembered = _assemble(report.lookups, settings, cache, now, set(entered), remember_listings)
     if remembered:
         settings.save()
     cache.save()
@@ -342,10 +346,16 @@ def _day(price: MarketPrice) -> str:
 
 
 def _assemble(
-    lookups: Lookups, settings: Settings, cache: PriceCache, now: datetime, entered_now: set[str]
+    lookups: Lookups,
+    settings: Settings,
+    cache: PriceCache,
+    now: datetime,
+    entered_now: set[str],
+    remember_listings: bool = True,
 ) -> tuple[Report, bool]:
     """Turn what was fetched into prices and notes, in statement order. Returns the report and
-    whether the settings changed. ``entered_now`` are the tickers whose price was typed in just now."""
+    whether the settings changed. ``entered_now`` are the tickers whose price was typed in just now.
+    ``remember_listings`` saves the listing of each ticker with a price, as a run does."""
     statement, portfolio = lookups.statement, lookups.portfolio
     currency = statement.currency
     prices: dict[str, MarketPrice] = {}
@@ -415,7 +425,7 @@ def _assemble(
                 f"{ticker}: the price is quoted in {price.quoted_currency} and was converted to "
                 f"{currency} at the current exchange rate."
             )
-        if saved is None or saved.symbol != symbol or (user_chose and not saved.confirmed):
+        if remember_listings and (saved is None or saved.symbol != symbol or (user_chose and not saved.confirmed)):
             choice = TickerChoice(
                 symbol, quote.info.name, quote.info.exchange, quote.info.currency, confirmed=user_chose
             )

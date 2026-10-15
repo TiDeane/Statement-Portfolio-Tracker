@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from statement_tracker.core.errors import UserFacingError
+from statement_tracker.price_cache import PriceCache
 from statement_tracker.settings import Settings
 from statement_tracker.ui import dialogs, theme
 
@@ -41,6 +42,7 @@ NAME_COLUMN = 1
 NAME_TIP = "Double-click a name to change it. Leave it empty to use the fund's name from Yahoo Finance."
 YAHOO_NAME_TIP = "The fund's name from Yahoo Finance. Double-click to use your own name instead."
 ASK_AGAIN_STATUS = "Asks you on the next run"
+ENTERED_PRICE_STATUS = "price entered by you"
 ALWAYS_FIRST_SETTING = "When the app cannot tell which listing an investment is, use the first one without asking"
 NOTHING_REMEMBERED = "No investments are remembered yet. They appear here after your first run."
 
@@ -88,6 +90,10 @@ class SettingsDialog(QDialog):
     def __init__(self, settings: Settings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._settings = settings
+        self._prices = PriceCache.beside(settings.path)
+        """The prices typed in, which forgetting an investment removes too."""
+        self.changed = False
+        """True once anything was changed here, so that the window shows its result again."""
         self._filling = False
         self._select_after_edit: str | None = None
         # Replaceable in tests, like the main window's questions.
@@ -174,13 +180,19 @@ class SettingsDialog(QDialog):
 
     # -- showing -----------------------------------------------------------------
 
+    def _tickers(self) -> list[str]:
+        """Every investment the app keeps something about: a listing, a name or a price typed in."""
+        return sorted(set(self._settings.known_tickers()) | self._prices.entered_tickers())
+
     def _status(self, ticker: str) -> str:
         choice = self._settings.ticker_choices.get(ticker)
         if ticker in self._settings.ask_again:
-            return ASK_AGAIN_STATUS
-        if choice is None:
-            return "Not matched yet"
-        return "Chosen by you" if choice.confirmed else "Matched automatically"
+            status = ASK_AGAIN_STATUS
+        elif choice is None:
+            status = "Not matched yet"
+        else:
+            status = "Chosen by you" if choice.confirmed else "Matched automatically"
+        return f"{status}; {ENTERED_PRICE_STATUS}" if ticker in self._prices.entered_tickers() else status
 
     def _row(self, ticker: str) -> tuple[list[str], bool]:
         """The four texts for a ticker, and whether the name is Yahoo's rather than the user's own."""
@@ -195,7 +207,7 @@ class SettingsDialog(QDialog):
         return [ticker, own or yahoo_name, listing, self._status(ticker)], not own and bool(yahoo_name)
 
     def _refresh(self, select: str | None = None) -> None:
-        tickers = self._settings.known_tickers()
+        tickers = self._tickers()
         muted = QBrush(QColor(theme.current().muted))
         self._filling = True  # filling the table is not the user editing a name
         self.table.setRowCount(len(tickers))
@@ -243,6 +255,8 @@ class SettingsDialog(QDialog):
     # -- changing ----------------------------------------------------------------
 
     def _save(self) -> bool:
+        self.changed = True
+        self._prices.save()  # only if a price was forgotten
         try:
             self._settings.save()
         except OSError as exc:
@@ -311,25 +325,27 @@ class SettingsDialog(QDialog):
             return
         if not self.confirm(
             f"Forget {ticker}?\n\nThe app will match it to a listing again on the next run, asking you if it "
-            "cannot tell, and the name you gave it is removed."
+            "cannot tell. The name you gave it and the price you entered for it are removed."
         ):
             return
         self._settings.forget(ticker)
+        self._prices.forget_entered(ticker)
         if self._save():
             self.message_label.setText(f"{ticker} was forgotten.")
         self._refresh()
 
     def forget_all(self) -> None:
-        """Forget the listing and name of every investment, after asking."""
-        count = len(self._settings.known_tickers())
+        """Forget the listing, name and price typed in of every investment, after asking."""
+        count = len(self._tickers())
         if not count or not self.confirm(
             f"Forget {'your one investment' if count == 1 else f'all {count} investments'}?\n\n"
-            "Their listings and the names you gave them are removed. The app matches them again on the next "
-            "run, asking you when it cannot tell.\n\n"
-            "Your spreadsheet choice and the last known prices are kept."
+            "Their listings, the names you gave them and the prices you entered are removed. The app matches "
+            "them again on the next run, asking you when it cannot tell.\n\n"
+            "Your spreadsheet choice and the last prices fetched from Yahoo Finance are kept."
         ):
             return
         self._settings.forget_all()
+        self._prices.forget_all_entered()
         if self._save():
             self.message_label.setText("All investments were forgotten.")
         self._refresh()

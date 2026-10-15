@@ -109,7 +109,7 @@ class PriceCache:
             return None
 
     def forget_entered(self, ticker: str) -> None:
-        """Drop the price typed in for ``ticker``: Yahoo has one again."""
+        """Drop the price typed in for ``ticker``: Yahoo has one again, or the user asked."""
         if self._entered.pop(ticker, None) is not None:
             self._changed = True
 
@@ -130,6 +130,16 @@ class PriceCache:
             return {str(ticker): None if value is None else Decimal(str(value)) for ticker, value in record.items()}
         except (InvalidOperation, AttributeError):
             return None
+
+    def entered_tickers(self) -> set[str]:
+        """The tickers with a price typed in, in any currency."""
+        return set(self._entered)
+
+    def forget_all_entered(self) -> None:
+        """Drop every price typed in. The last prices fetched from Yahoo are kept."""
+        if self._entered:
+            self._entered.clear()
+            self._changed = True
 
     def save(self) -> None:
         """Write the prices if any changed, replacing the file in one step. Failures are ignored."""

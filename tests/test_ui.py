@@ -29,7 +29,7 @@ from statement_tracker.ui.dialogs import (  # noqa: E402
     PriceChoice,
     parse_price,
 )
-from statement_tracker.ui.settings_dialog import ASK_AGAIN_STATUS, SettingsDialog  # noqa: E402
+from statement_tracker.ui.settings_dialog import ASK_AGAIN_STATUS, ENTERED_PRICE_STATUS, SettingsDialog  # noqa: E402
 from statement_tracker.ui.main_window import (  # noqa: E402
     ENTERED_MARK,
     MIN_TABLE_HEIGHT,
@@ -813,6 +813,63 @@ def test_settings_forget_all_keeps_the_rest(app, tmp_path: Path) -> None:
     assert saved.known_tickers() == [] and not dialog.forget_all_button.isEnabled()
     assert saved.spreadsheet_path == tmp_path / "mine.xlsx"
     assert (tmp_path / "last_prices.json").exists()
+
+
+def test_settings_forget_the_prices_entered_too_but_not_the_ones_fetched(app, tmp_path: Path) -> None:
+    from statement_tracker.price_cache import PriceCache
+
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.set_statement(SAMPLE)
+    run(app, window)  # EQQB matched, and its price fetched
+    settings_path = tmp_path / "settings.json"
+    prices = PriceCache.beside(settings_path)
+    entered_at = datetime(2026, 10, 12, 12, tzinfo=UTC)
+    prices.enter("EQQB", Decimal("410"), "EUR", entered_at)
+    prices.enter("ZQXJ", Decimal("55"), "EUR", entered_at)  # never matched to a listing: only its price is kept
+    prices.save()
+    dialog = SettingsDialog(Settings.load(settings_path))
+    dialog.confirm = lambda question: True
+
+    def row(ticker: str) -> list[str]:
+        (found,) = [r for r in range(dialog.table.rowCount()) if dialog.table.item(r, 0).text() == ticker]
+        return [dialog.table.item(found, column).text() for column in range(4)]
+
+    assert row("ZQXJ") == ["ZQXJ", "", "", f"Not matched yet; {ENTERED_PRICE_STATUS}"]
+    assert row("EQQB")[3] == f"Matched automatically; {ENTERED_PRICE_STATUS}"
+
+    dialog.table.selectRow(1)  # ZQXJ, after EQQB
+    dialog.forget_selected()
+    assert PriceCache.beside(settings_path).entered_tickers() == {"EQQB"}
+    assert dialog.table.rowCount() == 1
+
+    dialog.forget_all()
+    kept = PriceCache.beside(settings_path)
+    assert kept.entered_tickers() == set()
+    assert kept.last_known("EQQB.DE", "EUR") is not None  # the price fetched from Yahoo stays
+    assert dialog.table.rowCount() == 0
+
+
+def test_forgetting_in_settings_shows_at_once_in_the_result(app, tmp_path: Path) -> None:
+    provider = provider_with("EQQB.DE")
+    window, errors = make_window(tmp_path, provider)
+    window.set_statement(SAMPLE)
+    run(app, window)
+    provider.offline = True
+    run(app, window)  # Yahoo unreachable: the last price fetched
+    window.ask_price = lambda choices, selected, currency: ("EQQB", Decimal("450"))
+    window.enter_price(0)
+    assert window.table.item(0, 3).text().endswith(ENTERED_MARK)
+
+    def forget_everything(dialog: SettingsDialog) -> None:
+        dialog.confirm = lambda question: True
+        dialog.forget_all()
+
+    window.show_settings = forget_everything
+    window.open_settings()
+
+    assert errors == []
+    assert window.table.item(0, 3).text().endswith(" *")  # back to the last price fetched, not the one entered
+    assert Settings.load(tmp_path / "settings.json").known_tickers() == []  # and the listing stays forgotten
 
 
 def test_settings_only_the_name_is_edited_in_the_table(app, tmp_path: Path) -> None:

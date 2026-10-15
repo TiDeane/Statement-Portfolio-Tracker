@@ -561,12 +561,17 @@ class MainWindow(QMainWindow):
         self.enter_price_button.setEnabled(not self._busy())
 
     def open_settings(self) -> None:
-        """Show the settings window."""
+        """Show the settings window. A result on show is worked out again if anything was changed there,
+        without fetching: a forgotten price or a new name shows at once, here and in the spreadsheet."""
         dialog = SettingsDialog(self._settings, self)
         try:
             self.show_settings(dialog)
+            changed = dialog.changed
         finally:
             dialog.deleteLater()  # a new one is made each time; this one must not linger as a child of the window
+        if changed and self._report is not None and not self._busy():
+            report = with_entered_prices(self._report, {}, self._settings, now=self._now(), remember_listings=False)
+            self._show_changed(report)
 
     # -- running -----------------------------------------------------------------
 

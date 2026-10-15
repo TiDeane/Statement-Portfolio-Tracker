@@ -509,6 +509,25 @@ def test_a_spreadsheet_left_behind_does_not_undo_a_newer_value(tmp_path: Path) -
     assert load_workbook(sheet)["Current Holdings"]["D3"].value == 200
 
 
+def test_a_price_forgotten_in_settings_does_not_come_back_from_the_spreadsheet(tmp_path: Path) -> None:
+    from statement_tracker.price_cache import PriceCache
+
+    settings_path, sheet = tmp_path / "settings.json", tmp_path / "mine.xlsx"
+    statement = write_statement(tmp_path, *TWO_HOLDINGS)
+    args = (str(statement), "--symbol", "ABCD=ABCD.DE", "--spreadsheet", str(sheet))
+    run_cli(*args, "--price", "WXYZ=100", provider=abcd_only(), settings=settings_path)
+    assert load_workbook(sheet)["Current Holdings"]["D3"].value == 400  # written with "entered by hand"
+
+    prices = PriceCache.beside(settings_path)  # what "Forget all" in Settings does
+    prices.forget_all_entered()
+    prices.save()
+    code, output, _ = run_cli(*args, provider=abcd_only(), settings=settings_path)
+
+    assert code == 0
+    assert output.splitlines()[2].startswith("WXYZ,201.00,not in total,unavailable,")
+    assert PriceCache.beside(settings_path).entered_tickers() == set()
+
+
 def test_cli_price_is_used_when_yahoo_has_none(tmp_path: Path) -> None:
     statement = write_statement(tmp_path, *TWO_HOLDINGS)
 

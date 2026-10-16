@@ -341,7 +341,7 @@ class MainWindow(QMainWindow):
         self.price_bar_label = QLabel()
         self.price_bar_label.setWordWrap(True)
         self.retry_button = QPushButton("T&ry again")
-        self.retry_button.setToolTip("Fetch the prices from Yahoo Finance again.")
+        self.retry_button.setToolTip("Look up the prices on Yahoo Finance again.")
         self.retry_button.clicked.connect(self.start)
         self.enter_value_button = QPushButton("&Enter its value...")
         self.enter_value_button.setToolTip("Type in what an investment is worth now yourself.")
@@ -616,7 +616,7 @@ class MainWindow(QMainWindow):
         self.go_button.setEnabled(self._statement is not None and not waiting_for_file and not self._busy())
         self.settings_button.setEnabled(not self._busy())  # a run reads and saves the same settings
         self.back_button.setToolTip(
-            "Stop fetching and go back to the steps. Nothing of this run is saved."
+            "Stop looking up prices and go back to the steps. Nothing is saved."
             if self._busy()
             else "Choose another statement or spreadsheet, or start again."
         )

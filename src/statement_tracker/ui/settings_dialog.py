@@ -43,7 +43,7 @@ HEADERS = ["Investment", "Name shown", "Listing used", "Status"]
 NAME_COLUMN = 1
 NAME_TIP = "Double-click a name to change it. Leave it empty to use the fund's name from Yahoo Finance."
 YAHOO_NAME_TIP = "The fund's name from Yahoo Finance. Double-click to use your own name instead."
-ASK_AGAIN_STATUS = "Asks you on the next run"
+ASK_AGAIN_STATUS = "Asks you next time"
 ENTERED_PRICE_STATUS = "value entered by you"
 ALWAYS_FIRST_SETTING = "When the app cannot tell which listing an investment is, use the first one without asking"
 NOTHING_REMEMBERED = "No investments are remembered yet. They appear here after your first run."
@@ -139,18 +139,18 @@ class SettingsDialog(QDialog):
         self.rename_button = QPushButton("&Rename")
         self.rename_button.setToolTip("Type a new name in the table. Enter saves it, Esc cancels.")
         self.rename_button.clicked.connect(self.rename_selected)
-        self.choose_again_button = QPushButton("Choose the &listing on the next run")
+        self.choose_again_button = QPushButton("Choose the &listing next time")
         self.choose_again_button.setToolTip(
             "Nothing changes now. The next time you press step 3, the app shows the listings for this investment "
             "so you can pick again."
         )
         self.choose_again_button.clicked.connect(self.choose_again_selected)
         self.forget_button = QPushButton("&Forget")
-        self.forget_button.setToolTip("Forget the listing and the name; the app matches it again on the next run.")
+        self.forget_button.setToolTip("Forget the listing and the name; the app looks for its listing again next time.")
         self.forget_button.clicked.connect(self.forget_selected)
         self.forget_all_button = QPushButton("Forget &all...")
         self.forget_all_button.setToolTip(
-            "Forget the listings and names of every investment; the app matches them again on the next run."
+            "Forget the listings and names of every investment; the app looks for their listings again next time."
         )
         self.forget_all_button.clicked.connect(self.forget_all)
         row_buttons = QHBoxLayout()
@@ -337,7 +337,7 @@ class SettingsDialog(QDialog):
             else:
                 self._settings.index_names.pop(ticker, None)
             if self._save():
-                self.message_label.setText("The new name is used from the next run on, also in the spreadsheet.")
+                self.message_label.setText("The new name is used the next time you run the app, also in the spreadsheet.")
         # Redrawn once the edit is over: the cell being edited must not be replaced while Qt still uses it.
         # Tied to this dialog, so it is dropped if the dialog is closed first.
         self._select_after_edit = ticker
@@ -354,7 +354,7 @@ class SettingsDialog(QDialog):
         self._settings.ask_again.add(ticker)
         if self._save():
             self.message_label.setText(
-                f"The next time you press step 3, the app will show you the listings for {ticker} to choose from. "
+                f"The next time you run the app, it will show you the listings for {ticker} to choose from. "
                 "Until then, the current one is kept."
             )
         self._refresh(select=ticker)
@@ -365,8 +365,8 @@ class SettingsDialog(QDialog):
         if ticker is None:
             return
         if not self.confirm(
-            f"Forget {ticker}?\n\nThe app will match it to a listing again on the next run, asking you if it "
-            "cannot tell. The name you gave it and the value you entered for it are removed."
+            f"Forget {ticker}?\n\nThe next time you run the app, it looks for its listing "
+            "again, asking you if it cannot tell. The name you gave it and the value you entered for it are removed."
         ):
             return
         self._settings.forget(ticker)
@@ -380,9 +380,9 @@ class SettingsDialog(QDialog):
         count = len(self._tickers())
         if not count or not self.confirm(
             f"Forget {'your one investment' if count == 1 else f'all {count} investments'}?\n\n"
-            "Their listings, the names you gave them and the values you entered are removed. The app matches "
-            "them again on the next run, asking you when it cannot tell.\n\n"
-            "Your spreadsheet choice and the last prices fetched from Yahoo Finance are kept."
+            "Their listings, the names you gave them and the values you entered are removed. The next time you "
+            "run the app, it looks for their listings again, asking you when it cannot tell.\n\n"
+            "Your spreadsheet choice and the last prices found on Yahoo Finance are kept."
         ):
             return
         self._settings.forget_all()

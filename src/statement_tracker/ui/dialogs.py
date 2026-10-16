@@ -347,7 +347,7 @@ class EnterValueDialog(QDialog):
                 self._current.setText(f"You entered {shown} on {when}.")
             else:
                 self._current.setText(
-                    f"At the last price fetched from Yahoo Finance, from {when}, it is worth {shown}."
+                    f"At the last price found on Yahoo Finance, from {when}, it is worth {shown}."
                 )
         self.value.selectAll()
         self.value.setFocus()

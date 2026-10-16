@@ -116,9 +116,9 @@ def value_portfolio(
 
     A ticker missing from ``prices`` is shown as unavailable, with the reason from
     ``unavailable`` when there is one, and is left out of the totals: the totals and
-    shares (of the amount invested too) cover the rest. Nothing is estimated, so net
-    worth and gain vs deposits, which need every value, stay None. Without any price
-    at all, the totals are None too.
+    shares (of the amount invested too) cover the rest, and so do net worth and gain
+    vs deposits: nothing is estimated, so what is left out counts for nothing there.
+    Without any price at all, the totals are None too.
     """
     unavailable = unavailable or {}
     open_positions = portfolio.open_positions
@@ -161,7 +161,7 @@ def value_portfolio(
         )
 
     unrealized_total = total - invested if total is not None else None
-    net_worth = total + portfolio.cash if total is not None and complete else None
+    net_worth = total + portfolio.cash if total is not None else None
     return PortfolioValuation(
         portfolio=portfolio,
         holdings=tuple(holdings),

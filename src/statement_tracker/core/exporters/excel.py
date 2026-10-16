@@ -158,25 +158,22 @@ def _points_elsewhere(value: Any) -> bool:
     return isinstance(value, str) and value.startswith("=") and "!" in value
 
 
-def _holdings_totals(sheet: Any) -> tuple[Decimal, Decimal | None, bool]:
+def _holdings_totals(sheet: Any) -> tuple[Decimal, Decimal | None]:
     """What the holdings sheet's Total row shows now, worked out as its formulas do: the invested
     and current value of the investments that have a value (all invested, and no value, when none
-    has one), and whether every investment has a value."""
+    has one)."""
     invested_all = invested = value_total = Decimal(0)
-    investments = valued = 0
+    valued = False
     for row in range(2, sheet.max_row + 1):
         label, cost, value = (sheet.cell(row=row, column=column).value for column in (1, 2, _VALUE_COLUMN))
         if label is None or label == TOTAL_LABEL or not _is_number(cost):
             continue
-        investments += 1
         invested_all += Decimal(str(cost))
         if _is_number(value):
-            valued += 1
+            valued = True
             invested += Decimal(str(cost))
             value_total += Decimal(str(value))
-    if not valued:
-        return invested_all, None, False
-    return invested, value_total, valued == investments
+    return (invested, value_total) if valued else (invested_all, None)
 
 
 def _percent(value: Decimal | None) -> Decimal | str:
@@ -383,9 +380,8 @@ class ExcelExporter:
         elif valuation.left_out:
             tickers = ", ".join(holding.position.ticker for holding in valuation.left_out)
             notes.append(
-                f'Today\'s row in "{self.history_sheet}" leaves out what has no price ({tickers}): its totals '
-                "cover the rest only, and its Net Worth and Gain vs Deposits are unavailable until a value "
-                "is typed in for it in "
+                f'Today\'s row in "{self.history_sheet}" leaves out what has no price ({tickers}): its totals, '
+                "Net Worth and Gain vs Deposits cover the rest only, until a value is typed in for it in "
                 f'"{self.holdings_sheet}".'
             )
         try:
@@ -632,17 +628,14 @@ class ExcelExporter:
         action = "updated" if target else "added"
         row = target or sheet.max_row + 1
 
-        cash = _signed(portfolio.cash)
         if holdings_rows:
             holdings = _reference(self.holdings_sheet)
             total = holdings_rows + 2
             cost_basis, market_value = f"={holdings}B{total}", f"={holdings}D{total}"
-            # Net worth needs every investment's value: none may be left out.
-            every_value = f"COUNT({holdings}D2:D{total - 1})={holdings_rows}"
-            net_worth = f'=IF({every_value},C{row}{cash},"{UNAVAILABLE}")'
         else:
             cost_basis, market_value = valuation.invested_in_totals, valuation.total_market_value
-            net_worth = f'=IF(ISNUMBER(C{row}),C{row}{cash},"{UNAVAILABLE}")'
+        # Like the Total row, net worth covers the investments that have a value.
+        net_worth = f'=IF(ISNUMBER(C{row}),C{row}{_signed(portfolio.cash)},"{UNAVAILABLE}")'
         values = [today, cost_basis, market_value, None, portfolio.realized_pnl, None, net_worth, portfolio.net_deposits]
         for column, value in enumerate(values, start=1):
             if value is not None:
@@ -659,13 +652,10 @@ class ExcelExporter:
         linked = [row for row in range(2, history.max_row + 1) if _points_elsewhere(history.cell(row=row, column=2).value)]
         if not linked:
             return
-        cost_basis, market_value, complete = _holdings_totals(holdings)
+        cost_basis, market_value = _holdings_totals(holdings)
         for row in linked:
-            cash = _NET_WORTH_CASH.search(str(history.cell(row=row, column=7).value))
             history.cell(row=row, column=2).value = cost_basis
             history.cell(row=row, column=3).value = _cell(market_value)
-            net_worth = f'=IF(ISNUMBER(C{row}),C{row}{cash.group(1)},"{UNAVAILABLE}")'
-            history.cell(row=row, column=7).value = net_worth if cash and complete else UNAVAILABLE
 
     def _history_formulas(self, sheet: Any, shown: dict[tuple[int, int], Any]) -> dict[tuple[int, int], Any]:
         """Write the formulas of every dated history row and return what they show, with ``shown``.

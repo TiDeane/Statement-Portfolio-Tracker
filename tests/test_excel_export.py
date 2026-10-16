@@ -210,7 +210,7 @@ def test_a_value_typed_in_reaches_todays_history_row_and_stays_there_the_next_da
     portfolio = compute_portfolio(statement_from(*LINES))
     ExcelExporter(path).export(value_portfolio(portfolio, {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}), DAY_ONE)
     # cost basis, market value, unrealized, realized, ROI %, net worth, net deposits, gain vs deposits
-    left_out = [1001, 1200, 199, 0, "unavailable", "unavailable", 2000, "unavailable"]
+    left_out = [1001, 1200, 199, 0, approx(-0.001), 1998, 2000, -2]
     assert computed(path, "Portfolio History")[1][1:] == left_out
 
     # The user types WXYZ's current value over "unavailable" in Current Holdings, as in Excel.
@@ -236,9 +236,7 @@ def test_a_day_left_incomplete_stays_incomplete_once_the_next_day_rewrites_the_h
     ExcelExporter(path).export(valuation(), DAY_TWO)
 
     # Still without WXYZ, as on its day.
-    assert computed(path, "Portfolio History")[1][1:] == [
-        1001, 1200, 199, 0, "unavailable", "unavailable", 2000, "unavailable",
-    ]  # fmt: skip
+    assert computed(path, "Portfolio History")[1][1:] == [1001, 1200, 199, 0, approx(-0.001), 1998, 2000, -2]
 
 
 def test_holdings_sheet_is_replaced_not_appended_to(tmp_path: Path) -> None:
@@ -412,7 +410,8 @@ def test_left_out_investment_is_greyed_and_the_total_and_history_cover_the_rest(
     assert result.history == "added"
     history = computed(path, "Portfolio History")[1]
     assert history[1:4] == [1001, 1200, 199]
-    assert history[5:] == ["unavailable", "unavailable", 2000, "unavailable"]  # net worth needs every value
+    # Like the Total row, net worth covers what has a value: ABCD and the cash (1200 + 798).
+    assert history[5:] == [approx(-0.001), 1998, 2000, -2]
     assert "leaves out what has no price (WXYZ)" in " ".join(result.notes)
 
 

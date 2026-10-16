@@ -257,7 +257,7 @@ def test_valuation_gives_values_allocation_and_totals() -> None:
     assert valuation.gain_vs_deposits == Decimal("398")
 
 
-def test_holdings_without_a_price_are_left_out_of_the_totals_and_nothing_is_estimated() -> None:
+def test_holdings_without_a_price_are_left_out_of_the_totals_and_net_worth() -> None:
     prices = {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}
     valuation = value_portfolio(_two_holdings(), prices, {"WXYZ": "Yahoo has no data."})
 
@@ -271,8 +271,9 @@ def test_holdings_without_a_price_are_left_out_of_the_totals_and_nothing_is_esti
     assert valuation.unrealized_pnl == Decimal("199")
     assert abcd.allocation_percent == Decimal("100") and abcd.invested_percent == Decimal("100")
     assert wxyz.invested_percent is None and wxyz.allocation_percent is None and wxyz.market_value is None
-    # Net worth needs every value: still nothing estimated.
-    assert valuation.net_worth is None and valuation.gain_vs_deposits is None
+    # Net worth covers ABCD and the cash; WXYZ, with no value, counts for nothing: nothing is estimated.
+    assert valuation.net_worth == Decimal("1998")  # 1200 + cash 798
+    assert valuation.gain_vs_deposits == Decimal("-2")
 
 
 def test_without_any_price_the_totals_are_unavailable() -> None:

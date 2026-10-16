@@ -106,16 +106,16 @@ PICK_SPREADSHEET = "Choose an Excel file you already have, or let the app create
 Outcome = tuple[Report, ExportResult | None, UserFacingError | None]
 
 
-def backup_text(spreadsheet: Path | None, days: int) -> str:
+def backup_text(spreadsheet: Path | None, kept: int) -> str:
     """What step 2 says about backup copies of ``spreadsheet``; empty when there is nothing to say."""
     if spreadsheet is None:
         return ""
-    if days == 0:
+    if kept == 0:
         return "No backup copy will be made before it is changed: backups are turned off in Settings."
     if not spreadsheet.exists():
         return ""  # a new file has nothing to back up yet
-    kept = "the last day's copy is kept" if days == 1 else f"copies from the last {days} days are kept"
-    return f"Before it is changed, a backup copy of it is saved in the same folder: one a day, and {kept}."
+    newest = "only the most recent is kept" if kept == 1 else f"the {kept} most recent are kept"
+    return f"Before it is changed, a backup copy of it is saved in the same folder (at most one a day); {newest}."
 
 
 def default_start_folder() -> Path:

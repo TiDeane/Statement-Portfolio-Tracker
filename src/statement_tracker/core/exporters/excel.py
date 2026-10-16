@@ -44,8 +44,8 @@ _PARTIAL_FILL_COLOUR = "FCE4D6"
 _PARTIAL_TEXT_COLOUR = "833C0B"
 """Light and dark orange from Excel's own theme colours, for history rows that leave something out."""
 BACKUPS_KEPT = 3
-"""Days of backup copies kept next to the spreadsheet unless the user chooses otherwise: one copy per
-day it was updated."""
+"""Backup copies kept next to the spreadsheet unless the user chooses otherwise, in all: one is made on
+each day it is updated, and the oldest is deleted when there are more."""
 MAX_BACKUPS_KEPT = 99
 ENTERED_COMMENT = "Value entered by hand"
 _EARLIER_ENTERED_COMMENT = "Price per share entered by hand"
@@ -352,7 +352,7 @@ class ExcelExporter:
     ) -> None:
         self.path = path
         self.backups_kept = max(0, backups_kept)
-        """Days of backup copies to keep. 0 makes no copy, and leaves copies made earlier alone."""
+        """Backup copies to keep in all, at most one a day. 0 makes no copy, and leaves copies made earlier alone."""
         self.index_names = dict(index_names or {})
         """Names to show next to tickers in the Investment column, e.g. "(ABCD) World fund"."""
         self.holdings_sheet = holdings_sheet

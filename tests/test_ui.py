@@ -1137,7 +1137,7 @@ def test_step_2_says_whether_a_backup_is_made_and_settings_change_it(app, tmp_pa
     assert not window.backup_label.isVisibleTo(window)  # nothing to back up yet
     window.set_spreadsheet(existing)
     assert window.backup_label.isVisibleTo(window)
-    assert "backup copy" in window.backup_label.text() and "last 3 days" in window.backup_label.text()
+    assert "backup copy" in window.backup_label.text() and "the 3 most recent are kept" in window.backup_label.text()
     assert window.backup_label.property("state") == "on"
 
     def no_backups(dialog: SettingsDialog) -> None:
@@ -1154,13 +1154,13 @@ def test_step_2_says_whether_a_backup_is_made_and_settings_change_it(app, tmp_pa
     window.set_spreadsheet(new_file)
     assert window.backup_label.isVisibleTo(window) and window.backup_label.property("state") == "off"
 
-    def one_day(dialog: SettingsDialog) -> None:
+    def one_copy(dialog: SettingsDialog) -> None:
         dialog.backups.setValue(1)
 
-    window.show_settings = one_day
+    window.show_settings = one_copy
     window.open_settings()
     window.set_spreadsheet(existing)
-    assert "the last day's copy is kept" in window.backup_label.text()
+    assert "only the most recent is kept" in window.backup_label.text()
 
 
 def test_with_backups_turned_off_no_copy_is_made(app, tmp_path: Path) -> None:

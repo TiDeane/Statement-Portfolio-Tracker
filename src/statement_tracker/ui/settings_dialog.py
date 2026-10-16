@@ -50,7 +50,8 @@ NOTHING_REMEMBERED = "No investments are remembered yet. They appear here after 
 BACKUPS_HELP = (
     "The first time each day that the app changes your spreadsheet, it first saves a copy of it as it was, "
     'in the same folder, named with the date (for example "My investments_backup_2026-10-15.xlsx"). '
-    "Older copies are deleted. When set to 0, no copies are made, and copies made earlier are left as they are."
+    "Once there are more copies than the number above, the oldest is deleted. When set to 0, no copies are "
+    "made, and copies made earlier are left as they are."
 )
 
 
@@ -181,7 +182,7 @@ class SettingsDialog(QDialog):
         self.backups.setRange(0, MAX_BACKUPS_KEPT)
         self.backups.setValue(settings.backups_kept)
         self.backups.valueChanged.connect(self._backups_changed)
-        backups_label = QLabel("&Days of backup copies to keep:")
+        backups_label = QLabel("&Backup copies to keep:")
         backups_label.setBuddy(self.backups)
         backups_row = QHBoxLayout()
         backups_row.addWidget(backups_label)

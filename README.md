@@ -237,7 +237,7 @@ When only some investments have no price, the app still adds the day's row, and 
 
 The first time each day that the app changes an existing spreadsheet, it first saves a copy of it as it was, in the same folder, named with the date, for example `My investments_backup_2026-10-15.xlsx`. Later changes that day (**Try again**, values you enter) keep that copy, so it is always the file as it was before you started that day.
 
-The copies from the three most recent days you used the app are kept, and older ones are deleted. You can choose how many days, or turn backups off, in [Settings](#spreadsheet-backups).
+Three copies are kept in all: when a new day's copy makes four, the oldest is deleted, so there are never more than three however long you use the app. To change how many, open **Settings** and set **Backup copies to keep** (0 to 99); with 1, each day's copy replaces the one before. When set to **0**, no copies are made, and step 2 says so in red; copies made earlier are left where they are.
 
 To go back, open a copy and save it under your spreadsheet's name. If something of yours went missing (a picture, for example), get it back from a copy soon: once the app has been used on as many more days as copies are kept, the last copy that still had it is deleted.
 
@@ -269,7 +269,7 @@ The switch **When the app cannot tell which listing an investment is, use the fi
 
 ### Spreadsheet backups
 
-**Days of backup copies to keep** sets how many days of [backup copies](#backup-copies) of your spreadsheet are kept; 3 unless you change it. When set to **0**, no copies are made, and step 2 says so in red; copies made earlier are left where they are.
+**Backup copies to keep** sets how many [backup copies](#backup-copies) of your spreadsheet are kept in all, as explained there.
 
 ## Privacy
 

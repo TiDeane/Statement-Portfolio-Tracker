@@ -60,7 +60,7 @@ class Settings:
         self.holdings_sheet: str = DEFAULT_HOLDINGS_SHEET
         self.history_sheet: str = DEFAULT_HISTORY_SHEET
         self.backups_kept: int = BACKUPS_KEPT
-        """Days of backup copies kept next to the spreadsheet; 0 turns backups off. Set by the user."""
+        """Backup copies kept next to the spreadsheet, at most one a day; 0 turns backups off. Set by the user."""
 
     @classmethod
     def load(cls, path: Path | None = None) -> Settings:

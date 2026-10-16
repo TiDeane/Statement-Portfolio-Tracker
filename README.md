@@ -231,7 +231,7 @@ A row is dated today, so it is only written when its values are today's. No row 
 - a value you entered was entered on an earlier day (one you entered today counts as today's);
 - no investment has a price at all.
 
-When only some investments have no price, the day's row is still written for the rest, with Net Worth and Gain vs Deposits shown as unavailable. The history can therefore dip on a day an investment is left out; entering its value yourself avoids that.
+When only some investments have no price, the app still adds the day's row, and like the Total row in Current Holdings, all of it covers only the investments that have a value: the others count for nothing in Net Worth, Gain vs Deposits and ROI %, though the money you paid for them is still in Net Deposits. The history therefore dips on a day an investment is left out. Such a row is coloured light orange, and a comment on its date (a small red corner in Excel) says which investments it leaves out. Entering their value yourself, in the app, or by typing it into Current Holdings before you next use the app on another day, brings them in, and the colour goes.
 
 ### Backup copies
 

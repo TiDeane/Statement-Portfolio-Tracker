@@ -38,6 +38,11 @@ TYPE_A_VALUE = (
     "the Revolut app shows: the totals follow, and the app keeps it next time."
 )
 LAST_KNOWN_COMMENT = "Last known price"
+PARTIAL_COMMENT = "Leaves out"
+"""How the comment on a history row that leaves out investments without a value begins."""
+_PARTIAL_FILL_COLOUR = "FCE4D6"
+_PARTIAL_TEXT_COLOUR = "833C0B"
+"""Light and dark orange from Excel's own theme colours, for history rows that leave something out."""
 BACKUPS_KEPT = 3
 """Days of backup copies kept next to the spreadsheet unless the user chooses otherwise: one copy per
 day it was updated."""
@@ -158,12 +163,18 @@ def _points_elsewhere(value: Any) -> bool:
     return isinstance(value, str) and value.startswith("=") and "!" in value
 
 
-def _holdings_totals(sheet: Any) -> tuple[Decimal, Decimal | None]:
+def _ticker(label: str) -> str:
+    """The ticker in an Investment cell, which reads "(TICKER) Name", or the ticker alone."""
+    return (label[1 : label.index(")")] if label.startswith("(") and ")" in label else label).strip()
+
+
+def _holdings_totals(sheet: Any) -> tuple[Decimal, Decimal | None, list[str]]:
     """What the holdings sheet's Total row shows now, worked out as its formulas do: the invested
     and current value of the investments that have a value (all invested, and no value, when none
-    has one)."""
+    has one), and the tickers left out for having none."""
     invested_all = invested = value_total = Decimal(0)
     valued = False
+    missing: list[str] = []
     for row in range(2, sheet.max_row + 1):
         label, cost, value = (sheet.cell(row=row, column=column).value for column in (1, 2, _VALUE_COLUMN))
         if label is None or label == TOTAL_LABEL or not _is_number(cost):
@@ -173,7 +184,25 @@ def _holdings_totals(sheet: Any) -> tuple[Decimal, Decimal | None]:
             valued = True
             invested += Decimal(str(cost))
             value_total += Decimal(str(value))
-    return (invested, value_total) if valued else (invested_all, None)
+        else:
+            missing.append(_ticker(str(label)))
+    return (invested, value_total, missing) if valued else (invested_all, None, [])
+
+
+def _partial_comment(tickers: list[str], holdings_sheet: str, live: bool) -> str:
+    """The comment on a history row that leaves out investments without a value."""
+    names = ", ".join(tickers)
+    them = "it" if len(tickers) == 1 else "them"
+    when = "when this row was written" if live else "on this day"
+    text = f"{PARTIAL_COMMENT} {names}, with no current value {when}. "
+    while_coloured = "While this row is coloured, its" if live else "Its"
+    text += (
+        f'Like the Total row in "{holdings_sheet}", it counts only what has a value. {while_coloured} '
+        f"Net Worth, Gain vs Deposits and ROI % count {them} as nothing and are lower than they should be."
+    )
+    if live:
+        text += f' Typing the value into "{holdings_sheet}" before you run the app on another day brings {them} in.'
+    return text
 
 
 def _percent(value: Decimal | None) -> Decimal | str:
@@ -181,10 +210,10 @@ def _percent(value: Decimal | None) -> Decimal | str:
     return UNAVAILABLE if value is None else value / _HUNDRED
 
 
-def _comment(text: str) -> Any:
+def _comment(text: str, height: int = 70) -> Any:
     from openpyxl.comments import Comment
 
-    return Comment(text, APP_NAME, width=220, height=70)
+    return Comment(text, APP_NAME, width=220, height=height)
 
 
 def _shown_length(value: Any, number_format: str | None) -> int:
@@ -306,9 +335,7 @@ def typed_values(path: Path, holdings_sheet: str = DEFAULT_HOLDINGS_SHEET) -> di
         kind = next((kind for marker, kind in _COMMENT_KINDS if marker in (cell.comment.text or "")), None)
         value = cell.value
         if kind and isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
-            # The first column reads "(TICKER) Name", or the ticker alone.
-            ticker = label[1 : label.index(")")] if label.startswith("(") and ")" in label else label
-            found[ticker.strip()] = (Decimal(str(value)), kind)
+            found[_ticker(label)] = (Decimal(str(value)), kind)
     return found
 
 
@@ -357,6 +384,7 @@ class ExcelExporter:
         _style(holdings, _HOLDINGS_FORMATS, bold_last_row=written > 0, shown=shown)
         _mark_missing_values(holdings, written + 1)
         _style(history, _HISTORY_FORMATS, shown=self._history_formulas(history, history_shown))
+        self._mark_partial_history(history, written)
 
         notes: list[str] = []
         backup, made_now = (None, False) if created or not self.backups_kept else self._backup(today)
@@ -640,6 +668,12 @@ class ExcelExporter:
         for column, value in enumerate(values, start=1):
             if value is not None:
                 sheet.cell(row=row, column=column, value=value)
+        left_out = [holding.position.ticker for holding in valuation.left_out]
+        sheet.cell(row=row, column=1).comment = (
+            _comment(_partial_comment(left_out, self.holdings_sheet, live=bool(holdings_rows)), height=130)
+            if left_out
+            else None
+        )
         return action, {
             (row, 2): valuation.invested_in_totals,
             (row, 3): valuation.total_market_value,
@@ -652,10 +686,35 @@ class ExcelExporter:
         linked = [row for row in range(2, history.max_row + 1) if _points_elsewhere(history.cell(row=row, column=2).value)]
         if not linked:
             return
-        cost_basis, market_value = _holdings_totals(holdings)
+        cost_basis, market_value, missing = _holdings_totals(holdings)
         for row in linked:
             history.cell(row=row, column=2).value = cost_basis
             history.cell(row=row, column=3).value = _cell(market_value)
+            history.cell(row=row, column=1).comment = (
+                _comment(_partial_comment(missing, self.holdings_sheet, live=False), height=110) if missing else None
+            )
+
+    def _mark_partial_history(self, sheet: Any, holdings_rows: int) -> None:
+        """Colour the history rows that leave out investments without a value, the rows with our
+        comment. A row still pointing at the holdings sheet is coloured only while a value is
+        missing there, so it turns plain once the value is typed in. Replaces the sheet's rules."""
+        from openpyxl.formatting.formatting import ConditionalFormattingList
+        from openpyxl.formatting.rule import FormulaRule
+        from openpyxl.styles import Font, PatternFill
+
+        sheet.conditional_formatting = ConditionalFormattingList()  # the app's sheet: no rules but its own
+        fill = PatternFill(fill_type="solid", start_color=_PARTIAL_FILL_COLOUR, end_color=_PARTIAL_FILL_COLOUR)
+        font = Font(color=_PARTIAL_TEXT_COLOUR)
+        # INDIRECT, because Google Sheets does not let a rule name another sheet directly.
+        values = f"{_reference(self.holdings_sheet)}D2:D{holdings_rows + 1}".replace('"', '""')
+        for row in range(2, sheet.max_row + 1):
+            comment = sheet.cell(row=row, column=1).comment
+            # Excel may put the author's name before the text, so the text is looked for, not matched.
+            if comment is None or PARTIAL_COMMENT not in (comment.text or ""):
+                continue
+            linked = _points_elsewhere(sheet.cell(row=row, column=2).value) and holdings_rows
+            condition = f'COUNT(INDIRECT("{values}"))<{holdings_rows}' if linked else "TRUE"
+            sheet.conditional_formatting.add(f"A{row}:I{row}", FormulaRule(formula=[condition], fill=fill, font=font))
 
     def _history_formulas(self, sheet: Any, shown: dict[tuple[int, int], Any]) -> dict[tuple[int, int], Any]:
         """Write the formulas of every dated history row and return what they show, with ``shown``.

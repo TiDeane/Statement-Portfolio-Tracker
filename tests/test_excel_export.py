@@ -220,11 +220,14 @@ def test_a_value_typed_in_reaches_todays_history_row_and_stays_there_the_next_da
 
     typed = [1202, 1600, 398, 0, approx(0.199), 2398, 2000, 398]
     assert computed(path, "Portfolio History")[1][1:] == typed  # the whole row follows
-    # The next day's run rewrites Current Holdings: the first day's row keeps what it showed, now as figures.
+    # The next day's run rewrites Current Holdings: the first day's row keeps what it showed, now as figures,
+    # and as nothing is left out of it any more, it loses its colour and comment.
     ExcelExporter(path).export(valuation(abcd="130"), DAY_TWO)
     history = computed(path, "Portfolio History")
     assert history[1][1:] == typed
     assert rows(path, "Portfolio History")[1][1:3] == (1202, 1600)
+    sheet = load_workbook(path)["Portfolio History"]
+    assert sheet["A2"].comment is None and not list(sheet.conditional_formatting)
     assert history[2][1:] == [1202, 1700, 498, 0, approx(0.249), 2498, 2000, 498]
 
 
@@ -233,10 +236,26 @@ def test_a_day_left_incomplete_stays_incomplete_once_the_next_day_rewrites_the_h
     portfolio = compute_portfolio(statement_from(*LINES))
     ExcelExporter(path).export(value_portfolio(portfolio, {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}), DAY_ONE)
 
+    sheet = load_workbook(path)["Portfolio History"]
+    # The row says it leaves WXYZ out: a comment, and light orange while Current Holdings misses a value.
+    assert "Leaves out WXYZ, with no current value when this row was written" in sheet["A2"].comment.text
+    assert "before you run the app on another day" in sheet["A2"].comment.text
+    rules = {str(cells.sqref): cells.rules[0] for cells in sheet.conditional_formatting}
+    assert list(rules) == ["A2:I2"]
+    assert rules["A2:I2"].formula == ["COUNT(INDIRECT(\"'Current Holdings'!D2:D3\"))<2"]
+    assert rules["A2:I2"].dxf.fill.fgColor.rgb.endswith("FCE4D6")
+    assert rules["A2:I2"].dxf.font.color.rgb.endswith("833C0B")
+
     ExcelExporter(path).export(valuation(), DAY_TWO)
 
-    # Still without WXYZ, as on its day.
+    # Still without WXYZ, as on its day, and still marked so, now for good; today's row leaves nothing out.
     assert computed(path, "Portfolio History")[1][1:] == [1001, 1200, 199, 0, approx(-0.001), 1998, 2000, -2]
+    sheet = load_workbook(path)["Portfolio History"]
+    assert "Leaves out WXYZ, with no current value on this day" in sheet["A2"].comment.text
+    assert "on another day" not in sheet["A2"].comment.text
+    rules = {str(cells.sqref): cells.rules[0] for cells in sheet.conditional_formatting}
+    assert list(rules) == ["A2:I2"] and rules["A2:I2"].formula == ["TRUE"]
+    assert sheet["A3"].comment is None
 
 
 def test_holdings_sheet_is_replaced_not_appended_to(tmp_path: Path) -> None:

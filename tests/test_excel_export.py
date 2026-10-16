@@ -65,11 +65,31 @@ def test_missing_workbook_is_created_with_both_sheets(tmp_path: Path) -> None:
     assert holdings[3] == ["Total", 1202, 1, 1600, 1, approx(0.331115), 0, "EUR"]
     assert len(holdings) == 4
     assert rows(path, "Current Holdings")[1][3] == 1200  # the values themselves are numbers, which can be typed over
-    history = rows(path, "Portfolio History")
-    assert history[0] == HISTORY_HEADER
-    assert history[1][0].date() == DAY_ONE
+    history = computed(path, "Portfolio History")
+    assert tuple(history[0]) == HISTORY_HEADER
+    assert rows(path, "Portfolio History")[1][0].date() == DAY_ONE
     # cost basis, market value, unrealized, realized, ROI %, net worth, net deposits, gain vs deposits
-    assert history[1][1:] == (1202, 1600, 398, 0, pytest.approx(0.331115, abs=1e-6), 2398, 2000, 398)
+    assert history[1][1:] == [1202, 1600, 398, 0, approx(0.199), 2398, 2000, 398]
+
+
+def test_roi_is_the_gain_on_deposits_and_rows_from_earlier_versions_switch_to_it(tmp_path: Path) -> None:
+    path = tmp_path / "portfolio.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Portfolio History"
+    sheet.append(HISTORY_HEADER)
+    # Written by an earlier version: ROI % was the unrealized PnL over the cost basis (100 / 500).
+    sheet.append([datetime(2026, 10, 1), 500, 600, 100, 0, 0.2, 1100, 1000, 100])
+    sheet.append([datetime(2026, 10, 2), 500, 600, 100, 0, 0.2, "unavailable", 1000, "unavailable"])
+    workbook.save(path)
+
+    ExcelExporter(path).export(valuation(), DAY_ONE)
+
+    history = computed(path, "Portfolio History")
+    # Gain vs Deposits / Net Deposits: 100 / 1000, unavailable without a gain, then today's 398 / 2000.
+    assert [row[5] for row in history[1:]] == [approx(0.1), "unavailable", approx(0.199)]
+    assert [row[2] for row in history[1:]] == [600, 600, 1600]  # nothing else in the old rows changes
+    assert rows(path, "Portfolio History")[1][5].startswith("=")  # a formula, so it follows typed-in changes
 
 
 def test_sheets_are_formatted_for_reading(tmp_path: Path) -> None:

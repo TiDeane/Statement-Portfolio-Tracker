@@ -61,7 +61,7 @@ ERROR = _Text("#VALUE!")
 def computed(path: Path, sheet_name: str) -> list[list[object]]:
     """Return a sheet's rows as Excel would show them, working out its formulas.
 
-    Knows only what the app's sheets use: IF, OR, ISNUMBER, COUNT, SUM, SUMPRODUCT, arithmetic,
+    Knows only what the app's sheets use: IF, OR, AND, N, ISNUMBER, COUNT, SUM, SUMPRODUCT, arithmetic,
     comparisons, cell references and ranges (``$`` ignored). Numbers come back as floats.
     """
     import re
@@ -95,6 +95,8 @@ def computed(path: Path, sheet_name: str) -> list[list[object]]:
     functions = {
         "IF": lambda condition, then, otherwise: then if condition else otherwise,
         "OR": lambda *items: any(items),
+        "AND": lambda *items: all(items),
+        "N": lambda item: item if isinstance(item, float) else 0.0,
         "ISNUMBER": is_number,
         "COUNT": lambda items: sum(isinstance(item, float) for item in items),
         "SUM": lambda items: sum(item for item in items if isinstance(item, float)),

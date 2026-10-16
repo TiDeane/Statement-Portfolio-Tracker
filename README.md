@@ -218,7 +218,7 @@ One row per day you run the app, so you can follow your totals over time. Runnin
 | Total Market Value | What it is all worth now ("Worth now" in the app). |
 | Unrealized PnL | Your gain or loss on what you still hold: market value minus cost basis. |
 | Realized PnL | Your gain or loss on what you have sold. |
-| ROI % | Unrealized PnL as a percentage of the cost basis. |
+| ROI % | Your return on the money you have put in: Gain vs Deposits as a percentage of Net Deposits. It counts what you have sold, dividends and the cash not yet invested (which brings it down). |
 | Net Worth | Market value plus the cash left in your Revolut investment account, worked out from the statement. |
 | Net Deposits | All the money you have put into the account. |
 | Gain vs Deposits | Net worth minus net deposits: how much you are up or down overall. |

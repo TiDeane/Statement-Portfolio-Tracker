@@ -135,6 +135,10 @@ def _cell(value: Decimal | None) -> Decimal | str:
     return UNAVAILABLE if value is None else value
 
 
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float, Decimal)) and not isinstance(value, bool)
+
+
 def _percent(value: Decimal | None) -> Decimal | str:
     """A percentage as Excel stores it (21.08% is 0.2108), shown with a % sign by the cell format."""
     return UNAVAILABLE if value is None else value / _HUNDRED
@@ -312,7 +316,7 @@ class ExcelExporter:
         history_action = self._write_history(history, valuation, today) if current else "skipped"
         _style(holdings, _HOLDINGS_FORMATS, bold_last_row=written > 0, shown=shown)
         _mark_missing_values(holdings, written + 1)
-        _style(history, _HISTORY_FORMATS)
+        _style(history, _HISTORY_FORMATS, shown=self._write_roi(history))
 
         notes: list[str] = []
         backup, made_now = (None, False) if created or not self.backups_kept else self._backup(today)
@@ -560,14 +564,13 @@ class ExcelExporter:
         portfolio = valuation.portfolio
         if valuation.total_market_value is None or valuation.unrealized_pnl is None:
             return "skipped"
-        cost_basis = valuation.invested_in_totals
         values = [
             today,
-            cost_basis,
+            valuation.invested_in_totals,
             valuation.total_market_value,
             valuation.unrealized_pnl,
             portfolio.realized_pnl,
-            _cell(valuation.unrealized_pnl / cost_basis if cost_basis > 0 else None),
+            None,  # ROI %: a formula, written by _write_roi
             _cell(valuation.net_worth),  # unavailable when something is left out of the totals
             portfolio.net_deposits,
             _cell(valuation.gain_vs_deposits),
@@ -586,3 +589,24 @@ class ExcelExporter:
         for column, value in enumerate(values, start=1):
             sheet.cell(row=target, column=column, value=value)
         return action
+
+    def _write_roi(self, sheet: Any) -> dict[tuple[int, int], Any]:
+        """Make the ROI % of every dated history row Gain vs Deposits / Net Deposits, as a formula.
+
+        Rows written by earlier versions (unrealized PnL / cost basis) switch too, since both
+        columns it needs were always written. Returns what each formula cell shows, to size the
+        column by.
+        """
+        shown: dict[tuple[int, int], Any] = {}
+        for row in range(2, sheet.max_row + 1):
+            if sheet.cell(row=row, column=1).value is None:
+                continue
+            sheet.cell(row=row, column=6).value = (
+                f'=IF(AND(ISNUMBER(I{row}),N(H{row})>0),I{row}/H{row},"{UNAVAILABLE}")'
+            )
+            deposits, gain = sheet.cell(row=row, column=8).value, sheet.cell(row=row, column=9).value
+            if _is_number(deposits) and _is_number(gain) and deposits > 0:
+                shown[row, 6] = Decimal(str(gain)) / Decimal(str(deposits))
+            else:
+                shown[row, 6] = UNAVAILABLE
+        return shown

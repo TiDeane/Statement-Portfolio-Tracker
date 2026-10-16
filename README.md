@@ -50,7 +50,7 @@ There are two ways to get the app. Most people want the first.
 
 ### Option 1: install with the `.exe` (Windows 10 and 11)
 
-Nothing else needs to be installed first.
+Nothing else needs to be installed first. Installed, the app takes about 70 MB.
 
 1. Open the [Releases page](https://github.com/TiDeane/Statement-Portfolio-Tracker/releases) and download the file ending in `-windows-x64-setup.exe` from the latest release.
 2. Double-click it. Windows may show a blue box saying **"Windows protected your PC"**. If it does, this is because the app is not signed with a paid certificate, not because something was found in it. Click **More info**, then **Run anyway**.
@@ -58,8 +58,6 @@ Nothing else needs to be installed first.
 4. Start **Statement Portfolio Tracker** from the Start menu or the desktop shortcut.
 
 If the warning appears, it is only for the installer, not each time you start the app. Do not turn off Windows security features to install this, "Run anyway" applies to this one file only.
-
-If Windows says the app was blocked by **Smart App Control** and offers no "Run anyway", the app cannot be installed on that computer for now. Smart App Control only allows signed apps, and this one is not signed yet. Option 2 still works there.
 
 To remove the app, use **Settings > Apps > Installed apps** like any other program. This also deletes what the app remembers: your settings, the listings and names of your investments, and the values you entered. Your spreadsheets and their backup copies are kept. Installing a newer version over the old one keeps everything.
 
@@ -69,18 +67,17 @@ Releases also include `.dmg` files for Apple Silicon and Intel Macs. They need *
 
 ### Option 2: run from a zip of the project
 
-This runs the same app directly from its source code. You need [Python](https://www.python.org/downloads/) 3.12 or newer and an internet connection for the first setup, which downloads the libraries the app uses (a few hundred megabytes).
+This runs the same app directly from its source code. You need [Python](https://www.python.org/downloads/) 3.12 or newer and an internet connection for the first setup, which downloads the libraries the app uses.
 
 1. **Get the source**: on the project's GitHub page click **Code > Download ZIP**, or download **Source code (zip)** from a release.
-2. Unzip it and open a terminal in the unzipped folder (the one that contains `pyproject.toml`).
-3. Set it up once, then start the app.
+2. **Unzip it** and open a terminal in the unzipped folder.
+3. Download the libraries into a `.venv` folder inside the unzipped folder.
 
    Windows (PowerShell):
 
    ```
    py -m venv .venv
    .venv\Scripts\python -m pip install .
-   .venv\Scripts\python -m statement_tracker
    ```
 
    macOS and Linux:
@@ -88,10 +85,23 @@ This runs the same app directly from its source code. You need [Python](https://
    ```
    python3 -m venv .venv
    .venv/bin/python -m pip install .
+   ```
+
+4. Then, whenever you want to start the app, simply open the folder in a terminal and run:
+
+   Windows (PowerShell):
+
+   ```
+   .venv\Scripts\python -m statement_tracker
+   ```
+
+   macOS and Linux:
+
+   ```
    .venv/bin/python -m statement_tracker
    ```
 
-From then on, only the last line is needed to start the app. To update, download the new zip and repeat the steps in the new folder. To remove it, delete the folder.
+To update, download the new zip and do steps 2 to 4 in the new folder. To remove it, delete the folder.
 
 On Linux, if the window does not open, your system may be missing a library Qt needs; on Debian or Ubuntu, `sudo apt install libxcb-cursor0` usually fixes it.
 
@@ -110,21 +120,21 @@ In the Revolut app:
 
 > **Always choose All time.** The app needs your whole history, from your first trade until today, to know what you still hold. The other choices, a range of months or a tax year, list only the buys and sells inside that period, so the results would be wrong or the file would be rejected as incomplete.
 
-Revolut may move these menus in newer versions of its app.
-
 ## Use the app
 
 1. **Step 1: your Revolut statement.** Click **Choose statement file...** and pick the CSV file, or drag the file onto the window.
-2. **Step 2 (optional): your Excel spreadsheet.** Choose **Don't use a spreadsheet** to only see the results in the window, or **Update my Excel spreadsheet** to also write them into Excel. With the second, two buttons appear: **Choose my spreadsheet...** to use an Excel file you already have, or **Create a new one...**. You can also drag an Excel file onto the window. The app remembers your choice for next time, and you can change it at any point. Before choosing an existing spreadsheet, read [New or existing spreadsheet](#new-or-existing-spreadsheet).
-3. **Step 3.** Click the green button. The window turns to a page with your investments: a progress bar first shows how far the app is while it fetches prices, which takes a few seconds, then the table appears. With many investments, scroll the table to see them all.
-
-**← Back to the steps** takes you back to choose other files. Pressed while the prices are still being fetched, it stops: nothing of that run is saved, and you can start again.
+2. **Step 2 (optional): your Excel spreadsheet.** Choose **Don't use a spreadsheet** to only see the results in the app, or **Update my Excel spreadsheet** to also write them into Excel. With the second, two buttons appear: **Choose my spreadsheet** to use an Excel file you already have, or **Create a new one**. The app remembers your choice for next time, and you can change it at any point. Choosing an existing spreadsheet keeps your own sheets, but any pictures, shapes and text boxes in the file are lost when the app saves it.
+3. **Step 3.** Click the green button. The window turns to a page with your investments: a progress bar shows how far along the app is while it looks up prices, which takes a few seconds, then the table appears. With many investments, scroll the table to see them all.
 
 ### If the app asks you to confirm an investment
 
-Many funds are traded on several stock exchanges under the same code. When the app cannot tell which one is yours, it shows a short list. They are usually the same fund at almost the same price, so pick the one whose name and currency match what you see in Revolut. The app remembers your answer and does not ask again. If you are unsure, **Skip this investment** leaves it without a current value; nothing is guessed. If you picked the wrong one, see [Settings](#settings).
+Many funds are traded on several stock exchanges under the same code. When the app cannot tell which one is yours, it shows a short list. They are usually the same fund at almost the same price. You can:
 
-If you don't want to be asked at all, press **Always choose the first option**. The app uses the first listing for this investment, and from then on whenever it cannot tell by itself. When several listings fit your purchases, the first one fits best. When none fits (the app says it "could not tell for sure"), the first one is only the first found, so check in Settings, under "Listing used", that it is your fund. You can turn this off in Settings.
+- **Pick one**: choose the one whose name and currency match what you see in Revolut.
+- **Always choose the first option**: if you don't want to be asked at all, the app uses the first listing now and whenever it cannot tell by itself, which is usually right: the listing whose past prices best match what you paid comes first. But if the app says it "could not tell for sure", no listing matched your prices, and the first is simply the first one found: check under "Listing used" in **Settings** that it is your fund.
+- **Skip this investment**: It is left without a current value.
+
+The app remembers your answer and does not ask again. If you picked the wrong one, you can change your choice in **Settings**, or turn "always choose the first option" off there.
 
 ## Read the result
 
@@ -145,49 +155,56 @@ A value shown as "unavailable", in red, or marked with **\*** or **(your value)*
 
 ### Renaming an investment
 
-Double-click an investment's name in the table (or select it and press F2) and type the name you want. Enter saves it, Esc cancels. The name is remembered and also written to your spreadsheet, straight away. Leave it empty to go back to the fund's name from Yahoo Finance. You can also rename an investment in [Settings](#settings).
+Double-click an investment's name in the table (or select it and press F2) and type the name you want. Enter saves it, Esc cancels. The name is remembered and also written to your spreadsheet, straight away. Leave it empty to go back to the fund's name from Yahoo Finance. You can also rename an investment in **Settings**.
 
 ## When a price is missing
 
 ### What you see
 
-**"unavailable"** means the app could not get a current price for that investment. Its row is shown in grey, with "not in total" in the percentage columns, and the Total and the percentages cover the other investments only. The app never guesses a value for it. Its **Worth now** cell is shown in red: you can [enter its value there yourself](#enter-its-value-yourself).
+**"unavailable"** means the app could not get a current price for that investment. Its row is shown in grey, with "not in total" in the percentage columns, and the Total and the percentages cover the other investments only. The app never guesses a value for it. Its **Worth now** cell is shown in red: you can enter its value there yourself.
 
-**A value marked with \*** uses the last price the app fetched on an earlier day, because Yahoo Finance could not be reached this time. Point at the value to see the date of that price. The Total is marked too, since it includes that value. An investment the app has never fetched a price for is shown as unavailable instead.
+**A value marked with \*** uses the last price the app found on an earlier day, because Yahoo Finance could not be reached this time. Point at the value to see the date of that price. The Total is marked too, since it includes that value. An investment the app has never found a price for is shown as unavailable instead.
 
-**A value marked (your value)** is one you entered yourself; see below. The Total is marked too.
+**A value marked (your value)** is one you entered yourself. The Total is marked too.
 
 When any of these is in the table, a line under it names the investments Yahoo Finance has no current price for, with two buttons: **Try again** and **Enter its value...**.
 
 ### Try again
 
-**Try again** fetches the prices again, as the green button does. Use it for values marked with \* once you are back online.
+**Try again** looks up the prices again, as the green button does. Use it for values marked with \* once you are back online.
 
 ### Enter its value yourself
 
-**In the app:** press **Enter its value...**, or double-click the investment's row in the table, anywhere but its name (double-clicking the name renames it). Type what the investment is worth now, all your shares together, as the Revolut app shows it. The number you type is the number shown in **Worth now**. The app adds everything up again straight away and updates your spreadsheet, without fetching anything.
+**In the app:** press **Enter its value...**, or double-click the investment's row in the table, anywhere but its name (double-clicking the name renames it). Type what the investment is worth now, all your shares together, as the Revolut app shows it. The number you type is the number shown in **Worth now**. The app adds everything up again straight away and updates your spreadsheet, without looking up the prices again.
 
-**In the spreadsheet:** type the investment's current value over "unavailable" in its red **Current Value** cell. The next time you press the green button, the app picks it up and keeps it, as if you had entered it in the app. See [The Current Holdings sheet](#the-current-holdings-sheet).
+**In the spreadsheet:** type the investment's current value over "unavailable" in its red **Current Value** cell. The next time you run the app, it picks it up and keeps it, as if you had entered it in the app.
 
 ### How long your value is kept
 
-The app keeps a value you entered for the next times, so you don't have to type it again (if you buy or sell shares, it follows them), and uses it whenever Yahoo Finance has no price for that investment. As soon as Yahoo Finance has one again, the app uses Yahoo's and forgets yours. To change a value you entered, double-click it in **Worth now**; to remove it, use **Forget** in [Settings](#settings).
+The app keeps a value you entered for the next times, so you don't have to type it again (if you buy or sell shares, it is adjusted to match), and uses it whenever Yahoo Finance has no price for that investment. As soon as Yahoo Finance has one again, the app uses Yahoo's and forgets yours. To change a value you entered, double-click it in **Worth now**; to remove it, select the investment in **Settings** and press **Forget**.
 
 ## Your Excel spreadsheet
 
-If you chose a spreadsheet in step 2, each run writes your results into two sheets of it, **Current Holdings** and **Portfolio History**, creating them the first time. Close the file in Excel before you press the green button: the app cannot save a file that Excel has open, and tells you if that happens.
+If you chose a spreadsheet in step 2, each time you press the green button the app writes your results into two sheets of it, **Current Holdings** and **Portfolio History**, creating them the first time. Close the file in Excel before you press the green button: the app cannot save a file that Excel has open, and tells you if that happens.
 
 ### New or existing spreadsheet
 
 **Create a new one...** makes an Excel file with only the app's two sheets. This is the safest choice.
 
-**Choose my spreadsheet...** adds the two sheets to an Excel file you already have. Your own sheets in it are not changed, but to save the file the app has to write all of it again. Values, formulas, colours, colour rules and charts in your sheets are kept. **Pictures, shapes and text boxes are not**: they disappear from the saved file. If your spreadsheet has any of those, create a new one instead. If a sheet of yours is already called "Current Holdings" or "Portfolio History", the app stops without changing anything; rename that sheet in Excel first.
+**Choose my spreadsheet...** adds the two sheets to an Excel file you already have. Your own sheets in it are not changed, but to save the file the app has to write all of it again:
 
-Before changing an existing file, the app saves a [backup copy](#backup-copies) of it. Step 2 says whether it will: in grey when it will, in red when backups are turned off.
+- **Kept:** your values, formulas, formatting, colour rules, tables, and charts (including charts made from your tables).
+- **Lost: pictures, shapes and text boxes.** If your spreadsheet has any of those, create a new one instead.
+
+Before changing an existing file, the app saves a backup copy of it, so after the first update you can check that your charts look as before and go back if anything is missing. Step 2 says whether a copy will be made: in grey when it will, in red when backups are turned off. The number of backup copies saved is customizable.
+
+> **How I use it:** I track my expenses in an Excel file saved in OneDrive. The file only has tables and charts, so I let the app update it directly: it writes and updates its own two sheets without touching mine. I keep a single backup copy, just in case.
+
+If a sheet of yours is already called "Current Holdings" or "Portfolio History", the app stops without changing anything; rename that sheet in Excel first.
 
 ### The Current Holdings sheet
 
-One row per investment you still hold, and a **Total** row. The whole sheet is rewritten on every run, so keep your own notes in another sheet.
+One row per investment you still hold, and a **Total** row. The app rewrites the whole sheet each time, so keep your own notes in another sheet.
 
 | Column | Meaning |
 |---|---|
@@ -204,7 +221,7 @@ The percentages and the Total row are Excel formulas worked out from **Current V
 
 Some cells say more:
 
-- **"unavailable"**, in red, in **Current Value**: the app had no current price for it. Its row is grey with "not in total", and the Total covers the other investments. You can type its value over "unavailable": the row turns black and the percentages and the Total follow at once. The next time you press the green button, the app keeps the value you typed, as if you had [entered it in the app](#enter-its-value-yourself).
+- **"unavailable"**, in red, in **Current Value**: the app had no current price for it. Its row is grey with "not in total", and the Total covers the other investments. You can type its value over "unavailable": the row turns black and the percentages and the Total follow at once. The next time you run the app, it keeps the value you typed, as if you had [entered it in the app](#enter-its-value-yourself).
 - **A comment** (a small red corner in Excel; point at it to read it) on a value that uses the last price from an earlier day says from when; on a value you entered, it says on which day. The Total has one too when it includes such a value.
 
 ### The Portfolio History sheet
@@ -215,7 +232,7 @@ Excel works out Unrealized PnL, ROI %, Net Worth and Gain vs Deposits from the o
 
 | Column | Meaning |
 |---|---|
-| Date | The day of the run. |
+| Date | The day you used the app. |
 | Total Cost Basis | What you paid for what you still hold, in total ("Invested" in the app). |
 | Total Market Value | What it is all worth now ("Worth now" in the app). |
 | Unrealized PnL | Your gain or loss on what you still hold: market value minus cost basis. |
@@ -225,7 +242,7 @@ Excel works out Unrealized PnL, ROI %, Net Worth and Gain vs Deposits from the o
 | Net Deposits | All the money you have put into the account. |
 | Gain vs Deposits | Net worth minus net deposits: how much you are up or down overall. |
 
-A row is dated today, so it is only written when its values are today's. No row is written, and existing rows are left unchanged, when:
+Each row stands for one day, so the app adds today's row only when all its values are from today. It adds no row, and leaves the others as they are, when:
 
 - a value uses the last price from an earlier day (marked \*), because Yahoo Finance could not be reached;
 - a value you entered was entered on an earlier day (one you entered today counts as today's);
@@ -249,7 +266,7 @@ Google Sheets can open and edit Excel files kept in Google Drive, so you can use
 2. In step 2, choose **Create a new one...** and save it inside your Drive, or choose an Excel file that is already there.
 3. Open the file from [drive.google.com](https://drive.google.com). Google Sheets edits it as an Excel file and shows a small **.XLSX** label next to its name.
 
-After each run, Drive uploads the updated file within a few moments; reload the page in your browser to see the new values. Close the file in Google Sheets before you press the green button, so that your edits and the app's don't overwrite each other.
+Each time the app updates the file, Drive uploads it within a few moments; reload the page in your browser to see the new values. Close the file in Google Sheets before you press the green button, so that your edits and the app's don't overwrite each other.
 
 The file stays an Excel file. **File > Save as Google Sheets** makes a separate copy, which the app does not update.
 
@@ -257,13 +274,13 @@ The file stays an Excel file. **File > Save as Google Sheets** makes a separate 
 
 ### Your investments
 
-The **Settings** button lists the investments the app remembers, including any you entered a value for even if the app never matched them to a listing. Select one to:
+**Settings** lists the investments the app remembers, including any you entered a value for even if the app never found a listing for them. Select one to:
 
 - **Rename** it: double-click its name (or press **Rename**) and type the name to show next to its code in the table and the spreadsheet. Enter saves it, Esc cancels. Leave it empty to go back to the fund's name from Yahoo Finance, which is shown in grey.
-- **Choose the listing on the next run**: nothing changes right away. The next time you press the green button, the app shows you the list of listings for it again to pick from. Until then, the current one is kept.
-- **Forget** it: the app matches it again on the next run, as on the first day. The name you gave it and any value you entered for it are removed too.
+- **Choose the listing next time**: nothing changes right away. The next time you run the app, it shows you the list of listings for it again to pick from. Until then, the current one is kept.
+- **Forget** it: the next time you run the app, it looks for its listing again, as on the first day. The name you gave it and any value you entered for it are removed too.
 
-**Forget all...** does the same for every investment at once. Your spreadsheet choice and the last prices fetched from Yahoo Finance are kept.
+**Forget all...** does the same for every investment at once. Your spreadsheet choice and the last prices found on Yahoo Finance are kept.
 
 The switch **When the app cannot tell which listing an investment is, use the first one without asking** is explained in [If the app asks you to confirm an investment](#if-the-app-asks-you-to-confirm-an-investment).
 
@@ -277,14 +294,14 @@ Everything happens on your computer. There are no accounts, and the app does not
 
 The only information that leaves your computer are the codes of your investments and dates, sent to Yahoo Finance to look up prices. Your amounts and your statement file are never sent anywhere.
 
-The app keeps its settings (your confirmed investments and where your spreadsheet is), the last price it fetched for each fund, and any values you entered, in your user folder: `%LOCALAPPDATA%\StatementPortfolioTracker` on Windows, `~/Library/Application Support/StatementPortfolioTracker` on macOS and `~/.config/StatementPortfolioTracker` on Linux. Those are kept as prices per share; none of the amounts in your statement are kept. Together they take a few kilobytes. Uninstalling the app on Windows deletes that folder; otherwise (macOS, or running from the source), delete it yourself.
+The app keeps its settings (your confirmed investments and where your spreadsheet is), the last price it found for each fund, and any values you entered, in your user folder: `%LOCALAPPDATA%\StatementPortfolioTracker` on Windows, `~/Library/Application Support/StatementPortfolioTracker` on macOS and `~/.config/StatementPortfolioTracker` on Linux. Those are kept as prices per share; none of the amounts in your statement are kept. Together they take a few kilobytes. Uninstalling the app on Windows deletes that folder; otherwise (macOS, or running from the source), delete it yourself.
 
 ## Known limitations
 
 - Only Revolut's stock statement in CSV format is supported, and only the "All time" range.
 - The statement must be in a single currency. Statements with trades in more than one currency, or with a currency conversion, are not supported yet and are rejected with an explanation.
 - Only these kinds of entries are understood: cash top-ups, market buys, market sells and dividends. Anything else (for example a stock split or a withdrawal) stops the app with a message naming the row, so that it never shows numbers built on a guess. Please report it if this happens to you.
-- Prices need an internet connection. Without one, the app uses the last prices it fetched, marked with \*, or shows values as unavailable if it has never fetched them. You can then [enter values yourself](#enter-its-value-yourself).
+- Prices need an internet connection. Without one, the app uses the last prices it found, marked with \*, or shows values as unavailable if it has never found them. You can then [enter values yourself](#enter-its-value-yourself).
 - The figures are simple: what you paid against what it is worth now. There are no tax calculations and no time-weighted returns.
 - The app is in English only. It does not update itself; new versions are on the Releases page.
 

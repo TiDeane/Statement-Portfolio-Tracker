@@ -88,8 +88,10 @@ def test_roi_is_the_gain_on_deposits_and_rows_from_earlier_versions_switch_to_it
     history = computed(path, "Portfolio History")
     # Gain vs Deposits / Net Deposits: 100 / 1000, unavailable without a gain, then today's 398 / 2000.
     assert [row[5] for row in history[1:]] == [approx(0.1), "unavailable", approx(0.199)]
-    assert [row[2] for row in history[1:]] == [600, 600, 1600]  # nothing else in the old rows changes
-    assert rows(path, "Portfolio History")[1][5].startswith("=")  # a formula, so it follows typed-in changes
+    # Nothing else in the old rows changes, though the worked-out columns become formulas too.
+    assert history[1][1:5] == [500, 600, 100, 0] and history[1][6:] == [1100, 1000, 100]
+    assert history[2][6:] == ["unavailable", 1000, "unavailable"]
+    assert all(rows(path, "Portfolio History")[1][column].startswith("=") for column in (3, 5, 6, 8))
 
 
 def test_sheets_are_formatted_for_reading(tmp_path: Path) -> None:
@@ -184,7 +186,7 @@ def test_second_run_on_the_same_day_updates_that_days_row(tmp_path: Path) -> Non
 
     result = ExcelExporter(path).export(valuation(abcd="130"), DAY_ONE)
 
-    history = rows(path, "Portfolio History")
+    history = computed(path, "Portfolio History")
     assert result.history == "updated"
     assert len(history) == 2
     assert history[1][2] == 1700
@@ -197,10 +199,46 @@ def test_a_new_day_adds_a_row_and_keeps_the_old_ones(tmp_path: Path) -> None:
 
     result = ExcelExporter(path).export(valuation(abcd="130"), DAY_TWO)
 
-    history = rows(path, "Portfolio History")
+    history = computed(path, "Portfolio History")
     assert result.history == "added"
-    assert [row[0].date() for row in history[1:]] == [DAY_ONE, DAY_TWO]
+    assert [row[0].date() for row in rows(path, "Portfolio History")[1:]] == [DAY_ONE, DAY_TWO]
     assert (history[1][2], history[2][2]) == (1600, 1700)
+
+
+def test_a_value_typed_in_reaches_todays_history_row_and_stays_there_the_next_day(tmp_path: Path) -> None:
+    path = tmp_path / "portfolio.xlsx"
+    portfolio = compute_portfolio(statement_from(*LINES))
+    ExcelExporter(path).export(value_portfolio(portfolio, {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}), DAY_ONE)
+    # cost basis, market value, unrealized, realized, ROI %, net worth, net deposits, gain vs deposits
+    left_out = [1001, 1200, 199, 0, "unavailable", "unavailable", 2000, "unavailable"]
+    assert computed(path, "Portfolio History")[1][1:] == left_out
+
+    # The user types WXYZ's current value over "unavailable" in Current Holdings, as in Excel.
+    workbook = load_workbook(path)
+    workbook["Current Holdings"]["D3"] = 400
+    workbook.save(path)
+
+    typed = [1202, 1600, 398, 0, approx(0.199), 2398, 2000, 398]
+    assert computed(path, "Portfolio History")[1][1:] == typed  # the whole row follows
+    # The next day's run rewrites Current Holdings: the first day's row keeps what it showed, now as figures.
+    ExcelExporter(path).export(valuation(abcd="130"), DAY_TWO)
+    history = computed(path, "Portfolio History")
+    assert history[1][1:] == typed
+    assert rows(path, "Portfolio History")[1][1:3] == (1202, 1600)
+    assert history[2][1:] == [1202, 1700, 498, 0, approx(0.249), 2498, 2000, 498]
+
+
+def test_a_day_left_incomplete_stays_incomplete_once_the_next_day_rewrites_the_holdings(tmp_path: Path) -> None:
+    path = tmp_path / "portfolio.xlsx"
+    portfolio = compute_portfolio(statement_from(*LINES))
+    ExcelExporter(path).export(value_portfolio(portfolio, {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}), DAY_ONE)
+
+    ExcelExporter(path).export(valuation(), DAY_TWO)
+
+    # Still without WXYZ, as on its day.
+    assert computed(path, "Portfolio History")[1][1:] == [
+        1001, 1200, 199, 0, "unavailable", "unavailable", 2000, "unavailable",
+    ]  # fmt: skip
 
 
 def test_holdings_sheet_is_replaced_not_appended_to(tmp_path: Path) -> None:
@@ -372,9 +410,9 @@ def test_left_out_investment_is_greyed_and_the_total_and_history_cover_the_rest(
     assert rules["D2:D3"].priority < rules["A2:H3"].priority  # its dark red text wins over the row's grey
     assert "type this investment's current value here" in sheet["D3"].comment.text
     assert result.history == "added"
-    history = rows(path, "Portfolio History")[1]
-    assert history[1:4] == (1001, 1200, 199)
-    assert (history[6], history[8]) == ("unavailable", "unavailable")  # net worth needs every value
+    history = computed(path, "Portfolio History")[1]
+    assert history[1:4] == [1001, 1200, 199]
+    assert history[5:] == ["unavailable", "unavailable", 2000, "unavailable"]  # net worth needs every value
     assert "leaves out what has no price (WXYZ)" in " ".join(result.notes)
 
 
@@ -414,7 +452,7 @@ def test_price_entered_today_is_written_with_a_comment_and_counts_for_history(tm
     assert "entered by hand on 2026-10-13" in sheet["D3"].comment.text
     assert "Includes values entered by hand" in sheet["D4"].comment.text
     assert result.history == "added"
-    assert rows(path, "Portfolio History")[1][2] == 1600
+    assert computed(path, "Portfolio History")[1][2] == 1600
 
 
 def test_price_entered_on_an_earlier_day_leaves_history_alone(tmp_path: Path) -> None:

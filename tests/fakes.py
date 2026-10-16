@@ -62,30 +62,35 @@ def computed(path: Path, sheet_name: str) -> list[list[object]]:
     """Return a sheet's rows as Excel would show them, working out its formulas.
 
     Knows only what the app's sheets use: IF, OR, AND, N, ISNUMBER, COUNT, SUM, SUMPRODUCT, arithmetic,
-    comparisons, cell references and ranges (``$`` ignored). Numbers come back as floats.
+    comparisons, cell references and ranges, also on other sheets (``$`` ignored). Numbers come back
+    as floats.
     """
     import re
 
     from openpyxl import load_workbook
     from openpyxl.utils import column_index_from_string
 
-    sheet = load_workbook(path)[sheet_name]
-    done: dict[tuple[int, int], object] = {}
+    workbook = load_workbook(path)
+    names = list(workbook.sheetnames)
+    done: dict[tuple[int, int, int], object] = {}
 
-    def value(column: str, row: int) -> object:
-        key = (row, column_index_from_string(column))
+    def value(column: str, row: int, sheet: int) -> object:
+        key = (sheet, row, column_index_from_string(column))
         if key not in done:
-            raw = sheet.cell(row=key[0], column=key[1]).value
+            raw = workbook[names[sheet]].cell(row=row, column=key[2]).value
             if isinstance(raw, str) and raw.startswith("="):
-                done[key] = evaluate(raw[1:])
+                done[key] = evaluate(raw[1:], sheet)
             elif isinstance(raw, (int, float, Decimal)) and not isinstance(raw, bool):
                 done[key] = float(raw)
             else:
                 done[key] = _Text(raw) if raw is not None else None
         return done[key]
 
-    def cells(first: str, first_row: int, last: str, last_row: int) -> list[object]:
-        return [value(first, row) for row in range(first_row, last_row + 1)]
+    def cells(first: str, first_row: int, last: str, last_row: int, sheet: int) -> list[object]:
+        return [value(first, row, sheet) for row in range(first_row, last_row + 1)]
+
+    def sheet_index(match: re.Match[str]) -> str:
+        return str(names.index(match.group(1).replace("''", "'")))
 
     def is_number(item: object) -> object:
         if isinstance(item, list):
@@ -105,10 +110,14 @@ def computed(path: Path, sheet_name: str) -> list[list[object]]:
         "_value": value,
     }
 
-    def evaluate(formula: str) -> object:
+    def evaluate(formula: str, sheet: int) -> object:
         text = formula.replace("$", "").replace("--", "")
-        text = re.sub(r"\b([A-Z]+)(\d+):([A-Z]+)(\d+)\b", r"_cells('\1',\2,'\3',\4)", text)
-        text = re.sub(r"\b([A-Z]{1,2})(\d+)\b", r"_value('\1',\2)", text)
+        # 'Other sheet'!B4 becomes «1»B4, the sheet's number, so that its name is never read as a cell.
+        text = re.sub(r"'((?:[^']|'')+)'!", lambda match: f"«{sheet_index(match)}»", text)
+        here = f"«{sheet}»"
+        text = re.sub(r"(?<![»:\w])([A-Z]+\d+(?::[A-Z]+\d+)?)\b", lambda match: here + match.group(1), text)
+        text = re.sub(r"«(\d+)»([A-Z]+)(\d+):([A-Z]+)(\d+)\b", r"_cells('\2',\3,'\4',\5,\1)", text)
+        text = re.sub(r"«(\d+)»([A-Z]{1,2})(\d+)\b", r"_value('\2',\3,\1)", text)
         text = re.sub(r"(?<![<>!=])=(?!=)", "==", text)
         try:
             result = eval(text, {"__builtins__": {}}, functions)  # noqa: S307 - our own formulas, in tests
@@ -118,8 +127,10 @@ def computed(path: Path, sheet_name: str) -> list[list[object]]:
             return float(result)
         return _Text(result) if isinstance(result, str) else result
 
+    sheet = workbook[sheet_name]
+    index = names.index(sheet_name)
     return [
-        [value(column_letter, row) for column_letter in (chr(ord("A") + index) for index in range(sheet.max_column))]
+        [value(chr(ord("A") + column), row, index) for column in range(sheet.max_column)]
         for row in range(1, sheet.max_row + 1)
     ]
 

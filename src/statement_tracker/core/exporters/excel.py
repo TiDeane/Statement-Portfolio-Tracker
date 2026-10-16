@@ -139,6 +139,46 @@ def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float, Decimal)) and not isinstance(value, bool)
 
 
+def _signed(amount: Decimal) -> str:
+    """An amount to add in a formula: "+504.76" or "-3.20"."""
+    return f"{amount:+f}"
+
+
+_NET_WORTH_CASH = re.compile(r"C\d+([+-]\d+(?:\.\d+)?)")
+"""The cash in a history row's Net Worth formula, e.g. "+504.76" in '=IF(ISNUMBER(C5),C5+504.76,...)'."""
+
+
+def _reference(sheet_name: str) -> str:
+    """How a formula names another sheet: 'Current Holdings'!"""
+    return "'" + sheet_name.replace("'", "''") + "'!"
+
+
+def _points_elsewhere(value: Any) -> bool:
+    """Whether a cell is a formula that reads another sheet."""
+    return isinstance(value, str) and value.startswith("=") and "!" in value
+
+
+def _holdings_totals(sheet: Any) -> tuple[Decimal, Decimal | None, bool]:
+    """What the holdings sheet's Total row shows now, worked out as its formulas do: the invested
+    and current value of the investments that have a value (all invested, and no value, when none
+    has one), and whether every investment has a value."""
+    invested_all = invested = value_total = Decimal(0)
+    investments = valued = 0
+    for row in range(2, sheet.max_row + 1):
+        label, cost, value = (sheet.cell(row=row, column=column).value for column in (1, 2, _VALUE_COLUMN))
+        if label is None or label == TOTAL_LABEL or not _is_number(cost):
+            continue
+        investments += 1
+        invested_all += Decimal(str(cost))
+        if _is_number(value):
+            valued += 1
+            invested += Decimal(str(cost))
+            value_total += Decimal(str(value))
+    if not valued:
+        return invested_all, None, False
+    return invested, value_total, valued == investments
+
+
 def _percent(value: Decimal | None) -> Decimal | str:
     """A percentage as Excel stores it (21.08% is 0.2108), shown with a % sign by the cell format."""
     return UNAVAILABLE if value is None else value / _HUNDRED
@@ -309,14 +349,17 @@ class ExcelExporter:
             for name in [name for name in workbook.sheetnames if name not in (self.holdings_sheet, self.history_sheet)]:
                 del workbook[name]
 
+        self._freeze_history(history, holdings)
         written, shown = self._write_holdings(holdings, valuation)
         # A history row is dated today, so it is only written when every value is today's: a price
         # typed in today counts, a last known one or one typed in on an earlier day does not.
         current = valuation.prices_are_from(today)
-        history_action = self._write_history(history, valuation, today) if current else "skipped"
+        history_action, history_shown = (
+            self._write_history(history, valuation, today, written) if current else ("skipped", {})
+        )
         _style(holdings, _HOLDINGS_FORMATS, bold_last_row=written > 0, shown=shown)
         _mark_missing_values(holdings, written + 1)
-        _style(history, _HISTORY_FORMATS, shown=self._write_roi(history))
+        _style(history, _HISTORY_FORMATS, shown=self._history_formulas(history, history_shown))
 
         notes: list[str] = []
         backup, made_now = (None, False) if created or not self.backups_kept else self._backup(today)
@@ -341,7 +384,9 @@ class ExcelExporter:
             tickers = ", ".join(holding.position.ticker for holding in valuation.left_out)
             notes.append(
                 f'Today\'s row in "{self.history_sheet}" leaves out what has no price ({tickers}): its totals '
-                "cover the rest only, and its Net Worth and Gain vs Deposits are unavailable."
+                "cover the rest only, and its Net Worth and Gain vs Deposits are unavailable until a value "
+                "is typed in for it in "
+                f'"{self.holdings_sheet}".'
             )
         try:
             self._save(workbook)
@@ -559,23 +604,23 @@ class ExcelExporter:
                 sheet.cell(row=total, column=_VALUE_COLUMN).comment = _comment(" ".join(total_notes))
         return len(valuation.holdings), shown
 
-    def _write_history(self, sheet: Any, valuation: PortfolioValuation, today: date) -> str:
-        """Add today's row, or update it if today already has one. Other rows are never touched."""
+    # The history columns, by letter: A Date, B Total Cost Basis, C Total Market Value, D Unrealized
+    # PnL, E Realized PnL, F ROI %, G Net Worth, H Net Deposits, I Gain vs Deposits. Only B, C, E and
+    # H are figures; D, F, G and I are formulas over them, so they follow when a figure changes. Net
+    # Worth is the market value plus the cash the statement leaves, e.g. "C5+504.76".
+
+    def _write_history(
+        self, sheet: Any, valuation: PortfolioValuation, today: date, holdings_rows: int
+    ) -> tuple[str, dict[tuple[int, int], Any]]:
+        """Add today's row, or update it if today already has one. Other rows keep their figures.
+
+        Today's cost basis and market value point at the Total row of the holdings sheet, so a
+        value typed in there reaches the history too; ``_freeze_history`` turns them back into
+        figures on a later run. Returns what the row's formula cells show, to size columns by.
+        """
         portfolio = valuation.portfolio
         if valuation.total_market_value is None or valuation.unrealized_pnl is None:
-            return "skipped"
-        values = [
-            today,
-            valuation.invested_in_totals,
-            valuation.total_market_value,
-            valuation.unrealized_pnl,
-            portfolio.realized_pnl,
-            None,  # ROI %: a formula, written by _write_roi
-            _cell(valuation.net_worth),  # unavailable when something is left out of the totals
-            portfolio.net_deposits,
-            _cell(valuation.gain_vs_deposits),
-        ]
-
+            return "skipped", {}
         target = None
         for row in range(2, sheet.max_row + 1):
             existing = sheet.cell(row=row, column=1).value
@@ -585,28 +630,76 @@ class ExcelExporter:
                 target = row
                 break
         action = "updated" if target else "added"
-        target = target or sheet.max_row + 1
+        row = target or sheet.max_row + 1
+
+        cash = _signed(portfolio.cash)
+        if holdings_rows:
+            holdings = _reference(self.holdings_sheet)
+            total = holdings_rows + 2
+            cost_basis, market_value = f"={holdings}B{total}", f"={holdings}D{total}"
+            # Net worth needs every investment's value: none may be left out.
+            every_value = f"COUNT({holdings}D2:D{total - 1})={holdings_rows}"
+            net_worth = f'=IF({every_value},C{row}{cash},"{UNAVAILABLE}")'
+        else:
+            cost_basis, market_value = valuation.invested_in_totals, valuation.total_market_value
+            net_worth = f'=IF(ISNUMBER(C{row}),C{row}{cash},"{UNAVAILABLE}")'
+        values = [today, cost_basis, market_value, None, portfolio.realized_pnl, None, net_worth, portfolio.net_deposits]
         for column, value in enumerate(values, start=1):
-            sheet.cell(row=target, column=column, value=value)
-        return action
+            if value is not None:
+                sheet.cell(row=row, column=column, value=value)
+        return action, {
+            (row, 2): valuation.invested_in_totals,
+            (row, 3): valuation.total_market_value,
+            (row, 7): _cell(valuation.net_worth),
+        }
 
-    def _write_roi(self, sheet: Any) -> dict[tuple[int, int], Any]:
-        """Make the ROI % of every dated history row Gain vs Deposits / Net Deposits, as a formula.
+    def _freeze_history(self, history: Any, holdings: Any) -> None:
+        """Give history rows that point at the holdings sheet the figures it shows now, before it is
+        rewritten: each row keeps what it showed on its day, including values typed in since."""
+        linked = [row for row in range(2, history.max_row + 1) if _points_elsewhere(history.cell(row=row, column=2).value)]
+        if not linked:
+            return
+        cost_basis, market_value, complete = _holdings_totals(holdings)
+        for row in linked:
+            cash = _NET_WORTH_CASH.search(str(history.cell(row=row, column=7).value))
+            history.cell(row=row, column=2).value = cost_basis
+            history.cell(row=row, column=3).value = _cell(market_value)
+            net_worth = f'=IF(ISNUMBER(C{row}),C{row}{cash.group(1)},"{UNAVAILABLE}")'
+            history.cell(row=row, column=7).value = net_worth if cash and complete else UNAVAILABLE
 
-        Rows written by earlier versions (unrealized PnL / cost basis) switch too, since both
-        columns it needs were always written. Returns what each formula cell shows, to size the
-        column by.
+    def _history_formulas(self, sheet: Any, shown: dict[tuple[int, int], Any]) -> dict[tuple[int, int], Any]:
+        """Write the formulas of every dated history row and return what they show, with ``shown``.
+
+        Rows written by earlier versions hold figures in every column, and an ROI % that was the
+        unrealized PnL over the cost basis; they get the same formulas, which give the same figures
+        except for ROI %, now the gain over the money deposited.
         """
-        shown: dict[tuple[int, int], Any] = {}
+        shown = dict(shown)
         for row in range(2, sheet.max_row + 1):
             if sheet.cell(row=row, column=1).value is None:
                 continue
-            sheet.cell(row=row, column=6).value = (
-                f'=IF(AND(ISNUMBER(I{row}),N(H{row})>0),I{row}/H{row},"{UNAVAILABLE}")'
-            )
-            deposits, gain = sheet.cell(row=row, column=8).value, sheet.cell(row=row, column=9).value
-            if _is_number(deposits) and _is_number(gain) and deposits > 0:
-                shown[row, 6] = Decimal(str(gain)) / Decimal(str(deposits))
-            else:
-                shown[row, 6] = UNAVAILABLE
+
+            def number(column: int) -> Decimal | None:
+                value = shown.get((row, column), sheet.cell(row=row, column=column).value)
+                return Decimal(str(value)) if _is_number(value) else None
+
+            cost_basis, market_value, deposits = number(2), number(3), number(8)
+            net_worth = sheet.cell(row=row, column=7).value
+            if _is_number(net_worth) and market_value is not None:  # a figure, from an earlier version
+                cash = _signed(Decimal(str(net_worth)) - market_value)
+                sheet.cell(row=row, column=7).value = f'=IF(ISNUMBER(C{row}),C{row}{cash},"{UNAVAILABLE}")'
+                shown[row, 7] = Decimal(str(net_worth))
+            elif (row, 7) not in shown:
+                cash = _NET_WORTH_CASH.search(str(net_worth))
+                worth = market_value + Decimal(cash.group(1)) if cash and market_value is not None else None
+                shown[row, 7] = _cell(worth)
+            net_worth_now = number(7)
+
+            sheet.cell(row=row, column=4).value = f'=IF(AND(ISNUMBER(C{row}),ISNUMBER(B{row})),C{row}-B{row},"{UNAVAILABLE}")'
+            sheet.cell(row=row, column=6).value = f'=IF(AND(ISNUMBER(I{row}),N(H{row})>0),I{row}/H{row},"{UNAVAILABLE}")'
+            sheet.cell(row=row, column=9).value = f'=IF(AND(ISNUMBER(G{row}),ISNUMBER(H{row})),G{row}-H{row},"{UNAVAILABLE}")'
+            gain = net_worth_now - deposits if net_worth_now is not None and deposits is not None else None
+            shown[row, 4] = _cell(market_value - cost_basis if market_value is not None and cost_basis is not None else None)
+            shown[row, 6] = _cell(gain / deposits if gain is not None and deposits else None)
+            shown[row, 9] = _cell(gain)
         return shown

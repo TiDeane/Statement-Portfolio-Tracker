@@ -209,7 +209,9 @@ Some cells say more:
 
 ### The Portfolio History sheet
 
-One row per day you run the app, so you can follow your totals over time. Running again on the same day updates that day's row; rows from earlier days are never changed.
+One row per day you use the app, so you can follow your totals over time. Using it again on the same day updates that day's row. Rows from earlier days keep their numbers; the only exception is ROI %, which versions before 1.0 worked out differently: in their rows it switches to the meaning below.
+
+Excel works out Unrealized PnL, ROI %, Net Worth and Gain vs Deposits from the other columns, so they follow if you change a number. Today's Total Cost Basis and Total Market Value come straight from the Total row of Current Holdings, so a value you type in there shows up in today's row at once. The next day you use the app, it keeps what the row showed by then.
 
 | Column | Meaning |
 |---|---|

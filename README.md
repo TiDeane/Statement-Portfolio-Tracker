@@ -200,6 +200,8 @@ Before changing an existing file, the app saves a backup copy of it, so after th
 
 > **How I use it:** I track my expenses in an Excel file saved in OneDrive. The file only has tables and charts, so I let the app update it directly: it writes and updates its own two sheets without touching mine. I keep a single backup copy, just in case.
 
+**Using the app's sheets in your own.** Formulas, tables and charts in your own sheets can read from Current Holdings and Portfolio History, and keep working after each update. Build them in your own sheets, not inside the app's: anything you add there may be lost or stop the app from updating them. The Total row moves when you buy a new investment, so find it by name rather than by cell, for example `=XLOOKUP("Total", 'Current Holdings'!A:A, 'Current Holdings'!D:D)`.
+
 If a sheet of yours is already called "Current Holdings" or "Portfolio History", the app stops without changing anything; rename that sheet in Excel first.
 
 ### The Current Holdings sheet

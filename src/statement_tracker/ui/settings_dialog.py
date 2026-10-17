@@ -134,14 +134,20 @@ class SettingsDialog(QDialog):
         header.setSectionResizeMode(NAME_COLUMN, QHeaderView.ResizeMode.Stretch)  # the name takes what is left
         self.table.setAlternatingRowColors(True)
         self.table.itemSelectionChanged.connect(self._update_buttons)
-        self.empty_label = QLabel(NOTHING_REMEMBERED)
+        # While nothing is remembered, the table still shows, headings and all, with the reason inside it.
+        self.empty_label = QLabel(NOTHING_REMEMBERED, self.table.viewport())
+        self.empty_label.setObjectName("notes")
+        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_label.setWordWrap(True)
+        inside_table = QVBoxLayout(self.table.viewport())
+        inside_table.addWidget(self.empty_label)
 
         self.rename_button = QPushButton("&Rename")
         self.rename_button.setToolTip("Type a new name in the table. Enter saves it, Esc cancels.")
         self.rename_button.clicked.connect(self.rename_selected)
         self.choose_again_button = QPushButton("Choose the &listing next time")
         self.choose_again_button.setToolTip(
-            "Nothing changes now. The next time you press step 3, the app shows the listings for this investment "
+            "Nothing changes now. The next time you run the app, it shows the listings for this investment "
             "so you can pick again."
         )
         self.choose_again_button.clicked.connect(self.choose_again_selected)
@@ -173,7 +179,6 @@ class SettingsDialog(QDialog):
         investments_layout = QVBoxLayout(investments_box)
         investments_layout.addWidget(intro)
         investments_layout.addWidget(self.table)
-        investments_layout.addWidget(self.empty_label)
         investments_layout.addLayout(row_buttons)
         investments_layout.addWidget(self.always_first)
         investments_layout.addWidget(self.message_label)
@@ -249,7 +254,6 @@ class SettingsDialog(QDialog):
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, column, item)
         self._filling = False
-        self.table.setVisible(bool(tickers))
         self.empty_label.setVisible(not tickers)
         self.forget_all_button.setEnabled(bool(tickers))
         if select in tickers:

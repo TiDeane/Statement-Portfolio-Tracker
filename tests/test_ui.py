@@ -799,7 +799,8 @@ def test_settings_rename_choose_again_and_forget_an_investment(app, tmp_path: Pa
     dialog.confirm = lambda question: True
     dialog.table.selectRow(0)
     dialog.forget_selected()
-    assert dialog.table.isHidden() and not dialog.empty_label.isHidden()
+    # The empty table stays, headings and all, with the reason inside it.
+    assert dialog.table.rowCount() == 0 and not dialog.table.isHidden() and not dialog.empty_label.isHidden()
     assert Settings.load(tmp_path / "settings.json").known_tickers() == []
 
 

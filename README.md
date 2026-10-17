@@ -6,6 +6,26 @@ The app reads the account statement CSV file you export from the Revolut app. It
 
 > **Unofficial.** This app is not made by, affiliated with or endorsed by Revolut. It is not financial advice. Prices are read from Yahoo Finance's public web pages, which is unofficial; they may be delayed or wrong, and Yahoo's terms apply to them. Check important numbers against your Revolut app.
 
+## Key Information
+
+**Install:**
+
+- Download the file ending in `-windows-x64-setup.exe` from the latest release on the [Releases page](https://github.com/TiDeane/Statement-Portfolio-Tracker/releases), and run it to install the app.
+- MacOS and Linux versions are also available.
+
+**Each time you want an update:**
+
+1. In the Revolut app, export your account statement: **Invest › More › Documents › Brokerage account › Account statement**, format **CSV**, date range **All time**. Get the file onto your computer.
+2. Open the app and choose that file. The first time, also choose your Excel file or let the app create one. The app remembers this in the future. You may also simply display the output in the app itself, without touching any spreadsheets.
+3. Press the green button. The app looks up current prices, shows what each investment is worth and your gain or loss, and updates your Excel file.
+
+**What it does to your Excel file:**
+
+- It adds two sheets and updates them each time: **Current Holdings**, with one row per investment you hold and a Total, and **Portfolio History**, with your totals, one row per day you use the app.
+- Your own sheets keep their values, formulas, formatting, tables and charts, and can use the app's two sheets in their own formulas and charts. **Pictures, shapes and text boxes are lost**, because the app saves the whole file again.
+- Before its first change each day, it saves a backup copy of the file in the same folder. The total number of backups stored is customizable.
+- Close the file in Excel before you press the green button: the app cannot save a file that Excel has open.
+
 ## Contents
 
 - [Install](#install)

@@ -19,6 +19,9 @@ AppPublisherURL={#AppUrl}
 AppSupportURL={#AppUrl}/issues
 AppUpdatesURL={#AppUrl}/releases
 DefaultDirName={autopf}\{#AppName}
+; No "folder already exists" question: a folder left behind by an uninstall that could not remove
+; everything is the app's own, the user cannot act on the question, and [InstallDelete] clears it.
+DirExistsWarning=no
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible

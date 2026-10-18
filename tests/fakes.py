@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -34,6 +35,118 @@ def write_statement(folder: Path, *lines: str, header: str = HEADER) -> Path:
     path = folder / "statement.csv"
     path.write_text("\n".join((header, *lines)) + "\n", encoding="utf-8")
     return path
+
+
+@dataclass
+class Expected:
+    """What a statement made by ``random_statement`` must add up to, kept by the generator as it writes
+    each row: the plain average-cost rules of the specification (B1 to B7), worked out separately
+    from the app's own calculator."""
+
+    deposits: Decimal = Decimal(0)
+    cash: Decimal = Decimal(0)
+    shares: dict[str, Decimal] = field(default_factory=dict)
+    cost_basis: dict[str, Decimal] = field(default_factory=dict)
+    realized: dict[str, Decimal] = field(default_factory=dict)
+    dividends: dict[str, Decimal] = field(default_factory=dict)
+
+    @property
+    def held(self) -> list[str]:
+        """Tickers still held, in the order they were first bought."""
+        return [ticker for ticker, shares in self.shares.items() if shares > 0]
+
+
+def _amount(value: Decimal, currency: str, rng: random.Random) -> str:
+    """An amount as Revolut writes it: "EUR 123.45", "EUR 1,234.56", or "EUR 120" when it is whole."""
+    if value == value.to_integral_value() and rng.random() < 0.5:
+        return f"{currency} {value:,.0f}" if rng.random() < 0.5 else f"{currency} {value:.0f}"
+    return f"{currency} {value:,.2f}" if rng.random() < 0.7 else f"{currency} {value:.2f}"
+
+
+def random_statement(
+    seed: int,
+    tickers: Sequence[str] = ("ABCD", "WXYZ", "QRST", "LMNO", "EFGH"),
+    months: int = 36,
+    start: datetime = datetime(2022, 1, 3, 8, 0),
+    currency: str = "EUR",
+) -> tuple[list[str], Expected]:
+    """A believable full-history statement, different for each seed, as CSV lines (without the header),
+    and what it must add up to.
+
+    Every month there is a top-up, then buys of a few of the tickers (with a small fee in the total),
+    sometimes a sale of part or all of a holding (minus a fee), and sometimes a dividend, also on
+    tickers sold since. Buying again after selling everything happens too. Quantities have up to
+    eight decimals; times have three or six fractional digits; amounts are written in each of the
+    ways Revolut writes them. Nothing is ever sold that is not held.
+    """
+    import csv
+    import io
+    from datetime import timedelta
+
+    rng = random.Random(seed)
+    expected = Expected()
+    price = {ticker: Decimal(rng.randint(2000, 50000)) / 100 for ticker in tickers}
+    rows: list[list[str]] = []
+    moment = start
+
+    def at() -> str:
+        nonlocal moment
+        moment += timedelta(minutes=rng.randint(5, 600), seconds=rng.randint(0, 59))
+        fraction = f"{rng.randint(0, 999):03d}" if rng.random() < 0.5 else f"{rng.randint(0, 999999):06d}"
+        return moment.strftime("%Y-%m-%dT%H:%M:%S.") + fraction + "Z"
+
+    for month in range(months):
+        moment = max(moment, start + timedelta(days=30 * month))
+        top_up = Decimal(rng.randint(100, 3000))
+        rows.append([at(), "", "CASH TOP-UP", "", "", _amount(top_up, currency, rng), currency, "1"])
+        expected.deposits += top_up
+        expected.cash += top_up
+        for ticker in tickers:
+            price[ticker] = max(Decimal("1.00"), (price[ticker] * Decimal(rng.uniform(0.9, 1.12))).quantize(Decimal("0.01")))
+        chosen = rng.sample(list(tickers), rng.randint(1, 3))
+        budget = max(expected.cash, Decimal(0)) * Decimal(rng.uniform(0.4, 0.95)) / len(chosen)
+        for ticker in chosen:  # most of the cash there is goes into the investments, as people do
+            quantity = (budget / price[ticker]).quantize(Decimal("0.00000001"))
+            if quantity <= 0:
+                continue
+            fee = Decimal(rng.choice(["0", "0", "0.01", "0.50", "1"]))
+            total = (quantity * price[ticker] + fee).quantize(Decimal("0.01"))
+            if total < Decimal("0.01"):
+                continue
+            rows.append([at(), ticker, "BUY - MARKET", str(quantity), _amount(price[ticker], currency, rng),
+                         _amount(total, currency, rng), currency, "1"])  # fmt: skip
+            expected.shares[ticker] = expected.shares.get(ticker, Decimal(0)) + quantity
+            expected.cost_basis[ticker] = expected.cost_basis.get(ticker, Decimal(0)) + total
+            expected.cash -= total
+        for ticker in expected.held:
+            if rng.random() < 0.12:
+                held = expected.shares[ticker]
+                everything = rng.random() < 0.35
+                quantity = held if everything else (held * Decimal(rng.uniform(0.1, 0.8))).quantize(Decimal("0.00000001"))
+                if not everything and held - quantity < Decimal("0.001"):
+                    quantity = held  # never leave a crumb: sell all of it
+                fee = Decimal(rng.choice(["0", "0.01", "1"]))
+                total = max(Decimal("0.01"), (quantity * price[ticker] - fee).quantize(Decimal("0.01")))
+                rows.append([at(), ticker, "SELL - MARKET", str(quantity), _amount(price[ticker], currency, rng),
+                             _amount(total, currency, rng), currency, "1"])  # fmt: skip
+                average = expected.cost_basis[ticker] / held
+                expected.realized[ticker] = expected.realized.get(ticker, Decimal(0)) + total - average * quantity
+                expected.shares[ticker] = held - quantity
+                expected.cost_basis[ticker] = Decimal(0) if quantity == held else expected.cost_basis[ticker] - average * quantity
+                expected.cash += total
+        for ticker in list(expected.shares):  # held now or once
+            if rng.random() < 0.08:
+                dividend = Decimal(rng.randint(1, 2500)) / 100
+                rows.append([at(), ticker, "DIVIDEND", "", "", _amount(dividend, currency, rng), currency, "1"])
+                expected.dividends[ticker] = expected.dividends.get(ticker, Decimal(0)) + dividend
+                expected.cash += dividend
+
+    lines = []
+    for row in rows:
+        out = io.StringIO()
+        csv.writer(out, lineterminator="").writerow(row)
+        lines.append(out.getvalue())
+    return lines, expected
 
 
 def ranges_around(buys: Iterable[Transaction], spread: str = "0.50") -> dict[date, tuple[Decimal, Decimal]]:

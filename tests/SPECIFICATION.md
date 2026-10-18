@@ -212,3 +212,4 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
 - **J3.** A damaged settings file is explained, not silently reset. Tests never touch the real settings or the network.
 - **J4.** The packaged app's smoke test reads the sample offline and writes a spreadsheet.
 - **J5.** On Windows, the installer can tell that the app is open.
+- **J6.** Installing a newer version over an older one keeps everything: the settings, listings, names, entered values and last prices saved by any earlier version are read and used.

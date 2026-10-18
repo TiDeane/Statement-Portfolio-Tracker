@@ -1823,6 +1823,77 @@ def test_weeks_of_use_keep_one_history_row_per_valid_day_and_the_newest_backups(
     assert backups == ["mine_backup_2026-09-21.xlsx", "mine_backup_2026-09-22.xlsx", "mine_backup_2026-09-23.xlsx"]
 
 
+# -- upgrading ----------------------------------------------------------------------------------------------
+
+# What earlier versions of the app saved, exactly as each wrote it. Newer versions only ever added keys, and
+# one ("leave_out_unpriced") was dropped again.
+SETTINGS_OF = {
+    "2026-10-11": {"ticker_choices": {}, "suffixes": [".DE", ".L", ".AS", ".MI", ".PA"], "index_names": {},
+                   "last_folder": None, "spreadsheet_path": None, "holdings_sheet": "Current Holdings",
+                   "history_sheet": "Portfolio History"},
+    "2026-10-14": {"ticker_choices": {}, "ask_again": [], "always_use_first_listing": False,
+                   "leave_out_unpriced": True, "suffixes": [".DE", ".L", ".AS", ".MI", ".PA"], "index_names": {},
+                   "last_folder": None, "spreadsheet_path": None, "holdings_sheet": "Current Holdings",
+                   "history_sheet": "Portfolio History"},
+    "2026-10-15": {"ticker_choices": {}, "ask_again": [], "always_use_first_listing": False,
+                   "suffixes": [".DE", ".L", ".AS", ".MI", ".PA"], "index_names": {}, "last_folder": None,
+                   "spreadsheet_path": None, "holdings_sheet": "Current Holdings",
+                   "history_sheet": "Portfolio History", "backups_kept": 2},
+}  # fmt: skip
+LAST_PRICE = {"currency": "EUR", "price": "400", "quoted_currency": "EUR", "converted": False,
+              "as_of": "2026-10-09T17:35:00+00:00"}  # fmt: skip
+ENTERED = {"currency": "EUR", "price": "450", "entered_at": "2026-10-10T12:00:00+00:00"}
+PRICES_OF = {
+    "2026-10-14 (last prices)": {"prices": {"EQQB.DE": LAST_PRICE}},
+    "2026-10-14 (values entered)": {"prices": {"EQQB.DE": LAST_PRICE}, "entered": {"EQQB": ENTERED}},
+    "2026-10-15": {"prices": {"EQQB.DE": LAST_PRICE}, "entered": {"EQQB": ENTERED},
+                   "written": {"/somewhere/else.xlsx": {"EQQB": "662.98"}}},
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("prices_from", list(PRICES_OF))
+@pytest.mark.parametrize("settings_from", list(SETTINGS_OF))
+def test_what_an_earlier_version_kept_is_used_after_upgrading(
+    app, tmp_path: Path, settings_from: str, prices_from: str
+) -> None:
+    # Spec J6: installing a newer version over an older one keeps everything.
+    import json
+
+    spreadsheet = tmp_path / "mine.xlsx"
+    Workbook().save(spreadsheet)  # the user's own spreadsheet, chosen with the earlier version
+    saved = dict(SETTINGS_OF[settings_from])
+    saved["ticker_choices"] = {
+        "EQQB": {"symbol": "EQQB.DE", "name": "Nasdaq fund", "exchange": "XETRA", "currency": "EUR", "confirmed": True}
+    }
+    saved["index_names"] = {"EQQB": "My Nasdaq"}
+    saved["last_folder"], saved["spreadsheet_path"] = str(SAMPLE.parent), str(spreadsheet)
+    (tmp_path / "settings.json").write_text(json.dumps(saved, indent=2), encoding="utf-8")
+    (tmp_path / "last_prices.json").write_text(json.dumps(PRICES_OF[prices_from], indent=2), encoding="utf-8")
+
+    window, errors = make_window(tmp_path, FakeProvider(offline=True))  # Yahoo unreachable: what is kept shows
+    window.ask_listing = lambda resolution: pytest.fail("the listing chosen before is asked for again")
+
+    assert window.spreadsheet_badge.text() == "✓ Already done: remembered from last time."
+    assert shows(window.spreadsheet_label, spreadsheet)
+    kept = saved.get("backups_kept", 3)  # versions before it was a setting: the default
+    assert f"the {kept} most recent are kept" in window.backup_label.text()
+    drop(window, SAMPLE)
+    run(app, window)
+
+    assert errors == []
+    name, worth = cells(window.table)[0][0], cells(window.table)[0][3]
+    assert name == "(EQQB) My Nasdaq"
+    if "entered" in PRICES_OF[prices_from]:
+        assert amount(worth, "662.98") and worth.endswith(YOUR_VALUE)  # 1.47328346 shares at 450
+    else:
+        assert amount(worth, "589.31") and worth.endswith(LAST_KNOWN)  # at the last price found, 400
+    assert load_workbook(spreadsheet)["Current Holdings"]["A2"].value == "(EQQB) My Nasdaq"
+    # And what it saves now is read back the same way.
+    again = Settings.load(tmp_path / "settings.json")
+    assert again.ticker_choices["EQQB"] == TickerChoice("EQQB.DE", "Nasdaq fund", "XETRA", "EUR", confirmed=True)
+    assert again.index_names == {"EQQB": "My Nasdaq"} and again.backups_kept == kept
+
+
 # -- J4: the packaged app's own check ----------------------------------------------------------------------
 
 

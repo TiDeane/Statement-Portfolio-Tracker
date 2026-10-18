@@ -78,11 +78,11 @@ def provider_with(*symbols: str) -> FakeProvider:
 
 
 def make_window(
-    tmp_path: Path, provider: FakeProvider, now: datetime | None = None
+    tmp_path: Path, provider: FakeProvider, now: datetime | None = None, today: date = TODAY
 ) -> tuple[MainWindow, list[UserFacingError]]:
     """The app's window on its own settings in ``tmp_path``, as it opens when the app starts."""
     extra = {"now": lambda: now} if now else {}
-    window = MainWindow(Settings.load(tmp_path / "settings.json"), lambda: provider, lambda: TODAY, **extra)
+    window = MainWindow(Settings.load(tmp_path / "settings.json"), lambda: provider, lambda: today, **extra)
     errors: list[UserFacingError] = []
     window.show_error = errors.append
     window.ask_retry = lambda error: bool(errors.append(error))  # record it and answer "Not now"
@@ -1672,6 +1672,119 @@ def test_undoing_a_rename_after_a_run_brings_back_only_the_name(app, tmp_path: P
     assert saved.index_names == {} and saved.ticker_choices["EQQB"].symbol == "EQQB.MI" and saved.ask_again == set()
     assert window.table.item(0, 0).text() == "(EQQB) Nasdaq fund"
     assert errors == []
+
+
+# -- weeks of use ----------------------------------------------------------------------------------------------
+
+
+def test_weeks_of_use_keep_one_history_row_per_valid_day_and_the_newest_backups(app, tmp_path: Path) -> None:
+    # Spec D3, E4-E6, H4, H5, over time: the app is opened most days, each time with a statement exported
+    # that day; prices move, Yahoo is unreachable on some days, and the user fills in a value both ways.
+    import os
+
+    from fakes import computed
+
+    rows = [  # (date, row): each statement has the rows dated before the day it is exported
+        (date(2026, 8, 3), "2026-08-03T09:00:00.000Z,,CASH TOP-UP,,,EUR 3000,EUR,1"),
+        (date(2026, 8, 3), "2026-08-03T10:00:00.000Z,ABCD,BUY - MARKET,10,EUR 100.00,EUR 1001,EUR,1"),
+        (date(2026, 8, 4), "2026-08-04T10:00:00.000Z,WXYZ,BUY - MARKET,4,EUR 50.00,EUR 201,EUR,1"),
+        (date(2026, 9, 4), "2026-09-04T10:00:00.000Z,ZQXJ,BUY - MARKET,2,EUR 50.00,EUR 100,EUR,1"),
+        (date(2026, 9, 10), "2026-09-10T10:00:00.000Z,ABCD,BUY - MARKET,2,EUR 130.00,EUR 260,EUR,1"),
+        (date(2026, 9, 18), "2026-09-18T10:00:00.000Z,WXYZ,SELL - MARKET,2,EUR 55.00,EUR 110,EUR,1"),
+    ]
+    provider = FakeProvider()
+    provider.add("ABCD.DE", "EUR", ranges={date(2026, 8, 3): (Decimal(99), Decimal(101)),
+                                           date(2026, 9, 10): (Decimal(129), Decimal(131))})  # fmt: skip
+    provider.add("WXYZ.DE", "EUR", ranges={date(2026, 8, 4): (Decimal(49), Decimal(51))})
+    spreadsheet = tmp_path / "mine.xlsx"
+    history_as_shown: dict[date, list] = {}  # each day's history row, as Excel showed it at the end of that day
+    tables: dict[date, list[list[str]]] = {}
+
+    def open_the_app(day: date, offline: bool = False, *, before=None, after=None) -> None:
+        number = (day - date(2026, 9, 1)).days
+        provider.offline = offline
+        for symbol, start in (("ABCD.DE", 120), ("WXYZ.DE", 60), ("ZQXJ.DE", 70)):
+            if symbol in provider.listings:
+                provider.listings[symbol].price = Decimal(start + number)
+        if before:
+            before()
+        noon = datetime(day.year, day.month, day.day, 12).astimezone()
+        window, errors = make_window(tmp_path, provider, now=noon, today=day)
+        window.ask_listing = lambda resolution: None  # ZQXJ: nothing found, so "Skip this investment"
+        statement = write_statement(tmp_path, *(row for when, row in rows if when < day))
+        if not spreadsheet.exists():
+            drop(window, statement, spreadsheet)  # the first day: step 2 too; it is remembered from then on
+        else:
+            drop(window, statement)
+            assert shows(window.spreadsheet_label, spreadsheet)
+        run(app, window)
+        if after:
+            after(window)
+        assert errors == []
+        tables[day] = cells(window.table)
+        sheet = load_workbook(spreadsheet)["Portfolio History"]
+        dates = [cell.value.date() for cell in sheet["A"][1:]]
+        shown = computed(spreadsheet, "Portfolio History")[1:]
+        # Earlier days' rows show what they showed on their day, whatever happened since.
+        for when, row in zip(dates, shown):
+            if when in history_as_shown and when != day:
+                assert row == history_as_shown[when], f"the row of {when} changed on {day}"
+        history_as_shown.update(zip(dates, shown))
+        window.close()
+
+    def worth(day: date, ticker: str) -> str:
+        return next(row[3] for row in tables[day] if row[0] == ticker or row[0].startswith(f"({ticker})"))
+
+    def enter_value(window: MainWindow) -> None:
+        window.ask_value = lambda choices, selected, currency: ("ZQXJ", Decimal("120"))  # all 2 shares
+        button(window, "Enter its value...").click()
+
+    def type_into_the_sheet() -> None:
+        workbook = load_workbook(spreadsheet)
+        sheet = workbook["Current Holdings"]
+        (row,) = [row for row in range(2, sheet.max_row + 1) if str(sheet.cell(row=row, column=1).value).endswith("ZQXJ")
+                  or sheet.cell(row=row, column=1).value == "ZQXJ"]  # fmt: skip
+        sheet.cell(row=row, column=4).value = 130
+        workbook.save(spreadsheet)
+        saved = datetime(2026, 9, 14, 9).timestamp()  # typed in that morning, before opening the app
+        os.utime(spreadsheet, (saved, saved))
+
+    def yahoo_finds_zqxj() -> None:
+        provider.add("ZQXJ.DE", "EUR", price="91", ranges={date(2026, 9, 4): (Decimal(49), Decimal(51))})
+
+    open_the_app(date(2026, 9, 1))  # the spreadsheet is created
+    open_the_app(date(2026, 9, 2))
+    open_the_app(date(2026, 9, 3))
+    open_the_app(date(2026, 9, 3))  # again the same day: the day's row is updated, not doubled
+    open_the_app(date(2026, 9, 7))  # ZQXJ bought: Yahoo does not know it, so the row leaves it out
+    open_the_app(date(2026, 9, 8), after=enter_value)  # a value entered today: today's row includes it
+    open_the_app(date(2026, 9, 9))  # that value is from an earlier day now: no row
+    open_the_app(date(2026, 9, 10), offline=True)  # Yahoo unreachable: last known prices, no row
+    open_the_app(date(2026, 9, 11), offline=True)
+    open_the_app(date(2026, 9, 14), before=type_into_the_sheet)  # typed in today: today's row includes it
+    open_the_app(date(2026, 9, 21), before=yahoo_finds_zqxj)  # Yahoo's price replaces the value typed in
+    open_the_app(date(2026, 9, 22), offline=True)  # ZQXJ's last price is Yahoo's now, not the value typed in
+    open_the_app(date(2026, 9, 23))
+
+    sheet = load_workbook(spreadsheet)["Portfolio History"]
+    written = [cell.value.date() for cell in sheet["A"][1:]]
+    assert written == [date(2026, 9, day) for day in (1, 2, 3, 7, 8, 14, 21, 23)]  # one row per valid day
+    partial = {when for when, cell in zip(written, sheet["A"][1:]) if cell.comment and "Leaves out ZQXJ" in cell.comment.text}
+    assert partial == {date(2026, 9, 7)}
+    # Market value on the first day: 10 ABCD at 120 and 4 WXYZ at 60; on the last, 12 ABCD, 2 WXYZ and 2 ZQXJ.
+    assert history_as_shown[date(2026, 9, 1)][2] == 1440
+    assert history_as_shown[date(2026, 9, 23)][2] == 12 * 142 + 2 * 82 + 2 * 92
+    assert history_as_shown[date(2026, 9, 8)][2] == 10 * 127 + 4 * 67 + 120  # with the value entered
+    assert history_as_shown[date(2026, 9, 14)][2] == 12 * 133 + 4 * 73 + 130  # with the value typed in
+
+    assert worth(date(2026, 9, 9), "ZQXJ").endswith(YOUR_VALUE)
+    assert worth(date(2026, 9, 10), "ABCD").endswith(LAST_KNOWN) and worth(date(2026, 9, 10), "ZQXJ").endswith(YOUR_VALUE)
+    assert amount(worth(date(2026, 9, 14), "ZQXJ"), "130.00") and worth(date(2026, 9, 14), "ZQXJ").endswith(YOUR_VALUE)
+    assert amount(worth(date(2026, 9, 21), "ZQXJ"), "182.00") and not worth(date(2026, 9, 21), "ZQXJ").endswith(YOUR_VALUE)
+    assert amount(worth(date(2026, 9, 22), "ZQXJ"), "182.00") and worth(date(2026, 9, 22), "ZQXJ").endswith(LAST_KNOWN)
+
+    backups = sorted(path.name for path in tmp_path.glob("mine_backup_*.xlsx"))
+    assert backups == ["mine_backup_2026-09-21.xlsx", "mine_backup_2026-09-22.xlsx", "mine_backup_2026-09-23.xlsx"]
 
 
 # -- J4: the packaged app's own check ----------------------------------------------------------------------

@@ -1,4 +1,8 @@
-"""The UI-free pipeline and the command line, with a mocked provider and a temporary settings file."""
+"""The UI-free pipeline and the command line, with a mocked provider and a temporary settings file.
+
+Messages are checked by the facts they must give (which investment, which date, what happened), not
+word for word. Rule numbers refer to tests/SPECIFICATION.md. No network.
+"""
 
 import io
 from datetime import UTC, date, datetime
@@ -12,12 +16,10 @@ from openpyxl import load_workbook
 from statement_tracker import cli
 from statement_tracker.core.calculator import buys_by_ticker
 from statement_tracker.core.errors import UserFacingError
-from statement_tracker.core.market_data.pricing import price_in_currency, to_major_units
-from statement_tracker.core.market_data.provider import PriceUnavailableError, Quote, SymbolInfo
 from statement_tracker.core.parser import load_statement
 from statement_tracker.core.ticker_resolver import resolve_ticker
 from statement_tracker.settings import Settings, TickerChoice
-from statement_tracker.workflow import build_report, values_typed_in, with_entered_prices
+from statement_tracker.workflow import build_report, with_entered_prices
 
 EQQB_BUYS = buys_by_ticker(load_statement(SAMPLE))["EQQB"]
 
@@ -137,7 +139,8 @@ def test_missing_price_is_left_out_of_the_totals(tmp_path: Path) -> None:
         "WXYZ,201.00,not in total,unavailable,not in total,unavailable,unavailable",
         "Total,1001.00,100.00,1200.00,100.00,199.00,19.88",
     ]
-    assert "WXYZ: current value unavailable. No current price for WXYZ.DE. It is left out of the totals." in errors
+    (note,) = [line for line in errors.splitlines() if "WXYZ" in line and "unavailable" in line]
+    assert "WXYZ.DE" in note and "left out of the totals" in note
 
 
 def test_ambiguous_ticker_is_left_unavailable_without_a_chooser(tmp_path: Path) -> None:
@@ -179,7 +182,7 @@ def test_matched_ticker_is_remembered_so_the_next_run_skips_matching(tmp_path: P
 
     assert code == 0
     assert output.splitlines()[1] == "EQQB,541.49,100.00,589.31,100.00,47.82,8.83"
-    assert second.calls == [("quote", "EQQB.DE")]
+    assert [kind for kind, _ in second.calls] == ["quote"]  # its price only: no listing is looked for again
 
 
 def test_confirmed_choice_is_never_replaced_by_automatic_matching(tmp_path: Path) -> None:
@@ -206,7 +209,7 @@ def test_always_using_the_first_listing_skips_the_question(tmp_path: Path) -> No
 
     assert asked == []
     assert report.valuation.holdings[0].price.symbol == "EQQB.DE"
-    assert any("more than one listing fits, so the first one was used, as you asked" in note for note in report.notes)
+    assert any("EQQB" in note and "the first one was used" in note for note in report.notes)
     saved = Settings.load(tmp_path / "settings.json").ticker_choices["EQQB"]
     assert (saved.symbol, saved.confirmed) == ("EQQB.DE", False)  # the app's pick, not the user's
 
@@ -348,10 +351,9 @@ def test_last_known_price_is_used_when_yahoo_cannot_be_reached(tmp_path: Path) -
     assert holding.market_value == Decimal("1.47328346") * 400
     assert report.valuation.uses_last_known_prices
     assert report.valuation.total_market_value is not None
-    assert (
-        "EQQB: Prices could not be fetched (offline). The last price fetched for EQQB.DE, from 2026-10-09, "
-        "is used instead, so this value and the totals are not up to date."
-    ) in report.notes
+    (note,) = [note for note in report.notes if note.startswith("EQQB")]
+    for fact in ("offline", "EQQB.DE", "2026-10-09", "not up to date"):
+        assert fact in note
 
 
 def test_cli_marks_the_time_of_a_last_known_price(tmp_path: Path) -> None:
@@ -419,7 +421,7 @@ def test_entered_price_values_an_investment_yahoo_does_not_have_without_fetching
     assert entered.valuation.total_market_value == Decimal(1600)
     assert entered.valuation.uses_entered_prices
     assert not any("WXYZ: current value unavailable" in note for note in entered.notes)
-    assert any(note.startswith("WXYZ: no Yahoo listing is used for it, so the value you entered on") for note in entered.notes)
+    assert any(note.startswith("WXYZ") and "value you entered" in note for note in entered.notes)
 
     # Kept for the next run: Yahoo still has nothing for WXYZ.
     again = build_report(statement, abcd_only(), Settings.load(settings_path))
@@ -437,7 +439,7 @@ def test_entered_price_is_used_ahead_of_the_last_known_one_and_dropped_once_yaho
     price = entered.valuation.holdings[0].price
     assert price.entered and not price.last_known and price.price == Decimal("450")
     assert price.symbol == "EQQB.DE"
-    assert any("Prices could not be fetched (offline). The value you entered on" in note for note in entered.notes)
+    assert any("offline" in note and "value you entered" in note for note in entered.notes)
     assert build_report(SAMPLE, FakeProvider(offline=True), Settings.load(settings_path)).valuation.holdings[0].price.entered
 
     online = build_report(SAMPLE, sample_provider(), Settings.load(settings_path))
@@ -526,15 +528,15 @@ def test_values_the_app_wrote_itself_are_not_taken_for_typed_ones(tmp_path: Path
     assert "Last known price" in load_workbook(sheet)["Current Holdings"]["D2"].comment.text
 
     # The value the app wrote comes back from the sheet as a float, and is not taken for a typed one.
-    assert values_typed_in(Settings.load(settings_path), sheet)[0] == {}
-    report = build_report(SAMPLE, FakeProvider(offline=True), Settings.load(settings_path))
-    assert report.valuation.holdings[0].price.last_known
+    code, output, errors = run_cli(*args, "--details", provider=FakeProvider(offline=True), settings=settings_path)
+    assert "(last known)" in output.splitlines()[1] and "entered by hand" not in output
 
     # Typed over it, a different value is.
     workbook = load_workbook(sheet)
     workbook["Current Holdings"]["D2"] = 700
     workbook.save(sheet)
-    assert values_typed_in(Settings.load(settings_path), sheet)[0] == {"EQQB": Decimal(700)}
+    code, output, errors = run_cli(*args, "--details", provider=FakeProvider(offline=True), settings=settings_path)
+    assert output.splitlines()[1].startswith("EQQB,541.49,100.00,700.00,") and "entered by hand" in output
 
 
 def test_a_spreadsheet_left_behind_does_not_undo_a_newer_value(tmp_path: Path) -> None:
@@ -597,7 +599,7 @@ def test_cli_price_is_not_used_when_yahoo_has_one(tmp_path: Path) -> None:
 
     assert code == 0
     assert output.splitlines()[1] == "EQQB,541.49,100.00,589.31,100.00,47.82,8.83"
-    assert "Yahoo has a current price for EQQB.DE, so it is used instead of the value you entered" in errors
+    assert "EQQB.DE" in errors and "instead of the value you entered" in errors
 
 
 @pytest.mark.parametrize("price", ["abc", "0", "-5", "1,5", "NaN"])
@@ -634,6 +636,17 @@ def test_price_in_another_currency_is_converted_and_labelled(tmp_path: Path) -> 
     assert "quoted in USD and was converted to EUR" in errors
 
 
+def assert_progress(seen: list[tuple[int, int, str]], steps: int, says: tuple[str, ...]) -> None:
+    """The bar counts ``steps`` steps, only ever moves forward, ends full, and the texts say ``says``."""
+    counted = [(done, total) for done, total, _ in seen if total]
+    assert {total for _, total in counted} == {steps}
+    assert [done for done, _ in counted] == sorted(done for done, _ in counted)
+    assert counted[-1][0] == steps
+    texts = " ".join(text for _, _, text in seen)
+    for words in says:
+        assert words in texts, words
+
+
 def test_progress_is_reported_for_each_investment(tmp_path: Path) -> None:
     provider = FakeProvider()
     provider.add("ABCD.DE", "EUR", price="120")
@@ -649,15 +662,8 @@ def test_progress_is_reported_for_each_investment(tmp_path: Path) -> None:
     )
 
     # Getting ready is a step of its own; then the bar moves as each price arrives (they are fetched together).
-    assert seen == [
-        (0, 0, "Reading your statement..."),
-        (0, 3, "Getting ready to look up prices..."),
-        (1, 3, "Getting the current prices (0 of 2)..."),
-        (2, 3, "Getting the current prices (1 of 2)..."),
-        (3, 3, "Getting the current prices (2 of 2)..."),
-        (3, 3, "Adding everything up..."),
-    ]
-    assert provider.prepared == 1
+    assert_progress(seen, steps=3, says=("Reading your statement", "current prices", "Adding everything up"))
+    assert sum("current prices" in text for _, _, text in seen) == 3  # 0, 1 and 2 of 2
 
 
 def test_each_listing_to_find_is_a_step_of_the_progress_too(tmp_path: Path) -> None:
@@ -674,16 +680,7 @@ def test_each_listing_to_find_is_a_step_of_the_progress_too(tmp_path: Path) -> N
     )
 
     # Getting ready, two listings to find, two prices: five steps, each one moving the bar.
-    assert seen == [
-        (0, 0, "Reading your statement..."),
-        (0, 5, "Getting ready to look up prices..."),
-        (1, 5, "Finding the stock exchange listing of ABCD..."),
-        (2, 5, "Finding the stock exchange listing of WXYZ..."),
-        (3, 5, "Getting the current prices (0 of 2)..."),
-        (4, 5, "Getting the current prices (1 of 2)..."),
-        (5, 5, "Getting the current prices (2 of 2)..."),
-        (5, 5, "Adding everything up..."),
-    ]
+    assert_progress(seen, steps=5, says=("listing of ABCD", "listing of WXYZ", "current prices"))
 
     # Next time both listings are known: only the prices are left to count.
     seen.clear()
@@ -693,7 +690,8 @@ def test_each_listing_to_find_is_a_step_of_the_progress_too(tmp_path: Path) -> N
         Settings.load(tmp_path / "settings.json"),
         progress=lambda done, total, text: seen.append((done, total, text)),
     )
-    assert [total for _, total, _ in seen[1:]] == [3] * 5
+    assert_progress(seen, steps=3, says=("current prices",))
+    assert not any("listing of" in text for _, _, text in seen)
 
 
 def test_prices_are_fetched_at_the_same_time(tmp_path: Path) -> None:
@@ -764,8 +762,8 @@ def test_nothing_is_prepared_without_investments_to_price(tmp_path: Path) -> Non
         progress=lambda done, total, text: seen.append((done, total, text)),
     )
 
-    assert provider.prepared == 0
-    assert seen == [(0, 0, "Reading your statement..."), (0, 0, "Adding everything up...")]
+    assert provider.calls == []  # Yahoo is not contacted at all
+    assert not any(total for _, total, _ in seen) and not any("prices" in text for _, _, text in seen)
 
 
 def test_old_latest_price_is_pointed_out(tmp_path: Path) -> None:
@@ -783,27 +781,38 @@ def test_old_latest_price_is_pointed_out(tmp_path: Path) -> None:
     assert stale_report.valuation.holdings[0].market_value is not None
 
 
-def test_pence_are_converted_to_pounds() -> None:
-    assert to_major_units(Decimal("4120"), "GBp") == (Decimal("41.2"), "GBP")
-    assert to_major_units(Decimal("4120"), "GBX") == (Decimal("41.2"), "GBP")
-    assert to_major_units(Decimal("41.2"), "GBP") == (Decimal("41.2"), "GBP")
-
+@pytest.mark.parametrize("pence", ["GBp", "GBX"])
+def test_a_price_in_pence_is_turned_into_pounds_and_converted_when_needed(tmp_path: Path, pence: str) -> None:
+    # Spec D2: 10 shares quoted at 4,000 pence are worth 400 pounds, or 480 euros at 1.20.
+    pounds = write_statement(tmp_path, "2025-01-06T09:00:00.000Z,,CASH TOP-UP,,,GBP 500,GBP,1",
+                             "2025-01-06T10:00:00.000Z,ABCD,BUY - MARKET,10,GBP 39.00,GBP 390,GBP,1")  # fmt: skip
     provider = FakeProvider()
+    provider.add("ABCD.L", pence, price="4000")
     provider.add("GBPEUR=X", "EUR", price="1.2")
-    quote = Quote(SymbolInfo("ABCD.L"), Decimal("4000"), "GBp")
+    settings = tmp_path / "settings.json"
 
-    same = price_in_currency(quote, "GBP", provider)
-    converted = price_in_currency(quote, "EUR", provider)
+    code, output, errors = run_cli(str(pounds), "--symbol", "ABCD=ABCD.L", provider=provider, settings=settings)
+    assert code == 0 and output.splitlines()[1].startswith("ABCD,390.00,100.00,400.00,")
+    assert "converted" not in errors  # pence to pounds is not a conversion between currencies
 
-    assert (same.price, same.converted) == (Decimal("40"), False)
-    assert (converted.price, converted.converted, converted.quoted_currency) == (Decimal("48.0"), True, "GBp")
+    euros = write_statement(tmp_path, "2025-01-06T09:00:00.000Z,,CASH TOP-UP,,,EUR 500,EUR,1",
+                            "2025-01-06T10:00:00.000Z,ABCD,BUY - MARKET,10,EUR 45.00,EUR 450,EUR,1")  # fmt: skip
+    code, output, errors = run_cli(str(euros), "--symbol", "ABCD=ABCD.L", provider=provider, settings=settings)
+    assert code == 0 and output.splitlines()[1].startswith("ABCD,450.00,100.00,480.00,")
+    assert "converted to EUR" in errors
 
 
-def test_missing_exchange_rate_makes_the_price_unavailable() -> None:
-    quote = Quote(SymbolInfo("ABCD"), Decimal("500"), "USD")
+def test_without_an_exchange_rate_a_price_in_another_currency_leaves_the_value_unavailable(tmp_path: Path) -> None:
+    # Spec D2: nothing is guessed.
+    provider = FakeProvider()
+    provider.add("EQQB", "USD", price="500")  # and no USDEUR=X
 
-    with pytest.raises(PriceUnavailableError):
-        price_in_currency(quote, "EUR", FakeProvider())
+    code, output, errors = run_cli(
+        str(SAMPLE), "--symbol", "EQQB=EQQB", provider=provider, settings=tmp_path / "settings.json"
+    )
+
+    assert code == 0
+    assert output.splitlines()[1] == "EQQB,541.49,100.00,unavailable,unavailable,unavailable,unavailable"
 
 
 def test_cli_explains_a_wrong_file_without_a_stack_trace(tmp_path: Path) -> None:

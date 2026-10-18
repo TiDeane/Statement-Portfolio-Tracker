@@ -1,16 +1,13 @@
-"""Average-cost calculations on synthetic statements and on the sanitized sample."""
+"""Average-cost calculations on synthetic statements and on the sanitized sample. Rule numbers refer to
+tests/SPECIFICATION.md (B). No network."""
 
 from decimal import Decimal
 
 import pytest
 from fakes import SAMPLE, statement_from
 
-from statement_tracker.core.calculator import buys_by_ticker, compute_portfolio, value_portfolio
-from statement_tracker.core.errors import (
-    IncompleteStatementError,
-    StatementRowError,
-    UnknownTransactionTypeError,
-)
+from statement_tracker.core.calculator import compute_portfolio, value_portfolio
+from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.models import MarketPrice
 from statement_tracker.core.parser import load_statement
 from statement_tracker.core.transactions import TransactionHandler, TransactionKind, default_registry
@@ -109,12 +106,10 @@ def test_rows_are_replayed_in_time_order_not_file_order() -> None:
 def test_unknown_type_is_an_error_naming_the_row() -> None:
     split = "2025-02-03T10:00:00.000Z,ABCD,STOCK SPLIT,10,,EUR 0,EUR,1"
 
-    with pytest.raises(UnknownTransactionTypeError) as error:
+    with pytest.raises(UserFacingError) as error:
         compute_portfolio(statement_from(TOP_UP, BUY_WITH_FEE, split))
 
-    assert error.value.row == 4
-    assert error.value.type_name == "STOCK SPLIT"
-    assert "Row 4" in str(error.value)
+    assert "Row 4" in str(error.value) and "STOCK SPLIT" in str(error.value)
 
 
 def test_unknown_type_can_be_ignored_with_a_prominent_warning() -> None:
@@ -135,11 +130,10 @@ def test_unknown_type_can_be_ignored_with_a_prominent_warning() -> None:
     ],
 )
 def test_selling_more_than_was_bought_means_the_statement_is_incomplete(sell: str) -> None:
-    with pytest.raises(IncompleteStatementError) as error:
+    with pytest.raises(UserFacingError) as error:
         compute_portfolio(statement_from(TOP_UP, BUY_WITH_FEE, sell))
 
-    assert error.value.row == 4
-    assert "full history" in str(error.value)
+    assert "Row 4" in str(error.value) and "full history" in str(error.value)
 
 
 @pytest.mark.parametrize(
@@ -153,10 +147,10 @@ def test_selling_more_than_was_bought_means_the_statement_is_incomplete(sell: st
     ],
 )
 def test_rows_that_do_not_fit_their_type_are_errors(row: str) -> None:
-    with pytest.raises(StatementRowError) as error:
+    with pytest.raises(UserFacingError) as error:
         compute_portfolio(statement_from(TOP_UP, BUY_WITH_FEE, row))
 
-    assert error.value.row == 4
+    assert "Row 4" in str(error.value)
 
 
 def test_negative_cash_gives_a_warning() -> None:
@@ -216,13 +210,6 @@ def test_sample_matches_the_hand_computed_values() -> None:
     assert iusa.ticker == "IUSA"
     assert iusa.realized_pnl == Decimal("45.83")
     assert iusa.dividends == Decimal("3.86")
-
-
-def test_buys_by_ticker_lists_only_buy_rows_in_time_order() -> None:
-    buys = buys_by_ticker(load_statement(SAMPLE))
-
-    assert [buy.row for buy in buys["EQQB"]] == [3, 18]
-    assert [buy.row for buy in buys["IUSA"]] == [5, 8, 10, 14]
 
 
 def _two_holdings():

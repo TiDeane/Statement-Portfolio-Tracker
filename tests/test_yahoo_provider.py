@@ -1,7 +1,12 @@
-"""The direct Yahoo provider, fed made-up Yahoo answers through a fake transport. No network."""
+"""The direct Yahoo provider, fed made-up Yahoo answers through a fake transport. No network.
+
+Most of these check the app's side of an agreement with Yahoo, not something the user sees: which
+addresses it asks, and how it reads Yahoo's answers and errors. They change when Yahoo changes. What the
+user sees of prices is checked through whole runs elsewhere, and two tests here check the rules J1 and
+J3 of tests/SPECIFICATION.md (what is sent, and that tests cannot reach the network).
+"""
 
 import json
-import ssl
 from collections.abc import Mapping
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -170,11 +175,6 @@ def test_search_lists_the_listings_found() -> None:
 def test_search_failures_say_it_was_the_search() -> None:
     with pytest.raises(PriceUnavailableError, match="symbol search could not be reached"):
         YahooProvider(FakeTransport(status=429, body=b"")).search("ABCD")
-
-
-def test_certificates_include_certifis_bundle() -> None:
-    assert isinstance(yahoo_provider._context(), ssl.SSLContext)
-    assert yahoo_provider._context() is yahoo_provider._context()  # built once
 
 
 class FakeSocket:

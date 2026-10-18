@@ -172,81 +172,146 @@ class _Text(str):
 ERROR = _Text("#VALUE!")
 
 
-def computed(path: Path, sheet_name: str) -> list[list[object]]:
-    """Return a sheet's rows as Excel would show them, working out its formulas.
+class _Excel:
+    """Works out a workbook's formulas as Excel does, for what the app's sheets use: IF, OR, AND, NOT, N,
+    ISNUMBER, COUNT, SUM, SUMPRODUCT, INDIRECT, TRUE, arithmetic, comparisons, cell references and
+    ranges, also on other sheets (``$`` ignored). Numbers come out as floats."""
 
-    Knows only what the app's sheets use: IF, OR, AND, N, ISNUMBER, COUNT, SUM, SUMPRODUCT, arithmetic,
-    comparisons, cell references and ranges, also on other sheets (``$`` ignored). Numbers come back
-    as floats.
-    """
-    import re
+    def __init__(self, path: Path) -> None:
+        from openpyxl import load_workbook
 
-    from openpyxl import load_workbook
-    from openpyxl.utils import column_index_from_string
+        self.workbook = load_workbook(path)
+        self.names = list(self.workbook.sheetnames)
+        self._done: dict[tuple[int, int, int], object] = {}
+        self._functions = {
+            "IF": lambda condition, then, otherwise: then if condition else otherwise,
+            "OR": lambda *items: any(items),
+            "AND": lambda *items: all(items),
+            "NOT": lambda item: not item,
+            "N": lambda item: item if isinstance(item, float) else 0.0,
+            "ISNUMBER": self._is_number,
+            "COUNT": lambda items: sum(isinstance(item, float) for item in items),
+            "SUM": lambda items: sum(item for item in items if isinstance(item, float)),
+            "SUMPRODUCT": lambda left, right: sum(a * b for a, b in zip(left, right) if isinstance(a, float)),
+            # The reference in INDIRECT's text was turned into a call to _cells along with the rest.
+            "INDIRECT": lambda reference: eval(reference, {"__builtins__": {}}, self._functions),  # noqa: S307
+            "TRUE": True,
+            "FALSE": False,
+            "_cells": self._cells,
+            "_value": self.value,
+        }
 
-    workbook = load_workbook(path)
-    names = list(workbook.sheetnames)
-    done: dict[tuple[int, int, int], object] = {}
+    def value(self, column: str, row: int, sheet: int) -> object:
+        from openpyxl.utils import column_index_from_string
 
-    def value(column: str, row: int, sheet: int) -> object:
         key = (sheet, row, column_index_from_string(column))
-        if key not in done:
-            raw = workbook[names[sheet]].cell(row=row, column=key[2]).value
+        if key not in self._done:
+            raw = self.workbook[self.names[sheet]].cell(row=row, column=key[2]).value
             if isinstance(raw, str) and raw.startswith("="):
-                done[key] = evaluate(raw[1:], sheet)
+                self._done[key] = self.evaluate(raw[1:], sheet)
             elif isinstance(raw, (int, float, Decimal)) and not isinstance(raw, bool):
-                done[key] = float(raw)
+                self._done[key] = float(raw)
             else:
-                done[key] = _Text(raw) if raw is not None else None
-        return done[key]
+                self._done[key] = _Text(raw) if raw is not None else None
+        return self._done[key]
 
-    def cells(first: str, first_row: int, last: str, last_row: int, sheet: int) -> list[object]:
-        return [value(first, row, sheet) for row in range(first_row, last_row + 1)]
+    def _cells(self, first: str, first_row: int, last: str, last_row: int, sheet: int) -> list[object]:
+        return [self.value(first, row, sheet) for row in range(first_row, last_row + 1)]
 
-    def sheet_index(match: re.Match[str]) -> str:
-        return str(names.index(match.group(1).replace("''", "'")))
-
-    def is_number(item: object) -> object:
+    def _is_number(self, item: object) -> object:
         if isinstance(item, list):
-            return [is_number(each) for each in item]
+            return [self._is_number(each) for each in item]
         return isinstance(item, float)
 
-    functions = {
-        "IF": lambda condition, then, otherwise: then if condition else otherwise,
-        "OR": lambda *items: any(items),
-        "AND": lambda *items: all(items),
-        "N": lambda item: item if isinstance(item, float) else 0.0,
-        "ISNUMBER": is_number,
-        "COUNT": lambda items: sum(isinstance(item, float) for item in items),
-        "SUM": lambda items: sum(item for item in items if isinstance(item, float)),
-        "SUMPRODUCT": lambda left, right: sum(a * b for a, b in zip(left, right) if isinstance(a, float)),
-        "_cells": cells,
-        "_value": value,
-    }
+    def evaluate(self, formula: str, sheet: int) -> object:
+        import re
 
-    def evaluate(formula: str, sheet: int) -> object:
         text = formula.replace("$", "").replace("--", "")
         # 'Other sheet'!B4 becomes «1»B4, the sheet's number, so that its name is never read as a cell.
-        text = re.sub(r"'((?:[^']|'')+)'!", lambda match: f"«{sheet_index(match)}»", text)
+        text = re.sub(r"'((?:[^']|'')+)'!", lambda match: f"«{self.names.index(match.group(1).replace(chr(39) * 2, chr(39)))}»", text)
         here = f"«{sheet}»"
         text = re.sub(r"(?<![»:\w])([A-Z]+\d+(?::[A-Z]+\d+)?)\b", lambda match: here + match.group(1), text)
         text = re.sub(r"«(\d+)»([A-Z]+)(\d+):([A-Z]+)(\d+)\b", r"_cells('\2',\3,'\4',\5,\1)", text)
         text = re.sub(r"«(\d+)»([A-Z]{1,2})(\d+)\b", r"_value('\2',\3,\1)", text)
         text = re.sub(r"(?<![<>!=])=(?!=)", "==", text)
         try:
-            result = eval(text, {"__builtins__": {}}, functions)  # noqa: S307 - our own formulas, in tests
+            result = eval(text, {"__builtins__": {}}, self._functions)  # noqa: S307 - our own formulas, in tests
         except ZeroDivisionError:
             return ERROR
         if isinstance(result, (bool, int)):
             return float(result)
         return _Text(result) if isinstance(result, str) else result
 
-    sheet = workbook[sheet_name]
-    index = names.index(sheet_name)
+
+def computed(path: Path, sheet_name: str) -> list[list[object]]:
+    """Return a sheet's rows as Excel would show them, working out its formulas."""
+    excel = _Excel(path)
+    sheet = excel.workbook[sheet_name]
+    index = excel.names.index(sheet_name)
     return [
-        [value(chr(ord("A") + column), row, index) for column in range(sheet.max_column)]
+        [excel.value(chr(ord("A") + column), row, index) for column in range(sheet.max_column)]
         for row in range(1, sheet.max_row + 1)
     ]
+
+
+@dataclass(frozen=True)
+class Shown:
+    """How Excel colours a cell because of the sheet's colour rules: the fill and the text colour, as
+    six hex digits ("FCE4D6"), or None where no rule gives one."""
+
+    fill: str | None = None
+    text: str | None = None
+
+
+def coloured(path: Path, sheet_name: str) -> dict[tuple[int, int], Shown]:
+    """The colours the sheet's colour rules (conditional formatting) give each cell now, by (row, column),
+    as Excel works them out: each rule's formula is moved to every cell of its range, a reference with
+    no ``$`` moving with it, and where several rules apply the one first in order wins. Cells no rule
+    colours are left out."""
+    import re
+
+    excel = _Excel(path)
+    sheet = excel.workbook[sheet_name]
+    index = excel.names.index(sheet_name)
+    rules = sorted(
+        ((rule.priority, cells, rule) for formatting in sheet.conditional_formatting for cells in formatting.sqref.ranges
+         for rule in formatting.rules),
+        key=lambda item: item[0],
+    )  # fmt: skip
+
+    def moved(formula: str, rows: int, columns: int) -> str:
+        from openpyxl.utils import column_index_from_string, get_column_letter
+
+        def move(match: re.Match[str]) -> str:
+            fixed_column, column, fixed_row, row = match.groups()
+            if not fixed_column:
+                column = get_column_letter(column_index_from_string(column) + columns)
+            if not fixed_row:
+                row = str(int(row) + rows)
+            return f"{fixed_column}{column}{fixed_row}{row}"
+
+        # Text in quotes (as given to INDIRECT) stays as written.
+        parts = formula.split('"')
+        for number in range(0, len(parts), 2):
+            parts[number] = re.sub(r"(?<![A-Za-z_'])(\$?)([A-Z]{1,3})(\$?)(\d+)\b", move, parts[number])
+        return '"'.join(parts)
+
+    def colour(attribute: object) -> str | None:
+        rgb = getattr(attribute, "rgb", None)
+        return str(rgb)[-6:].upper() if isinstance(rgb, str) else None
+
+    shown: dict[tuple[int, int], Shown] = {}
+    for _, cells, rule in rules:
+        for row in range(cells.min_row, cells.max_row + 1):
+            for column in range(cells.min_col, cells.max_col + 1):
+                formula = moved(rule.formula[0], row - cells.min_row, column - cells.min_col)
+                if not excel.evaluate(formula, index):
+                    continue
+                before = shown.get((row, column), Shown())
+                fill = before.fill or (colour(rule.dxf.fill.fgColor) if rule.dxf and rule.dxf.fill else None)
+                text = before.text or (colour(rule.dxf.font.color) if rule.dxf and rule.dxf.font else None)
+                shown[row, column] = Shown(fill, text)
+    return shown
 
 
 @dataclass

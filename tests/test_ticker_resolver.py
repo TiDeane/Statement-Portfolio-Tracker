@@ -1,8 +1,10 @@
-"""Ticker matching against a mocked provider.
+"""Ticker matching against a mocked provider. Rule numbers refer to tests/SPECIFICATION.md (C).
 
 The synthetic price histories are built around the sample's own (date, price)
 pairs. The sample's dates are shifted, so it is never checked against real
-market data.
+market data. The last four tests check the rule C1 itself (when a purchase
+fits a day's prices) on the function that applies it, for the cases that are
+hard to set up through a whole match: weekends, the tolerance, time zones.
 """
 
 from datetime import UTC, date, datetime
@@ -14,13 +16,7 @@ from fakes import SAMPLE, FakeProvider, ranges_around, statement_from
 from statement_tracker.core.calculator import buys_by_ticker
 from statement_tracker.core.market_data.provider import DailyRange, PriceUnavailableError, SymbolInfo
 from statement_tracker.core.parser import load_statement
-from statement_tracker.core.ticker_resolver import (
-    Confidence,
-    candidate_symbols,
-    price_fits,
-    resolve_ticker,
-    trade_day,
-)
+from statement_tracker.core.ticker_resolver import Confidence, price_fits, resolve_ticker, trade_day
 
 EQQB_BUYS = buys_by_ticker(load_statement(SAMPLE))["EQQB"]
 FAR_AWAY = {buy.timestamp.date(): (Decimal("10"), Decimal("11")) for buy in EQQB_BUYS}
@@ -159,15 +155,19 @@ def test_search_results_add_listings_beyond_the_suffix_list() -> None:
     assert ("history", "EQQBX") not in provider.calls
 
 
-def test_candidates_are_tried_bare_first_then_suffixes_then_search() -> None:
+def test_listings_that_fit_equally_are_offered_bare_first_then_by_suffix_then_from_search() -> None:
+    # Spec C3: the order the listings are offered in when several fit.
+    statement = statement_from("2025-01-06T10:00:00.000Z,ABCD,BUY - MARKET,1,EUR 100.00,EUR 100,EUR,1")
+    buys = buys_by_ticker(statement)["ABCD"]
     provider = FakeProvider()
-    provider.search_results["ABCD"] = [SymbolInfo("ABCD.SW"), SymbolInfo("ABCD.DE", name="Known name")]
+    for symbol in ("ABCD.SW", "ABCD.L", "ABCD.DE", "ABCD"):  # added in another order on purpose
+        provider.add(symbol, "EUR", ranges=ranges_around(buys))
+    provider.search_results["ABCD"] = [SymbolInfo("ABCD.SW"), SymbolInfo("ABCD.DE")]
 
-    candidates = candidate_symbols("ABCD", (".DE", ".L"), provider)
+    resolution = resolve_ticker("ABCD", buys, "EUR", provider)
 
-    assert list(candidates) == ["ABCD", "ABCD.DE", "ABCD.L", "ABCD.SW"]
-    assert candidates["ABCD.DE"].name == "Known name"
-    assert candidates["ABCD"] is None and candidates["ABCD.L"] is None
+    assert resolution.confidence is Confidence.AMBIGUOUS
+    assert [candidate.info.symbol for candidate in resolution.candidates] == ["ABCD", "ABCD.DE", "ABCD.L", "ABCD.SW"]
 
 
 def test_listing_known_to_search_but_without_prices_near_the_purchases_stays_an_option() -> None:

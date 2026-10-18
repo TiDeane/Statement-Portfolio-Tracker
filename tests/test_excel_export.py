@@ -1,4 +1,9 @@
-"""Excel export: our two sheets are written, everything else in the workbook is left alone."""
+"""Excel export: the app's two sheets are written, everything else in the workbook is left alone.
+
+What a sheet shows is read as Excel would show it (``fakes.computed`` works out the formulas, and
+``fakes.coloured`` the colour rules), and expected headings and texts are spelled out here rather than
+taken from the app. Rule numbers refer to tests/SPECIFICATION.md. No network.
+"""
 
 import io
 from datetime import UTC, date, datetime
@@ -6,21 +11,29 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from fakes import FakeProvider, computed, statement_from, write_statement
+from fakes import FakeProvider, Shown, coloured, computed, statement_from, write_statement
 from openpyxl import Workbook, load_workbook
 
 from statement_tracker import cli
 from statement_tracker.core.calculator import compute_portfolio, value_portfolio
 from statement_tracker.core.errors import UserFacingError
-from statement_tracker.core.exporters.excel import (
-    HISTORY_HEADER,
-    HOLDINGS_HEADER,
-    MISSING,
-    ExcelExporter,
-    typed_values,
-)
+from statement_tracker.core.exporters.excel import ExcelExporter
 from statement_tracker.core.models import MarketPrice, PortfolioValuation
 from statement_tracker.settings import Settings
+
+HOLDINGS = (
+    "Investment", "Invested", "% of Invested", "Current Value", "% of Current Value", "% Up/Down", "Dividends",
+    "Currency",
+)  # fmt: skip
+HISTORY = (
+    "Date", "Total Cost Basis", "Total Market Value", "Unrealized PnL", "Realized PnL", "ROI %", "Net Worth",
+    "Net Deposits", "Gain vs Deposits",
+)  # fmt: skip
+GREY_TEXT = Shown(text="808080")
+TYPE_HERE = Shown(fill="FFC7CE", text="9C0006")
+"""Excel's own light red "Bad" cell: missing, and a value can be typed there."""
+LEFT_OUT = Shown(fill="FCE4D6", text="833C0B")
+"""Light orange: a history row that leaves out an investment without a value."""
 
 LINES = (
     "2025-01-06T09:00:00.000Z,,CASH TOP-UP,,,EUR 2000,EUR,1",
@@ -47,227 +60,63 @@ def approx(number: float) -> object:
     return pytest.approx(number, abs=1e-6)
 
 
+def backups(folder: Path, stem: str = "mine") -> list[str]:
+    """The dated backup copies in ``folder``, oldest first."""
+    return sorted(path.name for path in folder.glob(f"{stem}_backup_????-??-??.xlsx"))
+
+
+def type_into(path: Path, cell: str, value: object) -> None:
+    """The user types ``value`` into a cell of Current Holdings in Excel, and saves."""
+    workbook = load_workbook(path)
+    workbook["Current Holdings"][cell] = value
+    workbook.save(path)
+
+
+def notes(result) -> str:
+    return " ".join(result.notes)
+
+
+# -- H1: which sheets are written ----------------------------------------------------------------------
+
+
 def test_missing_workbook_is_created_with_both_sheets(tmp_path: Path) -> None:
+    # Spec H1, H3, H4.
     path = tmp_path / "portfolio.xlsx"
 
     result = ExcelExporter(path).export(valuation(), DAY_ONE)
 
-    assert (result.created, result.holdings_written, result.history) == (True, 2, "added")
+    assert result.created
     assert load_workbook(path).sheetnames == ["Current Holdings", "Portfolio History"]
     holdings = computed(path, "Current Holdings")
-    assert tuple(holdings[0]) == HOLDINGS_HEADER
-    # Everything worked out from the values is a formula; percentages are stored the Excel way (83.28% is 0.8328).
-    # Columns: Investment, Invested, % of Invested, Current Value, % of Current Value, % Up/Down, Dividends, Currency.
-    assert holdings[1] == [
-        "ABCD", 1001, approx(0.832779), 1200, approx(0.75), approx(0.198801), 0, "EUR",
-    ]  # fmt: skip
+    assert tuple(holdings[0]) == HOLDINGS
+    # Percentages are stored the Excel way (83.28% is 0.8328).
+    assert holdings[1] == ["ABCD", 1001, approx(0.832779), 1200, approx(0.75), approx(0.198801), 0, "EUR"]
     assert holdings[2][:5] == ["WXYZ", 201, approx(0.167221), 400, approx(0.25)]
     assert holdings[3] == ["Total", 1202, 1, 1600, 1, approx(0.331115), 0, "EUR"]
     assert len(holdings) == 4
     assert rows(path, "Current Holdings")[1][3] == 1200  # the values themselves are numbers, which can be typed over
     history = computed(path, "Portfolio History")
-    assert tuple(history[0]) == HISTORY_HEADER
+    assert tuple(history[0]) == HISTORY
     assert rows(path, "Portfolio History")[1][0].date() == DAY_ONE
     # cost basis, market value, unrealized, realized, ROI %, net worth, net deposits, gain vs deposits
     assert history[1][1:] == [1202, 1600, 398, 0, approx(0.199), 2398, 2000, 398]
 
 
-def test_roi_is_the_gain_on_deposits_and_rows_from_earlier_versions_switch_to_it(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "Portfolio History"
-    sheet.append(HISTORY_HEADER)
-    # Written by an earlier version: ROI % was the unrealized PnL over the cost basis (100 / 500).
-    sheet.append([datetime(2026, 10, 1), 500, 600, 100, 0, 0.2, 1100, 1000, 100])
-    sheet.append([datetime(2026, 10, 2), 500, 600, 100, 0, 0.2, "unavailable", 1000, "unavailable"])
-    workbook.save(path)
+def test_existing_workbook_keeps_its_own_sheet_and_gets_a_backup(tmp_path: Path) -> None:
+    # Spec H1, H5.
+    path = tmp_path / "mine.xlsx"
+    _users_workbook(path)
+    before = rows(path, "investimentos")
 
-    ExcelExporter(path).export(valuation(), DAY_ONE)
+    result = ExcelExporter(path).export(valuation(), DAY_ONE)
 
-    history = computed(path, "Portfolio History")
-    # Gain vs Deposits / Net Deposits: 100 / 1000, unavailable without a gain, then today's 398 / 2000.
-    assert [row[5] for row in history[1:]] == [approx(0.1), "unavailable", approx(0.199)]
-    # Nothing else in the old rows changes, though the worked-out columns become formulas too.
-    assert history[1][1:5] == [500, 600, 100, 0] and history[1][6:] == [1100, 1000, 100]
-    assert history[2][6:] == ["unavailable", 1000, "unavailable"]
-    assert all(rows(path, "Portfolio History")[1][column].startswith("=") for column in (3, 5, 6, 8))
-
-
-def test_sheets_are_formatted_for_reading(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-    ExcelExporter(path).export(valuation(), DAY_ONE)
-    workbook = load_workbook(path)
-
-    for name, header in (("Current Holdings", HOLDINGS_HEADER), ("Portfolio History", HISTORY_HEADER)):
-        sheet = workbook[name]
-        first_header, first_value = sheet["A1"], sheet["B2"]
-        # Header: its own colour, bold. Data cells: no fill.
-        assert first_header.fill.fill_type == "solid" and first_header.fill.start_color.rgb.endswith("1F4E78")
-        assert first_header.font.bold
-        assert first_value.fill.fill_type is None
-        # Every cell in the table has a thin black outline, including empty ones.
-        for row in sheet.iter_rows():
-            for cell in row:
-                for side in (cell.border.left, cell.border.right, cell.border.top, cell.border.bottom):
-                    assert side.style == "thin" and side.color.rgb.endswith("000000")
-        # Columns are wider than the longest text in them.
-        for index, title in enumerate(header):
-            width = sheet.column_dimensions[chr(ord("A") + index)].width
-            assert width > len(title)
-
-    holdings, history = workbook["Current Holdings"], workbook["Portfolio History"]
-    assert [holdings.cell(row=2, column=column).number_format for column in (3, 5, 6)] == ["0.00%"] * 3
-    # Rows are taller than Excel's default of 15 points, the header tallest.
-    assert holdings.row_dimensions[1].height > holdings.row_dimensions[2].height > 15
-    assert all(holdings.row_dimensions[row].height > 15 for row in range(1, 5))
-    assert history.row_dimensions[2].height > 15
-    assert holdings["B2"].number_format == "0.00"
-    assert history["F2"].number_format == "0.00%"
-    assert history["A2"].number_format == "yyyy-mm-dd"
-    assert holdings["A4"].value == "Total" and holdings["A4"].font.bold and not holdings["A3"].font.bold
-
-
-def test_share_columns_say_what_they_are_a_share_of_and_older_headers_are_upgraded(tmp_path: Path) -> None:
-    assert HOLDINGS_HEADER[1:5] == ("Invested", "% of Invested", "Current Value", "% of Current Value")
-
-    path = tmp_path / "portfolio.xlsx"
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "Current Holdings"
-    sheet.append(["Index", "Invested", "Current Value", "Current %", "Invested %", "% Up/Down", "Dividends", "Currency"])
-    workbook.save(path)
-
-    ExcelExporter(path).export(valuation(), DAY_ONE)
-
-    assert rows(path, "Current Holdings")[0] == HOLDINGS_HEADER
-
-
-def test_the_first_column_is_called_investment_and_a_sheet_calling_it_index_is_upgraded(tmp_path: Path) -> None:
-    assert HOLDINGS_HEADER[0] == "Investment"  # what each row is; an index is what some funds follow
-    path = tmp_path / "portfolio.xlsx"
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "Current Holdings"
-    sheet.append(["Index", *HOLDINGS_HEADER[1:]])  # as this app wrote it until now
-    workbook.save(path)
-
-    ExcelExporter(path).export(valuation(), DAY_ONE)
-
-    assert rows(path, "Current Holdings")[0] == HOLDINGS_HEADER
-
-
-def test_holdings_sheet_from_an_earlier_version_is_rewritten_in_the_shorter_layout(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-    earlier = (
-        "Index", "Invested", "Current Value", "Current %", "Invested %", "Shares", "Average Cost", "Current Price",
-        "Unrealized PnL", "% Up/Down", "Dividends", "Yahoo Symbol", "Price Time", "Currency",
-    )  # fmt: skip
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "Current Holdings"
-    sheet.append(earlier)
-    sheet.append(["OLD", 1, 2, 0.5, 0.5, 3, 4, 5, 6, 0.1, 0, "OLD.DE", "2026-10-01T10:00", "EUR"])
-    sheet.column_dimensions["N"].width = 40
-    workbook.save(path)
-
-    ExcelExporter(path).export(valuation(), DAY_ONE)
-
-    holdings = rows(path, "Current Holdings")
-    assert holdings[0] == HOLDINGS_HEADER
-    assert [row[0] for row in holdings] == ["Investment", "ABCD", "WXYZ", "Total"]
-    assert all(len(row) == len(HOLDINGS_HEADER) for row in holdings)
-    assert "N" not in load_workbook(path)["Current Holdings"].column_dimensions
-
-
-def test_second_run_on_the_same_day_updates_that_days_row(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-    ExcelExporter(path).export(valuation(), DAY_ONE)
-
-    result = ExcelExporter(path).export(valuation(abcd="130"), DAY_ONE)
-
-    history = computed(path, "Portfolio History")
-    assert result.history == "updated"
-    assert len(history) == 2
-    assert history[1][2] == 1700
-    assert len(rows(path, "Current Holdings")) == 4  # header, two holdings, total
-
-
-def test_a_new_day_adds_a_row_and_keeps_the_old_ones(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-    ExcelExporter(path).export(valuation(), DAY_ONE)
-
-    result = ExcelExporter(path).export(valuation(abcd="130"), DAY_TWO)
-
-    history = computed(path, "Portfolio History")
-    assert result.history == "added"
-    assert [row[0].date() for row in rows(path, "Portfolio History")[1:]] == [DAY_ONE, DAY_TWO]
-    assert (history[1][2], history[2][2]) == (1600, 1700)
-
-
-def test_a_value_typed_in_reaches_todays_history_row_and_stays_there_the_next_day(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-    portfolio = compute_portfolio(statement_from(*LINES))
-    ExcelExporter(path).export(value_portfolio(portfolio, {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}), DAY_ONE)
-    # cost basis, market value, unrealized, realized, ROI %, net worth, net deposits, gain vs deposits
-    left_out = [1001, 1200, 199, 0, approx(-0.001), 1998, 2000, -2]
-    assert computed(path, "Portfolio History")[1][1:] == left_out
-
-    # The user types WXYZ's current value over "unavailable" in Current Holdings, as in Excel.
-    workbook = load_workbook(path)
-    workbook["Current Holdings"]["D3"] = 400
-    workbook.save(path)
-
-    typed = [1202, 1600, 398, 0, approx(0.199), 2398, 2000, 398]
-    assert computed(path, "Portfolio History")[1][1:] == typed  # the whole row follows
-    # The next day's run rewrites Current Holdings: the first day's row keeps what it showed, now as figures,
-    # and as nothing is left out of it any more, it loses its colour and comment.
-    ExcelExporter(path).export(valuation(abcd="130"), DAY_TWO)
-    history = computed(path, "Portfolio History")
-    assert history[1][1:] == typed
-    assert rows(path, "Portfolio History")[1][1:3] == (1202, 1600)
-    sheet = load_workbook(path)["Portfolio History"]
-    assert sheet["A2"].comment is None and not list(sheet.conditional_formatting)
-    assert history[2][1:] == [1202, 1700, 498, 0, approx(0.249), 2498, 2000, 498]
-
-
-def test_a_day_left_incomplete_stays_incomplete_once_the_next_day_rewrites_the_holdings(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-    portfolio = compute_portfolio(statement_from(*LINES))
-    ExcelExporter(path).export(value_portfolio(portfolio, {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}), DAY_ONE)
-
-    sheet = load_workbook(path)["Portfolio History"]
-    # The row says it leaves WXYZ out: a comment, and light orange while Current Holdings misses a value.
-    assert "Leaves out WXYZ, with no current value when this row was written" in sheet["A2"].comment.text
-    assert "before you run the app on another day" in sheet["A2"].comment.text
-    rules = {str(cells.sqref): cells.rules[0] for cells in sheet.conditional_formatting}
-    assert list(rules) == ["A2:I2"]
-    assert rules["A2:I2"].formula == ["COUNT(INDIRECT(\"'Current Holdings'!D2:D3\"))<2"]
-    assert rules["A2:I2"].dxf.fill.fgColor.rgb.endswith("FCE4D6")
-    assert rules["A2:I2"].dxf.font.color.rgb.endswith("833C0B")
-
-    ExcelExporter(path).export(valuation(), DAY_TWO)
-
-    # Still without WXYZ, as on its day, and still marked so, now for good; today's row leaves nothing out.
-    assert computed(path, "Portfolio History")[1][1:] == [1001, 1200, 199, 0, approx(-0.001), 1998, 2000, -2]
-    sheet = load_workbook(path)["Portfolio History"]
-    assert "Leaves out WXYZ, with no current value on this day" in sheet["A2"].comment.text
-    assert "on another day" not in sheet["A2"].comment.text
-    rules = {str(cells.sqref): cells.rules[0] for cells in sheet.conditional_formatting}
-    assert list(rules) == ["A2:I2"] and rules["A2:I2"].formula == ["TRUE"]
-    assert sheet["A3"].comment is None
-
-
-def test_holdings_sheet_is_replaced_not_appended_to(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-    ExcelExporter(path).export(valuation(), DAY_ONE)
-    only_abcd = value_portfolio(
-        compute_portfolio(statement_from(*LINES[:2])), {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}
-    )
-
-    ExcelExporter(path).export(only_abcd, DAY_TWO)
-
-    assert [row[0] for row in rows(path, "Current Holdings")] == ["Investment", "ABCD", "Total"]
+    assert not result.created
+    assert load_workbook(path).sheetnames == ["investimentos", "Current Holdings", "Portfolio History"]
+    assert rows(path, "investimentos") == before
+    assert before[1][3] == "=C2/SUM(C2:C3)"  # formulas survive as formulas
+    assert backups(tmp_path) == ["mine_backup_2026-10-12.xlsx"]
+    assert "mine_backup_2026-10-12.xlsx" in notes(result)
+    assert load_workbook(tmp_path / "mine_backup_2026-10-12.xlsx").sheetnames == ["investimentos"]
 
 
 def _users_workbook(path: Path) -> None:
@@ -279,22 +128,6 @@ def _users_workbook(path: Path) -> None:
     sheet.append(["WXYZ", 200, 300, "=C3/SUM(C2:C3)", 0.4])
     sheet["J1"] = "Legend"
     workbook.save(path)
-
-
-def test_existing_workbook_keeps_its_own_sheet_and_gets_a_backup(tmp_path: Path) -> None:
-    path = tmp_path / "mine.xlsx"
-    _users_workbook(path)
-    before = rows(path, "investimentos")
-
-    result = ExcelExporter(path).export(valuation(), DAY_ONE)
-
-    assert result.created is False
-    assert load_workbook(path).sheetnames == ["investimentos", "Current Holdings", "Portfolio History"]
-    assert rows(path, "investimentos") == before
-    assert before[1][3] == "=C2/SUM(C2:C3)"  # formulas survive as formulas
-    backup = tmp_path / "mine_backup_2026-10-12.xlsx"
-    assert backup.name in " ".join(result.notes)
-    assert load_workbook(backup).sheetnames == ["investimentos"]
 
 
 def test_the_users_tables_charts_colour_rules_and_names_survive_an_update(tmp_path: Path) -> None:
@@ -339,12 +172,24 @@ def test_the_users_tables_charts_colour_rules_and_names_survive_an_update(tmp_pa
         assert "Budget!$B$2:$B$3" in files.read(charts[0]).decode().replace("'", "")
 
 
+def test_sheet_names_can_be_changed(tmp_path: Path) -> None:
+    path = tmp_path / "portfolio.xlsx"
+
+    ExcelExporter(path, holdings_sheet="Posições", history_sheet="Histórico").export(valuation(), DAY_ONE)
+
+    assert load_workbook(path).sheetnames == ["Posições", "Histórico"]
+
+
+# -- H2: refusing ---------------------------------------------------------------------------------------------
+
+
 @pytest.mark.parametrize(
     ("name", "heading"),
     [
+        ("Current Holdings", ["My own notes", "do not touch"]),
         ("Portfolio History", ["My own history", "do not touch"]),
-        ("Current Holdings", [*HOLDINGS_HEADER, "My notes"]),  # the app's sheet with a column of the user's
-        ("Portfolio History", [*HISTORY_HEADER, "My notes"]),
+        ("Current Holdings", [*HOLDINGS, "My notes"]),  # the app's sheet with a column of the user's
+        ("Portfolio History", [*HISTORY, "My notes"]),
     ],
 )
 def test_a_sheet_with_a_heading_of_the_users_is_never_overwritten(tmp_path: Path, name: str, heading: list) -> None:
@@ -365,195 +210,8 @@ def test_a_sheet_with_a_heading_of_the_users_is_never_overwritten(tmp_path: Path
     assert sorted(item.name for item in tmp_path.iterdir()) == ["mine.xlsx"]  # no backup copy either
 
 
-def test_one_backup_is_made_per_day_before_its_first_update(tmp_path: Path) -> None:
-    path = tmp_path / "mine.xlsx"
-    ExcelExporter(path).export(valuation(), DAY_ONE)  # created: nothing to back up yet
-    assert ExcelExporter(path).backups() == []
-
-    for abcd in ("121", "122", "123"):  # e.g. "Try again" and values entered, all on one day
-        result = ExcelExporter(path).export(valuation(abcd=abcd), DAY_TWO)
-
-    backups = ExcelExporter(path).backups()
-    assert [backup.name for backup in backups] == ["mine_backup_2026-10-13.xlsx"]
-    assert backups[0].name in " ".join(result.notes)
-    # The day's copy is the file as it was before that day's first update, not before the last one.
-    assert rows(backups[0], "Current Holdings")[1][3] == 1200
-
-
-def test_backups_of_the_newest_three_days_are_kept(tmp_path: Path) -> None:
-    path = tmp_path / "mine.xlsx"
-    legacy = tmp_path / "mine_backup_before_first_update.xlsx"  # made by earlier versions: never deleted
-    legacy.write_bytes(b"kept")
-    other = tmp_path / "other_backup_2020-01-01.xlsx"  # another workbook's copy
-    other.write_bytes(b"kept")
-    _users_workbook(path)
-
-    days = [date(2026, 9, 28), date(2026, 9, 30), date(2026, 10, 1), date(2026, 10, 9), date(2026, 10, 15)]
-    for day in days:
-        ExcelExporter(path).export(valuation(), day)
-
-    names = [backup.name for backup in ExcelExporter(path).backups()]
-    assert names == ["mine_backup_2026-10-01.xlsx", "mine_backup_2026-10-09.xlsx", "mine_backup_2026-10-15.xlsx"]
-    assert legacy.exists() and other.exists()
-    assert sorted(file.name for file in tmp_path.iterdir()) == sorted([path.name, legacy.name, other.name, *names])
-
-
-def test_a_failed_save_leaves_no_new_backup_and_deletes_no_old_one(tmp_path: Path, monkeypatch) -> None:
-    path = tmp_path / "mine.xlsx"
-    _users_workbook(path)
-    for day in (date(2026, 10, 1), date(2026, 10, 2), date(2026, 10, 3)):
-        ExcelExporter(path).export(valuation(), day)
-    kept = ExcelExporter(path).backups()
-
-    def locked(*_args: object) -> None:
-        raise PermissionError("in use")
-
-    monkeypatch.setattr("statement_tracker.core.exporters.excel.os.replace", locked)
-    with pytest.raises(UserFacingError, match="open in another program"):
-        ExcelExporter(path).export(valuation(), date(2026, 10, 4))
-    with pytest.raises(UserFacingError, match="open in another program"):
-        ExcelExporter(path).export(valuation(), date(2026, 10, 3))  # today's copy exists: it stays
-
-    assert ExcelExporter(path).backups() == kept
-
-
-def test_a_sheet_with_our_name_that_is_not_ours_is_never_overwritten(tmp_path: Path) -> None:
-    path = tmp_path / "mine.xlsx"
-    workbook = Workbook()
-    workbook.active.title = "Current Holdings"
-    workbook.active.append(["My own notes", "do not touch"])
-    workbook.save(path)
-
-    with pytest.raises(UserFacingError) as error:
-        ExcelExporter(path).export(valuation(), DAY_ONE)
-
-    assert "was not made by this app" in str(error.value)
-    assert rows(path, "Current Holdings") == [("My own notes", "do not touch")]
-    assert load_workbook(path).sheetnames == ["Current Holdings"]
-
-
-def test_without_any_price_unavailable_is_written_and_history_is_left_alone(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-    ExcelExporter(path).export(valuation(), DAY_ONE)
-
-    result = ExcelExporter(path).export(valuation(abcd=None, wxyz=None), DAY_TWO)
-
-    holdings = computed(path, "Current Holdings")
-    assert result.history == "skipped"
-    assert holdings[1][:6] == ["ABCD", 1001, approx(0.832779), "unavailable", "unavailable", "unavailable"]
-    assert holdings[3][:6] == ["Total", 1202, 1, "unavailable", "unavailable", "unavailable"]
-    assert len(rows(path, "Portfolio History")) == 2
-    assert "no row was written" in " ".join(result.notes)
-
-
-def test_last_known_price_is_written_with_a_comment_and_leaves_history_alone(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-    ExcelExporter(path).export(valuation(), DAY_ONE)
-    portfolio = compute_portfolio(statement_from(*LINES))
-    prices = {
-        "ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR"),
-        "WXYZ": MarketPrice(
-            Decimal("100"), "WXYZ.DE", "EUR", as_of=datetime(2026, 10, 9, 17, 35, tzinfo=UTC), last_known=True
-        ),
-    }
-
-    result = ExcelExporter(path).export(value_portfolio(portfolio, prices), DAY_TWO)
-
-    sheet = load_workbook(path)["Current Holdings"]
-    assert [row[3] for row in computed(path, "Current Holdings")[1:]] == [1200, 400, 1600]
-    assert sheet["D2"].comment is None
-    assert "Last known price, from 2026-10-09" in sheet["D3"].comment.text
-    assert "not up to date" in sheet["D4"].comment.text
-    assert result.history == "skipped"
-    assert len(rows(path, "Portfolio History")) == 2
-    assert "Yahoo could not be reached, so no row was written" in " ".join(result.notes)
-
-    ExcelExporter(path).export(valuation(), DAY_TWO)
-
-    sheet = load_workbook(path)["Current Holdings"]
-    assert sheet["D3"].comment is None and sheet["D4"].comment is None
-
-
-def test_left_out_investment_is_greyed_and_the_total_and_history_cover_the_rest(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-    portfolio = compute_portfolio(statement_from(*LINES))
-    prices = {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}
-
-    result = ExcelExporter(path).export(value_portfolio(portfolio, prices), DAY_ONE)
-
-    holdings = computed(path, "Current Holdings")
-    assert holdings[1][:5] == ["ABCD", 1001, 1, 1200, 1]
-    assert holdings[2][:6] == ["WXYZ", 201, "not in total", "unavailable", "not in total", "unavailable"]
-    assert holdings[3][:6] == ["Total", 1001, 1, 1200, 1, approx(0.198801)]
-    sheet = load_workbook(path)["Current Holdings"]
-    # While a row has no value, Excel itself shows it in grey, with its Current Value cell in red
-    # to say a value can be typed there: rules, not fixed colours, so typing a value undoes them.
-    rules = {str(cells.sqref): cells.rules[0] for cells in sheet.conditional_formatting}
-    assert set(rules) == {"A2:H3", "D2:D3"}
-    assert rules["A2:H3"].formula == ["NOT(ISNUMBER($D2))"] and rules["A2:H3"].dxf.font.color.rgb.endswith("808080")
-    assert rules["D2:D3"].formula == ["NOT(ISNUMBER($D2))"] and rules["D2:D3"].dxf.fill.fgColor.rgb.endswith("FFC7CE")
-    assert rules["D2:D3"].priority < rules["A2:H3"].priority  # its dark red text wins over the row's grey
-    assert "type this investment's current value here" in sheet["D3"].comment.text
-    assert result.history == "added"
-    history = computed(path, "Portfolio History")[1]
-    assert history[1:4] == [1001, 1200, 199]
-    # Like the Total row, net worth covers what has a value: ABCD and the cash (1200 + 798).
-    assert history[5:] == [approx(-0.001), 1998, 2000, -2]
-    assert "leaves out what has no price (WXYZ)" in " ".join(result.notes)
-
-
-def test_a_value_typed_into_the_sheet_updates_its_totals_and_is_read_back(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-    portfolio = compute_portfolio(statement_from(*LINES))
-    ExcelExporter(path).export(value_portfolio(portfolio, {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}), DAY_ONE)
-    assert typed_values(path) == {}  # "unavailable" is not a value
-
-    # The user types WXYZ's current value over "unavailable", as in Excel.
-    workbook = load_workbook(path)
-    workbook["Current Holdings"]["D3"] = 400
-    workbook.save(path)
-
-    holdings = computed(path, "Current Holdings")
-    assert holdings[2][:6] == ["WXYZ", 201, approx(0.167221), 400, approx(0.25), approx(0.990050)]
-    assert holdings[3][:6] == ["Total", 1202, 1, 1600, 1, approx(0.331115)]  # everything follows
-    assert typed_values(path) == {"WXYZ": (Decimal(400), MISSING)}  # and the app finds it next time
-
-
-def entered_on(day: date) -> MarketPrice:
-    """WXYZ at 100, typed in by the user at noon (local time) on ``day``."""
-    noon = datetime(day.year, day.month, day.day, 12).astimezone()
-    return MarketPrice(Decimal("100"), "", "EUR", as_of=noon, entered=True)
-
-
-def test_price_entered_today_is_written_with_a_comment_and_counts_for_history(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-    portfolio = compute_portfolio(statement_from(*LINES))
-    prices = {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR"), "WXYZ": entered_on(DAY_TWO)}
-
-    result = ExcelExporter(path).export(value_portfolio(portfolio, prices), DAY_TWO)
-
-    sheet = load_workbook(path)["Current Holdings"]
-    assert [row[3] for row in computed(path, "Current Holdings")[2:]] == [400, 1600]
-    assert sheet["D2"].comment is None
-    assert "entered by hand on 2026-10-13" in sheet["D3"].comment.text
-    assert "Includes values entered by hand" in sheet["D4"].comment.text
-    assert result.history == "added"
-    assert computed(path, "Portfolio History")[1][2] == 1600
-
-
-def test_price_entered_on_an_earlier_day_leaves_history_alone(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-    portfolio = compute_portfolio(statement_from(*LINES))
-    prices = {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR"), "WXYZ": entered_on(DAY_ONE)}
-
-    result = ExcelExporter(path).export(value_portfolio(portfolio, prices), DAY_TWO)
-
-    assert result.history == "skipped"
-    assert len(rows(path, "Portfolio History")) == 1
-    assert "were entered by you on an earlier day, so no row was written" in " ".join(result.notes)
-
-
 def test_workbook_open_in_excel_gives_a_friendly_message(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Spec H2.
     path = tmp_path / "portfolio.xlsx"
     ExcelExporter(path).export(valuation(), DAY_ONE)
     before = path.read_bytes()
@@ -573,6 +231,7 @@ def test_workbook_open_in_excel_gives_a_friendly_message(tmp_path: Path, monkeyp
 
 @pytest.mark.parametrize("name", ["portfolio.xls", "portfolio.csv", "portfolio.xlsm"])
 def test_other_file_types_are_refused(tmp_path: Path, name: str) -> None:
+    # Spec H2.
     with pytest.raises(UserFacingError) as error:
         ExcelExporter(tmp_path / name).export(valuation(), DAY_ONE)
 
@@ -580,6 +239,7 @@ def test_other_file_types_are_refused(tmp_path: Path, name: str) -> None:
 
 
 def test_file_that_is_not_a_workbook_is_explained_and_untouched(tmp_path: Path) -> None:
+    # Spec H2.
     path = tmp_path / "portfolio.xlsx"
     path.write_text("not a workbook", encoding="utf-8")
 
@@ -590,12 +250,424 @@ def test_file_that_is_not_a_workbook_is_explained_and_untouched(tmp_path: Path) 
     assert path.read_text(encoding="utf-8") == "not a workbook"
 
 
-def test_sheet_names_can_be_changed(tmp_path: Path) -> None:
+# -- H3: Current Holdings ------------------------------------------------------------------------------------
+
+
+def test_holdings_sheet_is_replaced_not_appended_to(tmp_path: Path) -> None:
+    # Spec H3.
+    path = tmp_path / "portfolio.xlsx"
+    ExcelExporter(path).export(valuation(), DAY_ONE)
+    only_abcd = value_portfolio(
+        compute_portfolio(statement_from(*LINES[:2])), {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}
+    )
+
+    ExcelExporter(path).export(only_abcd, DAY_TWO)
+
+    assert [row[0] for row in rows(path, "Current Holdings")] == ["Investment", "ABCD", "Total"]
+
+
+@pytest.mark.parametrize(
+    "earlier",
+    [
+        ("Index", *HOLDINGS[1:]),
+        ("Index", "Invested", "Current Value", "Current %", "Invested %", "% Up/Down", "Dividends", "Currency"),
+        ("Index", "Invested", "Current Value", "Share of Current Value", "Share of Invested", "% Up/Down",
+         "Dividends", "Currency"),
+        ("Index", "Invested", "Current Value", "Current %", "Invested %", "Shares", "Average Cost", "Current Price",
+         "Unrealized PnL", "% Up/Down", "Dividends", "Yahoo Symbol", "Price Time", "Currency"),
+    ],
+    ids=["index", "current %", "share of", "wide"],
+)  # fmt: skip
+def test_a_holdings_sheet_from_an_earlier_version_is_rewritten_in_todays_layout(tmp_path: Path, earlier: tuple) -> None:
+    # Spec H3: every layout an earlier version wrote is recognised as the app's own.
+    path = tmp_path / "portfolio.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Current Holdings"
+    sheet.append(earlier)
+    sheet.append(["OLD", *range(1, len(earlier))])
+    sheet.column_dimensions["N"].width = 40
+    workbook.save(path)
+
+    ExcelExporter(path).export(valuation(), DAY_ONE)
+
+    holdings = rows(path, "Current Holdings")
+    assert holdings[0] == HOLDINGS
+    assert [row[0] for row in holdings] == ["Investment", "ABCD", "WXYZ", "Total"]
+    assert all(len(row) == len(HOLDINGS) for row in holdings)
+    assert "N" not in load_workbook(path)["Current Holdings"].column_dimensions
+
+
+def test_index_column_shows_the_name_next_to_the_ticker_when_one_is_known(tmp_path: Path) -> None:
+    # Spec H3.
     path = tmp_path / "portfolio.xlsx"
 
-    ExcelExporter(path, holdings_sheet="Posições", history_sheet="Histórico").export(valuation(), DAY_ONE)
+    ExcelExporter(path, index_names={"ABCD": "S&P 500"}).export(valuation(), DAY_ONE)
 
-    assert load_workbook(path).sheetnames == ["Posições", "Histórico"]
+    assert [row[0] for row in rows(path, "Current Holdings")] == ["Investment", "(ABCD) S&P 500", "WXYZ", "Total"]
+    assert load_workbook(path)["Current Holdings"].column_dimensions["A"].width > len("(ABCD) S&P 500")
+
+
+def test_left_out_investment_is_greyed_and_the_total_and_history_cover_the_rest(tmp_path: Path) -> None:
+    # Spec B8, H3, H4.
+    path = tmp_path / "portfolio.xlsx"
+    portfolio = compute_portfolio(statement_from(*LINES))
+    prices = {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}
+
+    result = ExcelExporter(path).export(value_portfolio(portfolio, prices), DAY_ONE)
+
+    holdings = computed(path, "Current Holdings")
+    assert holdings[1][:5] == ["ABCD", 1001, 1, 1200, 1]
+    assert holdings[2][:6] == ["WXYZ", 201, "not in total", "unavailable", "not in total", "unavailable"]
+    assert holdings[3][:6] == ["Total", 1001, 1, 1200, 1, approx(0.198801)]
+    # Excel shows WXYZ's row in grey, and its Current Value in light red with dark red text: a value can go there.
+    colours = coloured(path, "Current Holdings")
+    assert {column: colours.get((3, column)) for column in range(1, 9)} == {
+        1: GREY_TEXT, 2: GREY_TEXT, 3: GREY_TEXT, 4: TYPE_HERE, 5: GREY_TEXT, 6: GREY_TEXT, 7: GREY_TEXT, 8: GREY_TEXT,
+    }  # fmt: skip
+    assert not any(colours.get((row, column)) for row in (2, 4) for column in range(1, 9))  # ABCD, the Total
+    assert "type this investment's current value here" in load_workbook(path)["Current Holdings"]["D3"].comment.text
+    assert result.history == "added"
+    history = computed(path, "Portfolio History")[1]
+    assert history[1:4] == [1001, 1200, 199]
+    # Like the Total row, net worth covers what has a value: ABCD and the cash (1200 + 798).
+    assert history[5:] == [approx(-0.001), 1998, 2000, -2]
+    assert "WXYZ" in notes(result) and "leaves out" in notes(result)
+
+
+def test_a_value_typed_into_the_sheet_updates_its_totals_and_its_colours(tmp_path: Path) -> None:
+    # Spec E1, H3: typing over "unavailable" in Excel.
+    path = tmp_path / "portfolio.xlsx"
+    portfolio = compute_portfolio(statement_from(*LINES))
+    ExcelExporter(path).export(value_portfolio(portfolio, {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}), DAY_ONE)
+
+    type_into(path, "D3", 400)
+
+    holdings = computed(path, "Current Holdings")
+    assert holdings[2][:6] == ["WXYZ", 201, approx(0.167221), 400, approx(0.25), approx(0.990050)]
+    assert holdings[3][:6] == ["Total", 1202, 1, 1600, 1, approx(0.331115)]  # everything follows
+    assert coloured(path, "Current Holdings") == {}  # and the row looks like the others again
+
+
+def test_last_known_price_is_written_with_a_comment_and_leaves_history_alone(tmp_path: Path) -> None:
+    # Spec D3, H3, H4.
+    path = tmp_path / "portfolio.xlsx"
+    ExcelExporter(path).export(valuation(), DAY_ONE)
+    portfolio = compute_portfolio(statement_from(*LINES))
+    prices = {
+        "ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR"),
+        "WXYZ": MarketPrice(
+            Decimal("100"), "WXYZ.DE", "EUR", as_of=datetime(2026, 10, 9, 17, 35, tzinfo=UTC), last_known=True
+        ),
+    }
+
+    result = ExcelExporter(path).export(value_portfolio(portfolio, prices), DAY_TWO)
+
+    sheet = load_workbook(path)["Current Holdings"]
+    assert [row[3] for row in computed(path, "Current Holdings")[1:]] == [1200, 400, 1600]
+    assert sheet["D2"].comment is None
+    assert "Last known price" in sheet["D3"].comment.text and "2026-10-09" in sheet["D3"].comment.text
+    assert "not up to date" in sheet["D4"].comment.text
+    assert result.history == "skipped" and len(rows(path, "Portfolio History")) == 2
+    assert "no row was written" in notes(result) and "Yahoo could not be reached" in notes(result)
+
+    ExcelExporter(path).export(valuation(), DAY_TWO)
+
+    sheet = load_workbook(path)["Current Holdings"]
+    assert sheet["D3"].comment is None and sheet["D4"].comment is None
+
+
+def entered_on(day: date) -> MarketPrice:
+    """WXYZ at 100, typed in by the user at noon (local time) on ``day``."""
+    noon = datetime(day.year, day.month, day.day, 12).astimezone()
+    return MarketPrice(Decimal("100"), "", "EUR", as_of=noon, entered=True)
+
+
+def test_price_entered_today_is_written_with_a_comment_and_counts_for_history(tmp_path: Path) -> None:
+    # Spec E3, E5.
+    path = tmp_path / "portfolio.xlsx"
+    portfolio = compute_portfolio(statement_from(*LINES))
+    prices = {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR"), "WXYZ": entered_on(DAY_TWO)}
+
+    result = ExcelExporter(path).export(value_portfolio(portfolio, prices), DAY_TWO)
+
+    sheet = load_workbook(path)["Current Holdings"]
+    assert [row[3] for row in computed(path, "Current Holdings")[2:]] == [400, 1600]
+    assert sheet["D2"].comment is None
+    assert "entered by hand" in sheet["D3"].comment.text and "2026-10-13" in sheet["D3"].comment.text
+    assert "entered by hand" in sheet["D4"].comment.text
+    assert result.history == "added"
+    assert computed(path, "Portfolio History")[1][2] == 1600
+
+
+def test_price_entered_on_an_earlier_day_leaves_history_alone(tmp_path: Path) -> None:
+    # Spec E5.
+    path = tmp_path / "portfolio.xlsx"
+    portfolio = compute_portfolio(statement_from(*LINES))
+    prices = {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR"), "WXYZ": entered_on(DAY_ONE)}
+
+    result = ExcelExporter(path).export(value_portfolio(portfolio, prices), DAY_TWO)
+
+    assert result.history == "skipped" and len(rows(path, "Portfolio History")) == 1
+    assert "no row was written" in notes(result) and "earlier day" in notes(result)
+
+
+# -- H4: Portfolio History -------------------------------------------------------------------------------------
+
+
+def test_roi_is_the_gain_on_deposits_and_rows_from_earlier_versions_switch_to_it(tmp_path: Path) -> None:
+    # Spec B7, H4.
+    path = tmp_path / "portfolio.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Portfolio History"
+    sheet.append(HISTORY)
+    # Written by an earlier version: ROI % was the unrealized PnL over the cost basis (100 / 500).
+    sheet.append([datetime(2026, 10, 1), 500, 600, 100, 0, 0.2, 1100, 1000, 100])
+    sheet.append([datetime(2026, 10, 2), 500, 600, 100, 0, 0.2, "unavailable", 1000, "unavailable"])
+    workbook.save(path)
+
+    ExcelExporter(path).export(valuation(), DAY_ONE)
+
+    history = computed(path, "Portfolio History")
+    # Gain vs Deposits / Net Deposits: 100 / 1000, unavailable without a gain, then today's 398 / 2000.
+    assert [row[5] for row in history[1:]] == [approx(0.1), "unavailable", approx(0.199)]
+    # Nothing else in the old rows changes.
+    assert history[1][1:5] == [500, 600, 100, 0] and history[1][6:] == [1100, 1000, 100]
+    assert history[2][6:] == ["unavailable", 1000, "unavailable"]
+
+
+def test_changing_a_figure_in_a_history_row_updates_what_is_worked_out_from_it(tmp_path: Path) -> None:
+    # Spec H4: Unrealized PnL, ROI %, Net Worth and Gain vs Deposits follow the row's figures.
+    path = tmp_path / "portfolio.xlsx"
+    ExcelExporter(path).export(valuation(), DAY_ONE)
+    ExcelExporter(path).export(valuation(abcd="130"), DAY_TWO)  # day one's row now holds figures of its own
+
+    workbook = load_workbook(path)
+    workbook["Portfolio History"]["C2"] = 1700  # the user corrects day one's market value by 100
+    workbook["Portfolio History"]["H2"] = 2100  # and its net deposits
+    workbook.save(path)
+
+    day_one = computed(path, "Portfolio History")[1]
+    # cost basis, market value, unrealized, realized, ROI %, net worth, net deposits, gain vs deposits
+    assert day_one[1:] == [1202, 1700, 498, 0, approx(398 / 2100), 2498, 2100, 398]
+
+
+def test_second_run_on_the_same_day_updates_that_days_row(tmp_path: Path) -> None:
+    # Spec H4.
+    path = tmp_path / "portfolio.xlsx"
+    ExcelExporter(path).export(valuation(), DAY_ONE)
+
+    result = ExcelExporter(path).export(valuation(abcd="130"), DAY_ONE)
+
+    history = computed(path, "Portfolio History")
+    assert result.history == "updated"
+    assert len(history) == 2
+    assert history[1][2] == 1700
+    assert len(rows(path, "Current Holdings")) == 4  # header, two holdings, total
+
+
+def test_a_new_day_adds_a_row_and_keeps_the_old_ones(tmp_path: Path) -> None:
+    # Spec H4.
+    path = tmp_path / "portfolio.xlsx"
+    ExcelExporter(path).export(valuation(), DAY_ONE)
+
+    result = ExcelExporter(path).export(valuation(abcd="130"), DAY_TWO)
+
+    history = computed(path, "Portfolio History")
+    assert result.history == "added"
+    assert [row[0].date() for row in rows(path, "Portfolio History")[1:]] == [DAY_ONE, DAY_TWO]
+    assert (history[1][2], history[2][2]) == (1600, 1700)
+
+
+def test_without_any_price_unavailable_is_written_and_history_is_left_alone(tmp_path: Path) -> None:
+    # Spec B8, H4.
+    path = tmp_path / "portfolio.xlsx"
+    ExcelExporter(path).export(valuation(), DAY_ONE)
+
+    result = ExcelExporter(path).export(valuation(abcd=None, wxyz=None), DAY_TWO)
+
+    holdings = computed(path, "Current Holdings")
+    assert result.history == "skipped"
+    assert holdings[1][:6] == ["ABCD", 1001, approx(0.832779), "unavailable", "unavailable", "unavailable"]
+    assert holdings[3][:6] == ["Total", 1202, 1, "unavailable", "unavailable", "unavailable"]
+    assert len(rows(path, "Portfolio History")) == 2
+    assert "no row was written" in notes(result)
+
+
+def test_a_value_typed_in_reaches_todays_history_row_and_stays_there_the_next_day(tmp_path: Path) -> None:
+    # Spec H4.
+    path = tmp_path / "portfolio.xlsx"
+    portfolio = compute_portfolio(statement_from(*LINES))
+    ExcelExporter(path).export(value_portfolio(portfolio, {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}), DAY_ONE)
+    # cost basis, market value, unrealized, realized, ROI %, net worth, net deposits, gain vs deposits
+    left_out = [1001, 1200, 199, 0, approx(-0.001), 1998, 2000, -2]
+    assert computed(path, "Portfolio History")[1][1:] == left_out
+
+    type_into(path, "D3", 400)  # WXYZ's current value, over "unavailable"
+
+    typed = [1202, 1600, 398, 0, approx(0.199), 2398, 2000, 398]
+    assert computed(path, "Portfolio History")[1][1:] == typed  # the whole row follows
+    # The next day's run rewrites Current Holdings: the first day's row keeps what it showed, now as figures,
+    # and as nothing is left out of it any more, it loses its colour and comment.
+    ExcelExporter(path).export(valuation(abcd="130"), DAY_TWO)
+    history = computed(path, "Portfolio History")
+    assert history[1][1:] == typed
+    assert rows(path, "Portfolio History")[1][1:3] == (1202, 1600)
+    assert load_workbook(path)["Portfolio History"]["A2"].comment is None
+    assert coloured(path, "Portfolio History") == {}
+    assert history[2][1:] == [1202, 1700, 498, 0, approx(0.249), 2498, 2000, 498]
+
+
+def test_a_day_left_incomplete_stays_incomplete_once_the_next_day_rewrites_the_holdings(tmp_path: Path) -> None:
+    # Spec H4.
+    path = tmp_path / "portfolio.xlsx"
+    portfolio = compute_portfolio(statement_from(*LINES))
+    ExcelExporter(path).export(value_portfolio(portfolio, {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}), DAY_ONE)
+
+    # The row says it leaves WXYZ out: a comment, and light orange while Current Holdings misses a value.
+    comment = load_workbook(path)["Portfolio History"]["A2"].comment.text
+    assert "Leaves out WXYZ" in comment and "when this row was written" in comment and "another day" in comment
+    assert set(coloured(path, "Portfolio History").values()) == {LEFT_OUT}
+    assert set(coloured(path, "Portfolio History")) == {(2, column) for column in range(1, 10)}
+
+    ExcelExporter(path).export(valuation(), DAY_TWO)
+
+    # Still without WXYZ, as on its day, and still marked so, now for good; today's row leaves nothing out.
+    assert computed(path, "Portfolio History")[1][1:] == [1001, 1200, 199, 0, approx(-0.001), 1998, 2000, -2]
+    sheet = load_workbook(path)["Portfolio History"]
+    assert "Leaves out WXYZ" in sheet["A2"].comment.text and "on this day" in sheet["A2"].comment.text
+    assert "another day" not in sheet["A2"].comment.text
+    assert set(coloured(path, "Portfolio History")) == {(2, column) for column in range(1, 10)}
+    assert sheet["A3"].comment is None
+    type_into(path, "D3", 400)  # a value typed in now changes nothing on day one
+    assert set(coloured(path, "Portfolio History")) == {(2, column) for column in range(1, 10)}
+
+
+def test_a_value_typed_in_the_same_day_takes_the_orange_off_todays_row(tmp_path: Path) -> None:
+    # Spec H4.
+    path = tmp_path / "portfolio.xlsx"
+    portfolio = compute_portfolio(statement_from(*LINES))
+    ExcelExporter(path).export(value_portfolio(portfolio, {"ABCD": MarketPrice(Decimal("120"), "ABCD.DE", "EUR")}), DAY_ONE)
+    assert coloured(path, "Portfolio History")
+
+    type_into(path, "D3", 400)
+
+    assert coloured(path, "Portfolio History") == {}
+
+
+# -- H5: backups ------------------------------------------------------------------------------------------------
+
+
+def test_one_backup_is_made_per_day_before_its_first_update(tmp_path: Path) -> None:
+    # Spec H5.
+    path = tmp_path / "mine.xlsx"
+    ExcelExporter(path).export(valuation(), DAY_ONE)  # created: nothing to back up yet
+    assert backups(tmp_path) == []
+
+    for abcd in ("121", "122", "123"):  # e.g. "Try again" and values entered, all on one day
+        result = ExcelExporter(path).export(valuation(abcd=abcd), DAY_TWO)
+
+    assert backups(tmp_path) == ["mine_backup_2026-10-13.xlsx"]
+    assert "mine_backup_2026-10-13.xlsx" in notes(result)
+    # The day's copy is the file as it was before that day's first update, not before the last one.
+    assert rows(tmp_path / "mine_backup_2026-10-13.xlsx", "Current Holdings")[1][3] == 1200
+
+
+def test_backups_of_the_newest_three_days_are_kept(tmp_path: Path) -> None:
+    # Spec H5.
+    path = tmp_path / "mine.xlsx"
+    legacy = tmp_path / "mine_backup_before_first_update.xlsx"  # made by earlier versions: never deleted
+    legacy.write_bytes(b"kept")
+    other = tmp_path / "other_backup_2020-01-01.xlsx"  # another workbook's copy
+    other.write_bytes(b"kept")
+    _users_workbook(path)
+
+    for day in (date(2026, 9, 28), date(2026, 9, 30), date(2026, 10, 1), date(2026, 10, 9), date(2026, 10, 15)):
+        ExcelExporter(path).export(valuation(), day)
+
+    names = ["mine_backup_2026-10-01.xlsx", "mine_backup_2026-10-09.xlsx", "mine_backup_2026-10-15.xlsx"]
+    assert backups(tmp_path) == names
+    assert legacy.exists() and other.exists()
+    assert sorted(file.name for file in tmp_path.iterdir()) == sorted([path.name, legacy.name, other.name, *names])
+
+
+def test_the_number_of_backups_kept_can_be_chosen_and_none_turns_them_off(tmp_path: Path) -> None:
+    # Spec H5.
+    path = tmp_path / "mine.xlsx"
+    _users_workbook(path)
+    for day in (date(2026, 10, 1), date(2026, 10, 2), date(2026, 10, 3)):
+        ExcelExporter(path, backups_kept=5).export(valuation(), day)
+    assert len(backups(tmp_path)) == 3
+
+    result = ExcelExporter(path, backups_kept=0).export(valuation(), date(2026, 10, 4))
+
+    # No copy is made, none is mentioned, and the copies made earlier stay.
+    assert len(backups(tmp_path)) == 3
+    assert "backup" not in notes(result).lower() and "copy" not in notes(result).lower()
+
+    ExcelExporter(path, backups_kept=1).export(valuation(), date(2026, 10, 5))
+    assert backups(tmp_path) == ["mine_backup_2026-10-05.xlsx"]
+
+
+def test_a_failed_save_leaves_no_new_backup_and_deletes_no_old_one(tmp_path: Path, monkeypatch) -> None:
+    # Spec H5.
+    path = tmp_path / "mine.xlsx"
+    _users_workbook(path)
+    for day in (date(2026, 10, 1), date(2026, 10, 2), date(2026, 10, 3)):
+        ExcelExporter(path).export(valuation(), day)
+    kept = backups(tmp_path)
+
+    def locked(*_args: object) -> None:
+        raise PermissionError("in use")
+
+    monkeypatch.setattr("os.replace", locked)
+    with pytest.raises(UserFacingError, match="open in another program"):
+        ExcelExporter(path).export(valuation(), date(2026, 10, 4))
+    with pytest.raises(UserFacingError, match="open in another program"):
+        ExcelExporter(path).export(valuation(), date(2026, 10, 3))  # today's copy exists: it stays
+
+    assert backups(tmp_path) == kept
+
+
+# -- H6: presentation ---------------------------------------------------------------------------------------------
+
+
+def test_sheets_are_formatted_for_reading(tmp_path: Path) -> None:
+    # Spec H6.
+    path = tmp_path / "portfolio.xlsx"
+    ExcelExporter(path).export(valuation(), DAY_ONE)
+    workbook = load_workbook(path)
+
+    for name, header in (("Current Holdings", HOLDINGS), ("Portfolio History", HISTORY)):
+        sheet = workbook[name]
+        first_header, first_value = sheet["A1"], sheet["B2"]
+        # Header: its own colour, bold. Data cells: no fill.
+        assert first_header.fill.fill_type == "solid" and first_header.fill.start_color.rgb.endswith("1F4E78")
+        assert first_header.font.bold
+        assert first_value.fill.fill_type is None
+        # Every cell in the table has a thin black outline, including empty ones.
+        for row in sheet.iter_rows():
+            for cell in row:
+                for side in (cell.border.left, cell.border.right, cell.border.top, cell.border.bottom):
+                    assert side.style == "thin" and side.color.rgb.endswith("000000")
+        # Columns are wider than the longest text in them.
+        for index, title in enumerate(header):
+            assert sheet.column_dimensions[chr(ord("A") + index)].width > len(title)
+
+    holdings, history = workbook["Current Holdings"], workbook["Portfolio History"]
+    assert [holdings.cell(row=2, column=column).number_format for column in (3, 5, 6)] == ["0.00%"] * 3
+    # Rows are taller than Excel's default of 15 points, the header tallest.
+    assert holdings.row_dimensions[1].height > holdings.row_dimensions[2].height > 15
+    assert all(holdings.row_dimensions[row].height > 15 for row in range(1, 5))
+    assert history.row_dimensions[2].height > 15
+    assert holdings["B2"].number_format == "0.00"
+    assert history["F2"].number_format == "0.00%"
+    assert history["A2"].number_format == "yyyy-mm-dd"
+    assert holdings["A4"].value == "Total" and holdings["A4"].font.bold and not holdings["A3"].font.bold
+
+
+# -- I3: the spreadsheet from the command line -------------------------------------------------------------
 
 
 def _run(tmp_path: Path, *arguments: str, today: date = DAY_ONE) -> tuple[int, str]:
@@ -613,31 +685,23 @@ def _run(tmp_path: Path, *arguments: str, today: date = DAY_ONE) -> tuple[int, s
 
 
 def test_cli_updates_the_spreadsheet_and_remembers_where_it_is(tmp_path: Path) -> None:
+    # Spec I3.
     path = tmp_path / "portfolio.xlsx"
 
     code, errors = _run(tmp_path, "--spreadsheet", str(path))
     assert code == 0
-    assert "Spreadsheet created" in errors and "2 row(s) written" in errors
-    assert "a new row for 2026-10-12 was added" in errors
+    assert "created" in errors and "2026-10-12" in errors
     assert Settings.load(tmp_path / "settings.json").spreadsheet_path == path.resolve()
 
     # From then on the remembered workbook is updated without any option.
     code, errors = _run(tmp_path, today=DAY_TWO)
     assert code == 0
-    assert "Spreadsheet updated" in errors
+    assert "updated" in errors
     assert len(rows(path, "Portfolio History")) == 3
 
 
-def test_index_column_shows_the_name_next_to_the_ticker_when_one_is_known(tmp_path: Path) -> None:
-    path = tmp_path / "portfolio.xlsx"
-
-    ExcelExporter(path, index_names={"ABCD": "S&P 500"}).export(valuation(), DAY_ONE)
-
-    assert [row[0] for row in rows(path, "Current Holdings")] == ["Investment", "(ABCD) S&P 500", "WXYZ", "Total"]
-    assert load_workbook(path)["Current Holdings"].column_dimensions["A"].width > len("(ABCD) S&P 500")
-
-
 def test_cli_uses_the_fund_name_from_yahoo_until_the_user_gives_their_own(tmp_path: Path) -> None:
+    # Spec I3.
     path = tmp_path / "portfolio.xlsx"
 
     _run(tmp_path, "--spreadsheet", str(path))
@@ -653,6 +717,7 @@ def test_cli_uses_the_fund_name_from_yahoo_until_the_user_gives_their_own(tmp_pa
 
 
 def test_cli_can_skip_the_remembered_spreadsheet_for_one_run(tmp_path: Path) -> None:
+    # Spec I3.
     path = tmp_path / "portfolio.xlsx"
     _run(tmp_path, "--spreadsheet", str(path))
     before = path.read_bytes()
@@ -665,26 +730,10 @@ def test_cli_can_skip_the_remembered_spreadsheet_for_one_run(tmp_path: Path) -> 
 
 
 def test_cli_without_a_chosen_spreadsheet_only_prints_and_says_how_to_choose_one(tmp_path: Path) -> None:
+    # Spec I3.
     code, errors = _run(tmp_path)
 
     assert code == 0
     assert "no spreadsheet was updated" in errors
     assert "--spreadsheet FILE.xlsx" in errors
     assert [item.name for item in tmp_path.glob("*.xlsx")] == []
-
-
-def test_the_days_of_backups_kept_can_be_chosen_and_none_turns_them_off(tmp_path: Path) -> None:
-    path = tmp_path / "mine.xlsx"
-    _users_workbook(path)
-    for day in (date(2026, 10, 1), date(2026, 10, 2), date(2026, 10, 3)):
-        ExcelExporter(path, backups_kept=5).export(valuation(), day)
-    assert len(ExcelExporter(path).backups()) == 3
-
-    result = ExcelExporter(path, backups_kept=0).export(valuation(), date(2026, 10, 4))
-
-    # No copy is made, none is mentioned, and the copies made earlier stay.
-    assert len(ExcelExporter(path).backups()) == 3
-    assert "backup" not in " ".join(result.notes).lower() and "copy" not in " ".join(result.notes).lower()
-
-    ExcelExporter(path, backups_kept=1).export(valuation(), date(2026, 10, 5))
-    assert [backup.name for backup in ExcelExporter(path).backups()] == ["mine_backup_2026-10-05.xlsx"]

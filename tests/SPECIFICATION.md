@@ -67,7 +67,8 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
 - **D3.** When Yahoo cannot be reached:
   - the last price found on an earlier day is used, marked with its date, and the totals are marked too;
   - an investment never priced is shown as unavailable;
-  - a last price in another statement currency is never used.
+  - a last price in another statement currency is never used;
+  - when Yahoo answers for some investments only, each one is marked for what it got.
 - **D4.** A fresh price replaces the kept one. A damaged file of kept prices is ignored and rebuilt.
 - **D5.** A run with several investments looks up their prices at the same time, and each exchange rate is fetched once.
 - **D6.** Notes and results are in statement order, whatever order the prices arrive in.

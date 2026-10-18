@@ -1823,6 +1823,85 @@ def test_weeks_of_use_keep_one_history_row_per_valid_day_and_the_newest_backups(
     assert backups == ["mine_backup_2026-09-21.xlsx", "mine_backup_2026-09-22.xlsx", "mine_backup_2026-09-23.xlsx"]
 
 
+def test_when_yahoo_answers_for_some_investments_only_each_is_marked_for_what_it_got(app, tmp_path: Path) -> None:
+    # Spec D3, F5, H4: some prices come back, some time out or are refused; nothing is mixed up.
+    from statement_tracker.core.market_data.provider import PriceUnavailableError
+
+    class HalfWorking(FakeProvider):
+        """Yahoo answering for some listings only."""
+
+        failing: dict[str, str] = {}
+
+        def quote(self, symbol: str):
+            if symbol in self.failing:
+                self.calls.append(("quote", symbol))
+                raise PriceUnavailableError(self.failing[symbol])
+            return super().quote(symbol)
+
+    provider = HalfWorking()
+    for symbol, price in (("ABCD.DE", "120"), ("WXYZ.DE", "60"), ("QRST.DE", "30"), ("LMNO.DE", "10")):
+        provider.add(symbol, "EUR", price=price)
+    settings = Settings.load(tmp_path / "settings.json")
+    for ticker in ("ABCD", "WXYZ", "QRST", "LMNO"):
+        settings.remember(ticker, TickerChoice(f"{ticker}.DE", f"{ticker} fund", confirmed=True))
+    settings.save()
+    statement = write_statement(
+        tmp_path,
+        "2026-01-05T09:00:00.000Z,,CASH TOP-UP,,,EUR 5000,EUR,1",
+        "2026-01-05T10:00:00.000Z,ABCD,BUY - MARKET,10,EUR 100.00,EUR 1000,EUR,1",
+        "2026-01-05T10:01:00.000Z,WXYZ,BUY - MARKET,10,EUR 50.00,EUR 500,EUR,1",
+        "2026-01-05T10:02:00.000Z,QRST,BUY - MARKET,10,EUR 25.00,EUR 250,EUR,1",
+        "2026-01-05T10:03:00.000Z,LMNO,BUY - MARKET,10,EUR 10.00,EUR 100,EUR,1",
+    )
+    spreadsheet = tmp_path / "mine.xlsx"
+    timed_out = "Prices could not be fetched from Yahoo (timed out). Check your internet connection and try again."
+    refused = "Yahoo is limiting requests right now. Try again in a few minutes."
+
+    # Day one: LMNO's price never comes; everything else does.
+    provider.failing = {"LMNO.DE": timed_out}
+    first, errors = make_window(tmp_path, provider, today=date(2026, 10, 12))
+    drop(first, statement, spreadsheet)
+    run(app, first)
+    first.close()
+
+    # Day two: only ABCD's price comes back.
+    provider.failing = {"WXYZ.DE": timed_out, "QRST.DE": refused, "LMNO.DE": timed_out}
+    for symbol in ("ABCD.DE", "WXYZ.DE", "QRST.DE"):
+        provider.listings[symbol].price += 5
+    window, errors = make_window(tmp_path, provider, today=date(2026, 10, 13))
+    drop(window, statement)
+    run(app, window)
+
+    shown = {row[0]: row for row in cells(window.table)}
+    abcd, wxyz, qrst, lmno = (shown[f"({ticker}) {ticker} fund"] for ticker in ("ABCD", "WXYZ", "QRST", "LMNO"))
+    assert abcd[3].replace(",", "").replace(".", "").startswith("125000")  # 1,250.00 at today's price...
+    assert not abcd[3].endswith(LAST_KNOWN)  # ...unmarked
+    assert amount(wxyz[3], "600.00") and wxyz[3].endswith(LAST_KNOWN)  # yesterday's price, marked
+    assert amount(qrst[3], "300.00") and qrst[3].endswith(LAST_KNOWN)
+    assert lmno[3] == "unavailable" and lmno[2] == "not in total"  # never had a price: nothing is estimated
+    assert shown["Total"][3].endswith(LAST_KNOWN)
+    names = [row[0] for row in cells(window.table)]
+    for ticker in ("WXYZ", "QRST"):  # each says from when its price is
+        assert "Last known price, from" in window.table.item(names.index(f"({ticker}) {ticker} fund"), 3).toolTip()
+    assert "LMNO" in window.price_bar_label.text() and button(window, "Try again").isVisibleTo(window)
+    history = load_workbook(spreadsheet)["Portfolio History"]
+    assert [cell.value.date() for cell in history["A"][1:]] == [date(2026, 10, 12)]  # no row from old prices
+    assert "Leaves out LMNO" in history["A2"].comment.text  # day one's row left LMNO out, and says so
+
+    # Yahoo answers again: "Try again" gives today's prices, and today's row.
+    provider.failing = {}
+    window.show()
+    button(window, "Try again").click()
+    wait_until(app, lambda: not running(window))
+
+    assert not any(row[3].endswith(LAST_KNOWN) for row in cells(window.table))
+    assert window.price_bar.isHidden()
+    history = load_workbook(spreadsheet)["Portfolio History"]
+    assert [cell.value.date() for cell in history["A"][1:]] == [date(2026, 10, 12), date(2026, 10, 13)]
+    assert history["A3"].comment is None  # nothing left out today
+    assert errors == []
+
+
 # -- upgrading ----------------------------------------------------------------------------------------------
 
 # What earlier versions of the app saved, exactly as each wrote it. Newer versions only ever added keys, and

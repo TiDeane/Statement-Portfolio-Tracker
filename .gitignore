@@ -1,4 +1,4 @@
-# Real statements: never commit. Only samples/revolut_sample.csv is tracked.
+# Real statements: never commit. Only the sample statements in samples/ are tracked.
 data/
 
 # Generated spreadsheets (anywhere in the repo) and Excel lock files

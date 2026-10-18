@@ -21,7 +21,8 @@ from statement_tracker.core.models import Statement, Transaction
 from statement_tracker.core.parser import parse_rows
 
 HEADER = "Date,Ticker,Type,Quantity,Price per share,Total Amount,Currency,FX Rate"
-SAMPLE = Path(__file__).resolve().parents[1] / "samples" / "revolut_sample.csv"
+SAMPLES = Path(__file__).resolve().parents[1] / "samples"
+SAMPLE = SAMPLES / "revolut_sample.csv"
 
 
 def statement_from(*lines: str, header: str = HEADER) -> Statement:

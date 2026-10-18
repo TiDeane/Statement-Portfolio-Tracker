@@ -12,6 +12,7 @@ from statement_tracker.core.errors import (
     StatementFileError,
     StatementFormatError,
     StatementRowError,
+    UserFacingError,
 )
 from statement_tracker.core.parser import load_statement
 
@@ -144,6 +145,73 @@ def test_blank_lines_are_skipped(tmp_path: Path) -> None:
     path = write_statement(tmp_path, "2025-01-06T09:00:00.000Z,,CASH TOP-UP,,,EUR 100,EUR,1", "", "")
 
     assert len(load_statement(path).transactions) == 1
+
+
+def _separated_by(text: str, separator: str) -> str:
+    """The statement as Excel saves it with another column separator, as on a computer set to use ";"."""
+    import csv
+    import io
+
+    out = io.StringIO()
+    writer = csv.writer(out, delimiter=separator, lineterminator="\r\n")
+    for row in csv.reader(io.StringIO(text)):
+        writer.writerow(row)
+    return out.getvalue()
+
+
+def _dates_rewritten(text: str) -> str:
+    """The statement with its dates rewritten the way Excel shows dates: 06/01/2025 10:00."""
+    import re
+
+    return re.sub(r"(\d{4})-(\d\d)-(\d\d)T(\d\d:\d\d):\d\d\.\d+Z", r"\3/\2/\1 \4", text)
+
+
+@pytest.mark.parametrize(
+    "saved",
+    [
+        lambda text: ("\ufeff" + text).encode("utf-8"),  # saved as "CSV UTF-8": an invisible mark at the start
+        lambda text: text.replace("\n", "\r\n").encode("utf-8"),  # Windows line endings
+        lambda text: ("\ufeff" + text.replace("\n", "\r\n")).encode("utf-8"),
+        lambda text: text.encode("cp1252"),  # saved as plain "CSV" on Windows
+    ],
+    ids=["mark", "line endings", "mark and line endings", "windows encoding"],
+)
+def test_a_statement_saved_again_without_changing_its_data_is_read_as_usual(tmp_path: Path, saved) -> None:
+    # Spec A1: what Excel changes when nothing in the data changed.
+    path = tmp_path / "statement.csv"
+    path.write_bytes(saved(SAMPLE.read_text(encoding="utf-8")))
+
+    statement = load_statement(path)
+
+    assert statement.transactions == load_statement(SAMPLE).transactions
+
+
+@pytest.mark.parametrize(
+    ("saved", "what"),
+    [
+        (lambda text: _separated_by(text, ";"), "they are separated by semicolons instead of commas"),
+        (lambda text: _separated_by(text, "\t"), "they are separated by tabs instead of commas"),
+        (_dates_rewritten, 'Row 2: the date "09/03/2025 13:09" is not in the expected format'),
+    ],
+    ids=["semicolons", "tabs", "dates"],
+)
+def test_a_statement_saved_with_another_layout_stops_and_says_what_it_should_look_like(
+    tmp_path: Path, saved, what: str
+) -> None:
+    # Spec A1, A6: nothing is guessed from a changed file; the message says what is wrong and what a
+    # statement from Revolut looks like.
+    path = tmp_path / "statement.csv"
+    path.write_text(saved(SAMPLE.read_text(encoding="utf-8")), encoding="utf-8")
+
+    with pytest.raises(UserFacingError) as error:
+        load_statement(path)
+
+    assert what in error.value.what_happened
+    advice = error.value.what_to_do
+    for looks_like in ("separated by commas", "2025-01-06T10:00:00.000Z", "EUR 1,234.56", "1.47328346"):
+        assert looks_like in advice
+    assert "export the statement from Revolut again" in advice
+    assert "Excel" not in error.value.what_happened + advice  # no guessing at which program it was
 
 
 def test_missing_file_is_explained(tmp_path: Path) -> None:

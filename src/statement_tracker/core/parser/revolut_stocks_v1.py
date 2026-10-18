@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from decimal import Decimal
 
-from statement_tracker.core.errors import MixedCurrencyError, StatementRowError
+from statement_tracker.core.errors import REVOLUT_LAYOUT, MixedCurrencyError, StatementRowError
 from statement_tracker.core.models import Statement, Transaction
 from statement_tracker.core.parser.profiles import Row, register_profile
 
@@ -17,6 +17,8 @@ _GROUPED_NUMBER = re.compile(r"\d{1,3}(,\d{3})+(\.\d+)?")
 _CURRENCY = re.compile(r"[A-Z]{3}")
 
 _REPORT = "If the file came straight from Revolut, please report this so the format can be supported."
+_LAYOUT = f"{REVOLUT_LAYOUT} {_REPORT}"
+"""For a row whose layout is not Revolut's: most likely another program changed the file when saving it."""
 
 
 def _parse_number(text: str) -> Decimal | None:
@@ -69,25 +71,25 @@ class RevolutStocksV1:
     def _parse_row(self, row: int, cells: list[str]) -> Transaction:
         if len(cells) != len(self.expected_header):
             raise StatementRowError(
-                row, f"expected {len(self.expected_header)} columns but found {len(cells)}.", _REPORT
+                row, f"expected {len(self.expected_header)} columns but found {len(cells)}.", _LAYOUT
             )
         date_text, ticker, type_name, quantity_text, price_text, total_text, currency, fx_text = cells
 
         if not _TIMESTAMP.fullmatch(date_text):
-            raise StatementRowError(row, f'the date "{date_text}" is not in the expected format.', _REPORT)
+            raise StatementRowError(row, f'the date "{date_text}" is not in the expected format.', _LAYOUT)
         try:
             timestamp = datetime.fromisoformat(date_text.replace("Z", "+00:00"))
         except ValueError:
-            raise StatementRowError(row, f'the date "{date_text}" is not a real date.', _REPORT) from None
+            raise StatementRowError(row, f'the date "{date_text}" is not a real date.', _LAYOUT) from None
 
         if not type_name:
-            raise StatementRowError(row, "the Type column is empty.", _REPORT)
+            raise StatementRowError(row, "the Type column is empty.", _LAYOUT)
         if not _CURRENCY.fullmatch(currency):
-            raise StatementRowError(row, f'the currency "{currency}" is not a three-letter code.', _REPORT)
+            raise StatementRowError(row, f'the currency "{currency}" is not a three-letter code.', _LAYOUT)
 
         fx_rate = _parse_number(fx_text)
         if fx_rate is None:
-            raise StatementRowError(row, f'the FX Rate "{fx_text}" is not a number.', _REPORT)
+            raise StatementRowError(row, f'the FX Rate "{fx_text}" is not a number.', _LAYOUT)
         if fx_rate != 1:
             raise MixedCurrencyError(
                 row,
@@ -99,11 +101,11 @@ class RevolutStocksV1:
         if quantity_text:
             quantity = _parse_number(quantity_text)
             if quantity is None:
-                raise StatementRowError(row, f'the quantity "{quantity_text}" is not a number.', _REPORT)
+                raise StatementRowError(row, f'the quantity "{quantity_text}" is not a number.', _LAYOUT)
 
         price = self._parse_amount(row, "Price per share", price_text, currency) if price_text else None
         if not total_text:
-            raise StatementRowError(row, "the Total Amount column is empty.", _REPORT)
+            raise StatementRowError(row, "the Total Amount column is empty.", _LAYOUT)
         total = self._parse_amount(row, "Total Amount", total_text, currency)
 
         return Transaction(
@@ -127,7 +129,7 @@ class RevolutStocksV1:
                 row,
                 f'the {column} "{text}" is not an amount this app can read '
                 f'(expected something like "{currency} 1,234.56").',
-                _REPORT,
+                _LAYOUT,
             )
         if code != currency:
             raise MixedCurrencyError(

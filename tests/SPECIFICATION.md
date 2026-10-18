@@ -6,7 +6,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
 
 ## A. Reading the statement
 
-- **A1.** A Revolut stock statement (CSV, the exact header `Date,Ticker,Type,Quantity,Price per share,Total Amount,Currency,FX Rate`) is read in full.
+- **A1.** A Revolut stock statement (CSV, the exact header `Date,Ticker,Type,Quantity,Price per share,Total Amount,Currency,FX Rate`) is read in full. So is one saved again by Excel without its data changing: an invisible mark at the start ("CSV UTF-8"), Windows line endings, or Windows' own text encoding.
 - **A2.** Amounts such as `EUR 355.45`, `EUR 123` and `EUR 1,234.56` are read exactly, with no rounding.
 - **A3.** Times are ISO 8601 UTC with 3 or 6 fractional digits and a `Z`.
 - **A4.** Rows are used in time order, whatever their order in the file.
@@ -19,7 +19,8 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - a transaction type other than the four known ones: the message names the row and the type;
   - a row that does not fit its type (a buy without a ticker or quantity, a dividend with a quantity, and so on);
   - a statement with no rows;
-  - a sell of more shares than are held: the message says the full history is needed.
+  - a sell of more shares than are held: the message says the full history is needed;
+  - a file whose layout another program changed when saving it (columns separated by `;` or tabs, dates or numbers rewritten): the message says what is wrong, what a statement from Revolut looks like (commas between columns, dates like `2025-01-06T10:00:00.000Z`, amounts like `EUR 1,234.56`, quantities like `1.47328346`), and to export it from Revolut again. It does not guess which program changed it.
 - **A7.** "Ignore unknown types" skips unknown rows and shows a prominent "results may be wrong" warning that names the type and the rows.
 
 ## B. Calculations

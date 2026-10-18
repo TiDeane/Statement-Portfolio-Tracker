@@ -24,11 +24,41 @@ class StatementFileError(UserFacingError):
     """The file could not be opened or read as text."""
 
 
+REVOLUT_LAYOUT = (
+    "In a statement as Revolut exports it, the columns are separated by commas, a date reads like "
+    "2025-01-06T10:00:00.000Z, an amount like EUR 1,234.56 (with a full stop before the cents), and a "
+    "quantity like 1.47328346. Saving the file in a spreadsheet program can change that: export the statement "
+    "from Revolut again and choose that file without saving it first."
+)
+"""What to do when a statement's layout is not Revolut's, as when another program rewrote its dates, numbers
+or column separators while saving it. (A save that only adds an invisible mark at the start, or other line
+endings, changes no data; such files are read as usual.)"""
+
+_SEPARATORS = {";": "semicolons", "\t": "tabs"}
+
+
 class StatementFormatError(UserFacingError):
     """The file's columns are not a format this app knows."""
 
     def __init__(self, expected: tuple[str, ...], found: tuple[str, ...]) -> None:
         self.found = found
+        # A spreadsheet program saving a CSV with the separator of the computer's own settings (";" where
+        # the comma is the decimal sign) leaves the right headings in a single column.
+        separator = next(
+            (
+                separator
+                for separator in _SEPARATORS
+                if len(found) == 1 and tuple(part.strip() for part in found[0].split(separator)) == expected
+            ),
+            None,
+        )
+        if separator is not None:
+            super().__init__(
+                f"This file has the columns of a Revolut stock statement, but they are separated by "
+                f"{_SEPARATORS[separator]} instead of commas.",
+                REVOLUT_LAYOUT,
+            )
+            return
         super().__init__(
             "This file does not look like a Revolut stock statement.\n"
             f"Expected columns: {', '.join(expected)}\n"

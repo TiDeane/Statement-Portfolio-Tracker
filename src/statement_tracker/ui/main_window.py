@@ -26,7 +26,17 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QBrush, QCloseEvent, QColor, QDragEnterEvent, QDropEvent, QFont, QResizeEvent
+from PySide6.QtGui import (
+    QBrush,
+    QCloseEvent,
+    QColor,
+    QDragEnterEvent,
+    QDropEvent,
+    QFont,
+    QKeySequence,
+    QResizeEvent,
+    QShortcut,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -61,6 +71,7 @@ from statement_tracker.core.ticker_resolver import Resolution
 from statement_tracker.settings import Settings
 from statement_tracker.ui import dialogs, theme
 from statement_tracker.ui.settings_dialog import SettingsDialog
+from statement_tracker.ui.undo import ENTERED, NAME, ChangeHistory
 from statement_tracker.ui.workers import QuestionBridge, Task
 from statement_tracker.workflow import (
     Report,
@@ -200,6 +211,9 @@ class MainWindow(QMainWindow):
     ) -> None:
         super().__init__()
         self._settings = settings
+        self._history = ChangeHistory(settings)
+        """Changes to investments made here or in Settings, for Ctrl+Z: names and values as long as the
+        app is open, forgetting and choosing a listing again until the next run finishes."""
         self._provider_factory = provider_factory
         self._today = today
         self._now = now
@@ -421,6 +435,10 @@ class MainWindow(QMainWindow):
         central.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         central.setFocus()
 
+        # While a name is being typed in the table, its editor takes these keys first, for the text typed so far.
+        QShortcut(QKeySequence.StandardKey.Undo, self, self.undo)
+        QShortcut(QKeySequence.StandardKey.Redo, self, self.redo)
+
         self._set_headers()
         self._refresh()
         # As tall as the three steps need. The result page then uses the same window.
@@ -626,7 +644,7 @@ class MainWindow(QMainWindow):
     def open_settings(self) -> None:
         """Show the settings window. A result on show is worked out again if anything was changed there,
         without fetching: a forgotten price or a new name shows at once, here and in the spreadsheet."""
-        dialog = SettingsDialog(self._settings, self)
+        dialog = SettingsDialog(self._settings, self, self._history)
         try:
             self.show_settings(dialog)
             changed = dialog.changed
@@ -724,6 +742,7 @@ class MainWindow(QMainWindow):
 
     def _failed(self, error: object) -> None:
         self._done()
+        self._history.run_finished()  # it may have saved listings before failing
         self._status("That did not work. Nothing was changed.", "error")
         if not isinstance(error, UserFacingError):
             details = "".join(traceback.format_exception(error)) if isinstance(error, BaseException) else repr(error)
@@ -737,6 +756,7 @@ class MainWindow(QMainWindow):
     def _finished(self, outcome: object) -> None:
         report, exported, export_error = outcome  # type: ignore[misc]
         self._done()
+        self._history.run_finished()
         self._show_outcome(report, exported, export_error)
 
     def _cell_double_clicked(self, row: int, column: int) -> None:
@@ -751,6 +771,7 @@ class MainWindow(QMainWindow):
         name = name.strip()
         if name == (self._settings.index_name(ticker) or ""):
             return  # nothing changed
+        self._history.record(f"the new name of {ticker}", [ticker], {NAME})
         if name:
             self._settings.index_names[ticker] = name
         else:
@@ -758,6 +779,24 @@ class MainWindow(QMainWindow):
         self._save_settings()
         if self._report is not None and not self._busy():
             self._show_changed(self._report)
+
+    def undo(self) -> None:
+        """Take back the last name or value changed, here or in Settings, while the result is shown."""
+        self._went_back(self._history.undo)
+
+    def redo(self) -> None:
+        """Make again the last change undone."""
+        self._went_back(self._history.redo)
+
+    def _went_back(self, step: Callable[[], str | None]) -> None:
+        # Only where the change shows, and never while a run is using the settings.
+        if self.pages.currentWidget() is not self.result_page or self._report is None or self._busy():
+            return
+        if step() is None:
+            return  # nothing to undo or redo
+        self._save_settings()
+        report = with_entered_prices(self._report, {}, self._settings, now=self._now(), remember_listings=False)
+        self._show_changed(report)
 
     def enter_value(self, row: int | None = None) -> None:
         """Let the user type in what an investment Yahoo has no current price for is worth now.
@@ -788,6 +827,7 @@ class MainWindow(QMainWindow):
         ticker, value = answer
         shares = next(choice.shares for choice in choices if choice.ticker == ticker)
         price = value / shares
+        self._history.record(f"the value entered for {ticker}", [ticker], {ENTERED})
         self._show_changed(with_entered_prices(report, {ticker: price}, self._settings, now=self._now()))
 
     def _show_changed(self, report: Report) -> None:

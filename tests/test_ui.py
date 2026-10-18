@@ -918,6 +918,177 @@ def test_settings_only_the_name_is_edited_in_the_table(app, tmp_path: Path) -> N
     dialog.close()
 
 
+def test_settings_changes_to_investments_are_undone_and_redone(app, tmp_path: Path) -> None:
+    from statement_tracker.price_cache import PriceCache
+
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.set_statement(SAMPLE)
+    run(app, window)
+    settings_path = tmp_path / "settings.json"
+    prices = PriceCache.beside(settings_path)
+    prices.enter("EQQB", Decimal("410"), "EUR", datetime(2026, 10, 12, 12, tzinfo=UTC))
+    prices.save()
+    dialog = SettingsDialog(Settings.load(settings_path))
+    dialog.confirm = lambda question: True
+
+    dialog.table.selectRow(0)
+    dialog.table.item(0, 1).setText("Tech fund")
+    settle(app)
+    dialog.undo()
+    assert Settings.load(settings_path).index_names == {} and dialog.table.item(0, 1).text() == "Nasdaq fund"
+    assert dialog.message_label.text() == "Undone: the new name of EQQB."
+    dialog.redo()
+    assert Settings.load(settings_path).index_names == {"EQQB": "Tech fund"}
+
+    dialog.table.selectRow(0)
+    dialog.forget_selected()
+    dialog.undo()  # the listing, the name and the value entered all come back
+    saved = Settings.load(settings_path)
+    assert saved.ticker_choices["EQQB"].symbol == "EQQB.DE" and saved.index_names == {"EQQB": "Tech fund"}
+    assert PriceCache.beside(settings_path).entered_tickers() == {"EQQB"}
+    assert dialog.table.rowCount() == 1
+
+    dialog.forget_all()
+    dialog.undo()
+    assert Settings.load(settings_path).known_tickers() == ["EQQB"]
+
+    # The tick box and the backups are not part of it: undoing goes past them and leaves them as they are.
+    dialog.always_first.setChecked(True)
+    dialog.backups.setValue(5)
+    dialog.undo()  # the redo of the name
+    saved = Settings.load(settings_path)
+    assert saved.index_names == {} and saved.always_use_first_listing and saved.backups_kept == 5
+    assert dialog.always_first.isChecked() and dialog.backups.value() == 5
+    dialog.undo()  # nothing left to undo: nothing happens
+    assert Settings.load(settings_path).index_names == {}
+
+
+def test_names_and_values_changed_in_the_result_are_undone_there_and_in_settings(app, tmp_path: Path) -> None:
+    from statement_tracker.price_cache import PriceCache
+
+    provider = provider_with("EQQB.DE")
+    window, errors = make_window(tmp_path, provider)
+    spreadsheet = tmp_path / "mine.xlsx"
+    window.set_statement(SAMPLE)
+    window.set_spreadsheet(spreadsheet)
+    run(app, window)
+    provider.offline = True
+    run(app, window)  # Yahoo unreachable: a value can be entered
+    settings_path = tmp_path / "settings.json"
+
+    window.rename("EQQB", "Tech fund")
+    window.ask_value = lambda choices, selected, currency: ("EQQB", Decimal("450"))
+    window.enter_value(0)
+    assert window.table.item(0, 3).text().endswith(ENTERED_MARK)
+
+    window.show()
+    window.activateWindow()  # the keys are the window's only while it is the active one
+    settle(app)
+    QTest.keyClick(window.table, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+    assert window.table.item(0, 3).text().endswith(" *")  # back to the last price fetched
+    assert PriceCache.beside(settings_path).entered_tickers() == set()
+    assert load_workbook(spreadsheet)["Current Holdings"]["A2"].value == "(EQQB) Tech fund"  # written again
+
+    # Settings carries on with the same history: the rename made in the result is undone there.
+    def undo_and_redo_there(dialog: SettingsDialog) -> None:
+        dialog.undo()
+        assert dialog.table.item(0, 1).text() == "Nasdaq fund"
+        assert dialog.message_label.text() == "Undone: the new name of EQQB."
+        dialog.redo()
+        dialog.redo()  # and the value entered in the result, redone
+        assert ENTERED_PRICE_STATUS in dialog.table.item(0, 3).text()
+
+    window.show_settings = undo_and_redo_there
+    window.open_settings()
+    assert window.table.item(0, 0).text() == "(EQQB) Tech fund"
+    assert window.table.item(0, 3).text().endswith(ENTERED_MARK)
+
+    window.show_steps()
+    window.undo()  # only on the result page, where the change shows
+    assert Settings.load(settings_path).index_names == {"EQQB": "Tech fund"}
+    window.close()
+    assert errors == []
+
+
+def test_after_a_run_names_and_values_are_still_undone_but_forgetting_is_not(app, tmp_path: Path) -> None:
+    from statement_tracker.price_cache import PriceCache
+
+    provider = provider_with("EQQB.DE")
+    window, errors = make_window(tmp_path, provider)
+    window.set_statement(SAMPLE)
+    run(app, window)
+    provider.offline = True
+    run(app, window)  # Yahoo unreachable: a value can be entered
+    settings_path = tmp_path / "settings.json"
+    window.rename("EQQB", "Tech fund")
+    window.ask_value = lambda choices, selected, currency: ("EQQB", Decimal("450"))
+    window.enter_value(0)
+    run(app, window)
+
+    window.show()  # undone where the change shows
+    window.undo()
+    assert PriceCache.beside(settings_path).entered_tickers() == set()
+    assert Settings.load(settings_path).index_names == {"EQQB": "Tech fund"}
+    window.undo()
+    assert Settings.load(settings_path).index_names == {}
+
+    # Each step puts back only what it changed: a rename, not the listing chosen since.
+    window.rename("EQQB", "Tech fund")
+    window._settings.ticker_choices["EQQB"] = TickerChoice("EQQB.MI", "Nasdaq fund", confirmed=True)
+    window.undo()
+    saved = Settings.load(settings_path)
+    assert saved.index_names == {} and saved.ticker_choices["EQQB"].symbol == "EQQB.MI"
+    window._settings.ticker_choices["EQQB"] = TickerChoice("EQQB.DE", "Nasdaq fund")
+    window._settings.save()
+
+    def forget(dialog: SettingsDialog) -> None:
+        dialog.confirm = lambda question: True
+        dialog.table.selectRow(0)
+        dialog.forget_selected()
+
+    window.show_settings = forget
+    window.open_settings()
+    provider.offline = False
+    run(app, window)  # matches the listing again
+    matched = Settings.load(settings_path).ticker_choices["EQQB"]
+    assert matched.symbol == "EQQB.DE"
+
+    def undo_there(dialog: SettingsDialog) -> None:
+        dialog.undo()  # forgetting cannot be undone after a run: nothing happens
+        assert dialog.message_label.text() == ""
+
+    window.show_settings = undo_there
+    window.open_settings()
+    window.undo()
+    assert Settings.load(settings_path).ticker_choices["EQQB"] == matched
+    window.close()
+    assert errors == []
+
+
+def test_after_a_run_choosing_the_listing_again_is_not_undone(app, tmp_path: Path) -> None:
+    window, errors = make_window(tmp_path, provider_with("EQQB.DE", "EQQB.MI"))
+    window.ask_listing = lambda resolution: "EQQB.DE"
+    window.set_statement(SAMPLE)
+    run(app, window)
+    settings_path = tmp_path / "settings.json"
+
+    def choose_again(dialog: SettingsDialog) -> None:
+        dialog.table.selectRow(0)
+        dialog.choose_again_selected()
+
+    window.show_settings = choose_again
+    window.open_settings()
+    window.ask_listing = lambda resolution: "EQQB.MI"  # picked again on the next run
+    run(app, window)
+
+    window.show()
+    window.undo()  # would bring back EQQB.DE and asking again: nothing happens
+    saved = Settings.load(settings_path)
+    assert saved.ticker_choices["EQQB"].symbol == "EQQB.MI" and saved.ask_again == set()
+    window.close()
+    assert errors == []
+
+
 def test_settings_highlight_the_whole_row_under_the_mouse(app, tmp_path: Path) -> None:
     window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
     window.set_statement(SAMPLE)

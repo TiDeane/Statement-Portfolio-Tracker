@@ -135,6 +135,19 @@ class PriceCache:
         """The tickers with a price typed in, in any currency."""
         return set(self._entered)
 
+    def entered_entry(self, ticker: str) -> dict[str, Any] | None:
+        """A copy of what is kept about the price typed in for ``ticker``, to give back to ``put_entered``."""
+        entry = self._entered.get(ticker)
+        return None if entry is None else dict(entry)
+
+    def put_entered(self, ticker: str, entry: Mapping[str, Any] | None) -> None:
+        """Keep for ``ticker`` what ``entered_entry`` gave, or no price typed in for None."""
+        if entry is None:
+            self.forget_entered(ticker)
+        elif self._entered.get(ticker) != entry:
+            self._entered[ticker] = dict(entry)
+            self._changed = True
+
     def forget_all_entered(self) -> None:
         """Drop every price typed in. The last prices fetched from Yahoo are kept."""
         if self._entered:

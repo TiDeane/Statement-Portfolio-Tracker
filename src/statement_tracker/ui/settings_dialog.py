@@ -1,7 +1,11 @@
 """The settings window: the investments the app remembers, how it matches them, and spreadsheet backups.
 
-Every change is saved at once. The only thing changed inside the table is the
-name, typed into its cell; everything else is read-only and changed with buttons.
+Every change is saved at once. Changes to the investments in the table can be
+undone with Ctrl+Z (Cmd+Z on a Mac) and redone with Ctrl+Y, in one history with
+the result table's (``ui/undo.py``); forgetting and choosing a listing again
+only until the next run. The tick box and the backups are not part of it.
+The only thing changed inside the table is the name, typed into its
+cell; everything else is read-only and changed with buttons.
 Nothing here contacts Yahoo: choosing a listing again happens on the next run,
 when the statement is there to compare against.
 """
@@ -11,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QEvent, QModelIndex, QPersistentModelIndex, Qt, QTimer
-from PySide6.QtGui import QBrush, QColor
+from PySide6.QtGui import QBrush, QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -38,6 +42,7 @@ from statement_tracker.core.exporters.excel import MAX_BACKUPS_KEPT
 from statement_tracker.price_cache import PriceCache
 from statement_tracker.settings import Settings
 from statement_tracker.ui import dialogs, theme
+from statement_tracker.ui.undo import ASK_AGAIN, EVERYTHING, NAME, ChangeHistory
 
 HEADERS = ["Investment", "Name shown", "Listing used", "Status"]
 NAME_COLUMN = 1
@@ -95,9 +100,13 @@ class _RowHoverDelegate(QStyledItemDelegate):
 class SettingsDialog(QDialog):
     """Rename investments, choose a listing again on the next run, or forget one or all of them."""
 
-    def __init__(self, settings: Settings, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, settings: Settings, parent: QWidget | None = None, history: ChangeHistory | None = None
+    ) -> None:
         super().__init__(parent)
         self._settings = settings
+        self._history = history or ChangeHistory(settings)
+        """The changes to investments that Ctrl+Z undoes, shared with the main window's result table."""
         self._prices = PriceCache.beside(settings.path)
         """The values typed in (kept as prices per share), which forgetting an investment removes too."""
         self.changed = False
@@ -207,6 +216,9 @@ class SettingsDialog(QDialog):
         layout.addWidget(investments_box, stretch=1)
         layout.addWidget(backups_box)
         layout.addWidget(close)
+        # While a name is being typed, its editor takes these keys first, for the text typed so far.
+        QShortcut(QKeySequence.StandardKey.Undo, self, self.undo)
+        QShortcut(QKeySequence.StandardKey.Redo, self, self.redo)
         self._refresh()
 
     # -- showing -----------------------------------------------------------------
@@ -282,6 +294,24 @@ class SettingsDialog(QDialog):
             and ticker not in self._settings.ask_again
         )
 
+    # -- undoing -----------------------------------------------------------------
+
+    def undo(self) -> None:
+        """Take back the last change to an investment, made here or in the result table, and save that."""
+        self._went_back(self._history.undo(), "Undone:")
+
+    def redo(self) -> None:
+        """Make again the last change undone, and save that."""
+        self._went_back(self._history.redo(), "Redone:")
+
+    def _went_back(self, what: str | None, done: str) -> None:
+        if what is None:
+            return  # nothing to undo or redo
+        self._prices = PriceCache.beside(self._settings.path)  # the history has saved the values typed in
+        if self._save():
+            self.message_label.setText(f"{done} {what}.")
+        self._refresh(select=self.selected_ticker())
+
     # -- changing ----------------------------------------------------------------
 
     def _save(self) -> bool:
@@ -302,7 +332,7 @@ class SettingsDialog(QDialog):
         return True
 
     def _always_first_toggled(self, checked: bool) -> None:
-        self._settings.always_use_first_listing = checked
+        self._settings.always_use_first_listing = checked  # not undoable: clicking it again does that
         self._save()
 
     def _backups_changed(self, days: int) -> None:
@@ -336,6 +366,7 @@ class SettingsDialog(QDialog):
         choice = self._settings.ticker_choices.get(ticker)
         shown_before = own or (choice.name if choice is not None else None) or ""
         if name != shown_before:  # Enter on an unchanged name (Yahoo's included) changes nothing
+            self._history.record(f"the new name of {ticker}", [ticker], {NAME})
             if name:
                 self._settings.index_names[ticker] = name
             else:
@@ -355,6 +386,9 @@ class SettingsDialog(QDialog):
         ticker = self.selected_ticker()
         if ticker is None or ticker not in self._settings.ticker_choices:
             return
+        self._history.record(
+            f"choosing the listing of {ticker} next time", [ticker], {ASK_AGAIN}, clears_on_run=True
+        )
         self._settings.ask_again.add(ticker)
         if self._save():
             self.message_label.setText(
@@ -373,6 +407,7 @@ class SettingsDialog(QDialog):
             "again, asking you if it cannot tell. The name you gave it and the value you entered for it are removed."
         ):
             return
+        self._history.record(f"forgetting {ticker}", [ticker], EVERYTHING, clears_on_run=True)
         self._settings.forget(ticker)
         self._prices.forget_entered(ticker)
         if self._save():
@@ -389,6 +424,7 @@ class SettingsDialog(QDialog):
             "Your spreadsheet choice and the last prices found on Yahoo Finance are kept."
         ):
             return
+        self._history.record("forgetting all investments", self._tickers(), EVERYTHING, clears_on_run=True)
         self._settings.forget_all()
         self._prices.forget_all_entered()
         if self._save():

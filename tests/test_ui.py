@@ -503,6 +503,42 @@ def test_statement_alone_shows_the_investments(app, tmp_path: Path) -> None:
     assert list(tmp_path.glob("*.xlsx")) == []
 
 
+@pytest.mark.parametrize(
+    ("language", "country", "invested", "gain", "month"),
+    [
+        ("English", "UnitedStates", "12,345.60 EUR", ("+654.90", "5.30 %"), "October"),
+        ("Portuguese", "Portugal", "345,60 EUR", ("+654,90", "5,30 %"), "outubro"),  # 12 345,60: spaced thousands
+    ],
+)
+def test_numbers_and_dates_are_shown_as_the_computer_is_set_up(
+    app, tmp_path: Path, language: str, country: str, invested: str, gain: tuple[str, str], month: str
+) -> None:
+    # Spec F4: the words stay English; numbers and dates follow the computer's own settings.
+    from PySide6.QtCore import QLocale
+
+    before = QLocale()
+    QLocale.setDefault(QLocale(getattr(QLocale.Language, language), getattr(QLocale.Country, country)))
+    try:
+        noon = datetime(TODAY.year, TODAY.month, TODAY.day, 12).astimezone()
+        window, _ = make_window(tmp_path, FakeProvider(), now=noon)  # Yahoo knows nothing: a value is entered
+        window.ask_listing = lambda resolution: None
+        drop(window, write_statement(
+            tmp_path,
+            "2026-01-05T09:00:00.000Z,,CASH TOP-UP,,,\"EUR 20,000\",EUR,1",
+            "2026-01-05T10:00:00.000Z,ABCD,BUY - MARKET,100,EUR 123.45,\"EUR 12,345.60\",EUR,1",
+        ))  # fmt: skip
+        run(app, window)
+        window.ask_value = lambda choices, selected, currency: ("ABCD", Decimal("13000.50"))
+        button(window, "Enter its value...").click()
+
+        abcd = cells(window.table)[0]
+        assert abcd[1].endswith(invested) and "12,345.60" not in abcd[1].replace(invested, "")
+        assert all(part in abcd[5] for part in gain)  # 13,000.50 against 12,345.60
+        assert month in window.table.item(0, 3).toolTip()  # "Value you entered on <the day>"
+    finally:
+        QLocale.setDefault(before)
+
+
 def test_gains_and_losses_have_their_own_sign_arrow_and_colour(app, tmp_path: Path) -> None:
     # Spec F4: not by colour alone.
     provider = FakeProvider()

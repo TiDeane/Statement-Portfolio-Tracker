@@ -336,6 +336,7 @@ class MainWindow(QMainWindow):
 
         # Result
         self.table = QTableWidget(0, len(TABLE_HEADERS))
+        self.table.setTabKeyNavigation(False)  # Tab goes on to the buttons below; the arrow keys move between cells
         self.table.setEditTriggers(
             QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed
         )

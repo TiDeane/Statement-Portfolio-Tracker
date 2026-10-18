@@ -128,6 +128,7 @@ class SettingsDialog(QDialog):
         self.table = InvestmentsTable(len(HEADERS))
         self.table.setHorizontalHeaderLabels(HEADERS)
         self.table.horizontalHeaderItem(NAME_COLUMN).setToolTip(NAME_TIP)
+        self.table.setTabKeyNavigation(False)  # Tab goes on to the buttons below; the arrow keys move between cells
         # Only the name can be changed in the table, by typing in its cell. Everything else is read-only
         # and changed with the buttons.
         self.table.setEditTriggers(

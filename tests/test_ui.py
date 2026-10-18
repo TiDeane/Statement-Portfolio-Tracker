@@ -654,6 +654,67 @@ def test_buttons_are_only_highlighted_when_reached_with_the_keyboard(
     assert choose.hasFocus()
 
 
+def shortcut_letters(window: QtWidgets.QWidget) -> list[str]:
+    """The Alt shortcut letters of everything visible in ``window`` (the letter after "&", "&&" being a plain &)."""
+    import re
+
+    texts = [found.text() for found in window.findChildren(QtWidgets.QAbstractButton) if found.isVisibleTo(window)]
+    texts += [found.text() for found in window.findChildren(QtWidgets.QLabel) if found.isVisibleTo(window) and found.buddy()]
+    letters = []
+    for text in texts:
+        match = re.search(r"(?<!&)&([^&\s])", text.replace("&&", ""))
+        if match:
+            letters.append(match.group(1).lower())
+    return letters
+
+
+def reached_with_tab(app, window: QtWidgets.QWidget) -> set:
+    """Everything that gets the focus when Tab is pressed over and over in ``window``."""
+    bring_to_front(app, window)
+    reached = set()
+    for _ in range(60):
+        QTest.keyClick(QtWidgets.QApplication.focusWidget() or window, Qt.Key.Key_Tab)
+        settle(app)
+        reached.add(QtWidgets.QApplication.focusWidget())
+    return reached
+
+
+def check_keyboard(app, window: QtWidgets.QWidget, where: str) -> None:
+    letters = shortcut_letters(window)
+    doubled = sorted({letter for letter in letters if letters.count(letter) > 1})
+    assert not doubled, f"{where}: Alt+{', Alt+'.join(doubled)} is the shortcut of more than one thing"
+    buttons = [found for found in window.findChildren(QtWidgets.QPushButton)
+               if found.isVisibleTo(window) and found.isEnabled()]  # fmt: skip
+    missed = [found.text().replace("&", "") for found in buttons if found not in reached_with_tab(app, window)]
+    assert not missed, f"{where}: Tab never reaches {missed}"
+
+
+def test_everything_can_be_reached_from_the_keyboard(app, tmp_path: Path) -> None:
+    # Product rule "keyboard navigable": on every page and in every window, Tab reaches each button, and
+    # no two things visible together share an Alt shortcut letter.
+    window, _ = make_window(tmp_path, FakeProvider(offline=True))  # no price: the result's own buttons show too
+    window.show()
+    drop(window, SAMPLE, tmp_path / "mine.xlsx")  # with a spreadsheet, its buttons show too
+    check_keyboard(app, window, "the steps")
+
+    run(app, window)
+    check_keyboard(app, window, "the result")
+
+    def in_the_dialog(dialog: SettingsDialog) -> None:
+        select(app, dialog.table, 0)  # the buttons for the selected investment are enabled
+        check_keyboard(app, dialog, "Settings")
+
+    in_settings(app, window, in_the_dialog)
+
+    listing = ChooseListingDialog(resolve_ticker("EQQB", EQQB_BUYS, "EUR", provider_with("EQQB.DE", "EQQB.MI")))
+    listing.show()
+    check_keyboard(app, listing, '"Confirm your investment"')
+    value = EnterValueDialog([ValueChoice("AAAA", "(AAAA) First fund", Decimal("3"), None)], "AAAA", "EUR")
+    value.show()
+    QTest.keyClicks(value.value, "100")  # "Use this value" is enabled
+    check_keyboard(app, value, '"Enter its value"')
+
+
 def test_progress_bar_moves_forward_through_each_listing_price_and_the_spreadsheet(app, tmp_path: Path) -> None:
     # Spec F3.
     window, _ = make_window(tmp_path, provider_with("EQQB.DE"))

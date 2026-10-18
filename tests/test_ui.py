@@ -10,6 +10,7 @@ numbers refer to tests/SPECIFICATION.md. No network.
 
 import gc
 import os
+import sys
 import time
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -1158,15 +1159,19 @@ def test_an_investment_is_renamed_by_typing_in_its_cell(app, tmp_path: Path) -> 
         assert not any(editor.isVisible() for editor in table.findChildren(QtWidgets.QLineEdit))
 
 
-def test_an_investment_is_renamed_with_f2_too(app, tmp_path: Path) -> None:
-    # Spec F6: select the investment, press F2, type, Enter.
+RENAME_KEY = Qt.Key.Key_Return if sys.platform == "darwin" else Qt.Key.Key_F2
+"""The system's own key for renaming the selected item: Return on a Mac (as in Finder), F2 elsewhere."""
+
+
+def test_an_investment_is_renamed_with_the_systems_rename_key_too(app, tmp_path: Path) -> None:
+    # Spec F6: select the investment, press F2 (Return on a Mac), type, Enter.
     window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
     window.show()
     drop(window, SAMPLE)
     run(app, window)
     select(app, window.table, 0)
 
-    press(app, window, Qt.Key.Key_F2)
+    press(app, window, RENAME_KEY)
     assert editor_text(window.table) == "Nasdaq fund"
     type_in_editor(app, window.table, "Tech fund")
 

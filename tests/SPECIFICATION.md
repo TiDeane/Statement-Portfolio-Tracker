@@ -113,7 +113,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - a last known value is marked `*`, with a dated tooltip;
   - an entered value is marked "(your value)";
   - in all three cases, a line under the table names them, with **Try again** and **Enter its value...**.
-- **F6.** Double-clicking a name, or pressing F2, renames the investment.
+- **F6.** Double-clicking a name, or pressing F2 (Return on a Mac, as in Finder), renames the investment.
   - Enter saves the name, Esc cancels, and an empty name goes back to Yahoo's.
   - The new name is saved and written to the spreadsheet at once.
   - Double-clicking elsewhere in a row without a price enters a value.

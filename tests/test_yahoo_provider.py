@@ -246,6 +246,42 @@ def test_tests_cannot_reach_yahoo_and_the_app_says_to_check_the_connection() -> 
         YahooProvider().quote("ABCD.DE")
 
 
+def test_only_symbols_and_dates_are_sent_to_yahoo(tmp_path) -> None:
+    # Spec J1: a whole run, matching and pricing, through the real provider; every request it makes is kept.
+    from fakes import write_statement
+
+    from statement_tracker.settings import Settings, TickerChoice
+    from statement_tracker.workflow import build_report
+
+    statement = write_statement(
+        tmp_path,
+        "2025-01-06T09:00:00.000Z,,CASH TOP-UP,,,EUR 9876.54,EUR,1",
+        "2025-01-06T10:00:00.000Z,ABCD,BUY - MARKET,7.654321,EUR 123.45,EUR 944.91,EUR,1",
+        "2025-01-20T10:00:00.000Z,WXYZ,BUY - MARKET,3.210987,EUR 61.73,EUR 198.22,EUR,1",
+        "2025-02-03T10:00:00.000Z,ABCD,SELL - MARKET,1.111111,EUR 130.07,EUR 144.52,EUR,1",
+    )
+    transport = FakeTransport(payload=chart(XETRA))
+    settings = Settings.load(tmp_path / "settings.json")
+    settings.remember("WXYZ", TickerChoice("WXYZ.DE", confirmed=True))  # its current price is asked for
+
+    build_report(statement, YahooProvider(transport), settings)
+
+    asked = {url.split("/v")[1].split("/")[2] for url, _ in transport.requests}
+    assert asked == {"search", "chart"}  # it searched, and asked for past and current prices
+    assert any("range" in params for _, params in transport.requests)  # a current price
+    sent = " ".join(url + " " + " ".join(f"{key}={value}" for key, value in params.items())
+                    for url, params in transport.requests)  # fmt: skip
+    for private in ("9876", "944.91", "7.654321", "123.45", "61.73", "198.22", "3.210987", "1.111111", "144.52",
+                    "130.07", "CASH", "BUY", "SELL", "EUR 1"):  # fmt: skip
+        assert private not in sent
+    for url, params in transport.requests:
+        asked_for = url.rsplit("/", 1)[-1] if "/chart/" in url else params["q"]
+        assert asked_for.split(".")[0].split("%")[0] in ("ABCD", "WXYZ")  # a ticker, with an exchange suffix
+        # The rest is how much history to send: a range, or a period given as dates (Unix times).
+        assert set(params) <= {"range", "interval", "period1", "period2", "events", "q", "quotesCount", "newsCount",
+                               "includePrePost"}  # fmt: skip
+
+
 def test_no_address_answering_is_an_error_saying_so(two_families: type[FakeSocket]) -> None:
     two_families.down = {"188.0.0.1", "188.0.0.2", "2a00::1", "2a00::2"}
 

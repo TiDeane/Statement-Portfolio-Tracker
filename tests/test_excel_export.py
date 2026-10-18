@@ -297,6 +297,74 @@ def test_existing_workbook_keeps_its_own_sheet_and_gets_a_backup(tmp_path: Path)
     assert load_workbook(backup).sheetnames == ["investimentos"]
 
 
+def test_the_users_tables_charts_colour_rules_and_names_survive_an_update(tmp_path: Path) -> None:
+    # Spec H1: what the README promises is kept in the user's own sheets.
+    from zipfile import ZipFile
+
+    from openpyxl.chart import BarChart, Reference
+    from openpyxl.formatting.rule import CellIsRule
+    from openpyxl.styles import PatternFill
+    from openpyxl.workbook.defined_name import DefinedName
+    from openpyxl.worksheet.table import Table
+
+    path = tmp_path / "mine.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Budget"
+    for row in (["Month", "Spent", "Saved"], ["January", 800, 200], ["February", 750, 250]):
+        sheet.append(row)
+    sheet.add_table(Table(displayName="Months", ref="A1:C3"))
+    chart = BarChart()
+    chart.add_data(Reference(sheet, min_col=2, min_row=1, max_col=3, max_row=3), titles_from_data=True)
+    sheet.add_chart(chart, "E2")
+    red = PatternFill(fill_type="solid", start_color="FFC7CE", end_color="FFC7CE")
+    sheet.conditional_formatting.add("B2:B3", CellIsRule(operator="greaterThan", formula=["780"], fill=red))
+    workbook.defined_names["Savings"] = DefinedName("Savings", attr_text="Budget!$C$2:$C$3")
+    sheet["A5"] = "=SUM('Current Holdings'!B:B)"  # the user's own formula reading the app's sheet
+    workbook.save(path)
+
+    ExcelExporter(path).export(valuation(), DAY_ONE)
+    ExcelExporter(path).export(valuation(abcd="130"), DAY_TWO)  # and once more, the sheets existing now
+
+    kept = load_workbook(path)
+    budget = kept["Budget"]
+    assert rows(path, "Budget")[:3] == [("Month", "Spent", "Saved"), ("January", 800, 200), ("February", 750, 250)]
+    assert dict(budget.tables.items()) == {"Months": "A1:C3"}
+    assert [str(cells.sqref) for cells in budget.conditional_formatting] == ["B2:B3"]
+    assert kept.defined_names["Savings"].attr_text == "Budget!$C$2:$C$3"
+    assert budget["A5"].value == "=SUM('Current Holdings'!B:B)"
+    with ZipFile(path) as files:
+        charts = [name for name in files.namelist() if name.startswith("xl/charts/chart")]
+        assert len(charts) == 1
+        assert "Budget!$B$2:$B$3" in files.read(charts[0]).decode().replace("'", "")
+
+
+@pytest.mark.parametrize(
+    ("name", "heading"),
+    [
+        ("Portfolio History", ["My own history", "do not touch"]),
+        ("Current Holdings", [*HOLDINGS_HEADER, "My notes"]),  # the app's sheet with a column of the user's
+        ("Portfolio History", [*HISTORY_HEADER, "My notes"]),
+    ],
+)
+def test_a_sheet_with_a_heading_of_the_users_is_never_overwritten(tmp_path: Path, name: str, heading: list) -> None:
+    # Spec H2: the app stops, and the file is exactly as it was.
+    path = tmp_path / "mine.xlsx"
+    workbook = Workbook()
+    workbook.active.title = name
+    workbook.active.append(heading)
+    workbook.save(path)
+    before = path.read_bytes()
+
+    with pytest.raises(UserFacingError) as error:
+        ExcelExporter(path).export(valuation(), DAY_ONE)
+
+    assert "was not made by this app" in str(error.value) and name in str(error.value)
+    assert "Nothing was changed" in str(error.value)
+    assert path.read_bytes() == before
+    assert sorted(item.name for item in tmp_path.iterdir()) == ["mine.xlsx"]  # no backup copy either
+
+
 def test_one_backup_is_made_per_day_before_its_first_update(tmp_path: Path) -> None:
     path = tmp_path / "mine.xlsx"
     ExcelExporter(path).export(valuation(), DAY_ONE)  # created: nothing to back up yet

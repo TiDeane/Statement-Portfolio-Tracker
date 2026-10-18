@@ -234,6 +234,18 @@ def test_each_address_gets_a_short_wait_and_ipv6_is_the_fallback(two_families: t
     assert connection.timeout == 15
 
 
+def test_tests_cannot_reach_yahoo_and_the_app_says_to_check_the_connection() -> None:
+    # Spec J3: the real provider, with its real connection, as the app uses it. tests/conftest.py blocks it.
+    import socket
+
+    from conftest import NO_NETWORK
+
+    with pytest.raises(OSError, match=NO_NETWORK):
+        socket.create_connection(("query1.finance.yahoo.com", 443))
+    with pytest.raises(PriceUnavailableError, match="Check your internet connection"):
+        YahooProvider().quote("ABCD.DE")
+
+
 def test_no_address_answering_is_an_error_saying_so(two_families: type[FakeSocket]) -> None:
     two_families.down = {"188.0.0.1", "188.0.0.2", "2a00::1", "2a00::2"}
 

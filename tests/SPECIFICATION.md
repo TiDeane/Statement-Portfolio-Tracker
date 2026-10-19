@@ -135,6 +135,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - there are light and dark themes;
   - buttons are only highlighted when reached with the keyboard.
 - **F11.** "Where do I get this file?" gives the Revolut steps and asks for All time. "About and privacy" shows the version and the releases link.
+- **F12.** The window and its dialogs show the app's icon, and the Windows program, its installer and the macOS app show the same one.
 
 ## G. Settings
 

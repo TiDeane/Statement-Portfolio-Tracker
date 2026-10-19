@@ -424,6 +424,36 @@ def test_about_shows_the_version_privacy_and_where_new_versions_are(app, tmp_pat
     assert "Yahoo" in shown  # what leaves the computer
 
 
+def test_the_window_and_its_dialogs_show_the_apps_icon(app, tmp_path: Path) -> None:
+    # Spec F12: the app's green tile, not Qt's or the system's default.
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+
+    for icon in (window.windowIcon(), QtWidgets.QApplication.windowIcon()):  # dialogs take the app's
+        assert not icon.isNull()
+        picture = icon.pixmap(64).toImage()
+        corner = picture.pixelColor(12, 12)  # inside the tile, away from the line and the bars
+        assert corner.alpha() == 255 and corner.green() > corner.red() + 60 and corner.green() > corner.blue() + 40
+
+
+def test_the_program_the_installer_and_the_mac_app_use_the_same_icon_as_the_window() -> None:
+    # Spec F12: made together by packaging/make_icon.py, and named where the app is built.
+    from PySide6.QtGui import QImageReader
+
+    root = Path(__file__).resolve().parents[1]
+    icons = root / "packaging" / "icon"
+    assert (icons / "app.png").read_bytes() == (root / "src" / "statement_tracker" / "ui" / "icon.png").read_bytes()
+    reader = QImageReader(str(icons / "app.ico"))
+    sizes = set()
+    for number in range(reader.imageCount()):
+        reader.jumpToImage(number)
+        sizes.add(reader.read().width())
+    assert {16, 32, 48, 256} <= sizes  # small enough for a title bar, big enough for Explorer
+    assert (icons / "app.icns").read_bytes()[:4] == b"icns"
+    spec = (root / "packaging" / "statement_tracker.spec").read_text(encoding="utf-8")
+    assert '"app.icns"' in spec and '"app.ico"' in spec and "WINDOW_ICON" in spec
+    assert "SetupIconFile=icon\\app.ico" in (root / "packaging" / "windows_installer.iss").read_text(encoding="utf-8")
+
+
 # -- F3, F4: the result -----------------------------------------------------------------------------
 
 

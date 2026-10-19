@@ -33,12 +33,14 @@ from PySide6.QtGui import (
     QDragEnterEvent,
     QDropEvent,
     QFont,
+    QIcon,
     QKeySequence,
     QResizeEvent,
     QShortcut,
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QButtonGroup,
     QFileDialog,
     QFrame,
@@ -100,6 +102,8 @@ ENTERED_MARK = "(your value)"
 MISSING_PRICES = "Yahoo Finance has no current price for {}."
 DOUBLE_CLICK_TO_ENTER = "Double-click to enter its value yourself."
 LEFT_OUT_TIP = f"No current price, so it is left out of the totals. {DOUBLE_CLICK_TO_ENTER}"
+APP_ICON = Path(__file__).with_name("icon.png")
+"""The app's icon, drawn by packaging/make_icon.py (which also makes the program's and the installer's)."""
 WINDOW_WIDTH = 1000
 MIN_WINDOW_WIDTH = 720
 """The window cannot be made narrower: below this the buttons and wrapped text get cramped."""
@@ -246,6 +250,10 @@ class MainWindow(QMainWindow):
         self._bridge = QuestionBridge(self._ask_during_run, self)
 
         self.setWindowTitle(APP_NAME)
+        # The whole app's, so that its dialogs, the taskbar on Linux and the Dock (run from source) show it too.
+        icon = QIcon(str(APP_ICON))
+        QApplication.instance().setWindowIcon(icon)
+        self.setWindowIcon(icon)
         self.setAcceptDrops(True)
 
         intro = QLabel("See how your investments are doing in three steps.")

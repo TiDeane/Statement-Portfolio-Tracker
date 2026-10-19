@@ -15,6 +15,8 @@ from statement_tracker import APP_NAME, __version__  # noqa: E402
 
 EXE_NAME = "StatementPortfolioTracker"
 BUNDLE_ID = "io.github.tideane.statementportfoliotracker"
+ICONS = ROOT / "packaging" / "icon"  # drawn by packaging/make_icon.py
+WINDOW_ICON = ROOT / "src" / "statement_tracker" / "ui" / "icon.png"
 
 # Qt pieces a Widgets-only app never loads. Dropping them trims the download.
 UNUSED_QT_FRAGMENTS = (
@@ -63,6 +65,8 @@ def _wanted(entry) -> bool:
 a = Analysis(
     [str(ROOT / "packaging" / "entry.py")],
     pathex=[str(ROOT / "src")],
+    # The window's icon, next to the code that loads it (statement_tracker/ui/main_window.py).
+    datas=[(str(WINDOW_ICON), "statement_tracker/ui")],
     # Heavy libraries the app does not use. Listed so that an installed copy (from another
     # package in the build environment) can never end up in the download.
     excludes=[
@@ -82,6 +86,8 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name=EXE_NAME,
+    # The program's icon in Explorer, the taskbar and its shortcuts (Windows); the bundle's is set below.
+    icon=str(ICONS / ("app.icns" if sys.platform == "darwin" else "app.ico")),
     console=False,
     upx=False,  # UPX-packed binaries trigger more antivirus false positives
 )
@@ -92,6 +98,7 @@ if sys.platform == "darwin":
     app = BUNDLE(
         coll,
         name=f"{APP_NAME}.app",
+        icon=str(ICONS / "app.icns"),
         bundle_identifier=BUNDLE_ID,
         version=__version__,
         info_plist={

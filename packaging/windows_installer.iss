@@ -32,6 +32,8 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayName={#AppName}
+; The installer's own icon; the program's (shown in Installed apps through UninstallDisplayIcon) is in the .exe.
+SetupIconFile=icon\app.ico
 UninstallDisplayIcon={app}\{#AppExe}
 ; Named by the app while it is open (RUNNING_MUTEX in statement_tracker/__main__.py). Setup and the
 ; uninstaller then ask for it to be closed first: an app left open while it is uninstalled writes

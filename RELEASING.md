@@ -34,6 +34,15 @@ Pushing a tag that starts with `v` makes GitHub build the app for each system, t
 
 All the work for the next version is committed on a branch named after it, such as `release/1.1.0`, never on `main`. `main` only ever gets a branch whose pre-release has passed the checks above. The commands below run in WSL, in the repository.
 
+### With the scripts
+
+Two scripts do steps 2 and 3 below, and stop with a message saying what to do whenever something is not as it should be. Run them on the version's branch, once its work is committed:
+
+- `bash scripts/release_candidate.sh` makes the next pre-release. It sets the app's version to the branch's (asking first), runs the tests, pushes the branch, waits for GitHub's tests, tags `v1.1.0-rc1` (then `-rc2`, ...), waits for every system's build, and downloads the Windows installer to your Downloads folder. Then install it and go through the checks above. If something must be fixed, commit the fix and run it again.
+- `bash scripts/release.sh` publishes the release once the last pre-release has passed the checks. It asks you to confirm, makes GitHub's `main` the tested commit, tags the release and waits for its build, deletes the pre-releases, and starts the next version's branch, deleting this one.
+
+Both take `--dry-run`, which shows each step and what it would push or change, without doing it. The steps below are what they do, for when you want to do it by hand.
+
 ### 1. The branch
 
 1. Make the branch once, from GitHub's `main`, and commit all the work for the version there:

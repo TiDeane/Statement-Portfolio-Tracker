@@ -1050,6 +1050,10 @@ def test_locked_spreadsheet_still_shows_the_investments(app, tmp_path: Path, mon
     assert title == "✗ Your Excel spreadsheet was not updated"
     assert "open in another program" in text and "Close the spreadsheet in Excel" in text
     assert window.spreadsheet_banner.property("state") == "error"
+    shown_in_folder: list[Path] = []
+    window.show_in_folder = shown_in_folder.append
+    button(window, "Open its folder").click()  # to find the file still open, for one
+    assert shown_in_folder == [tmp_path / "mine.xlsx"]
 
 
 def test_try_again_saves_the_spreadsheet_without_fetching_prices_again(
@@ -1171,6 +1175,10 @@ def test_the_result_says_on_its_own_what_was_done_to_the_spreadsheet(app, tmp_pa
     assert "Current Holdings: 1 investment and the Total." in text
     assert "Portfolio History: today's row was added." in text
     assert "Backup copy of the file as it was before today's first update: mine_backup_2026-10-12.xlsx" in text
+    shown_in_folder: list[Path] = []
+    window.show_in_folder = shown_in_folder.append  # instead of opening the file manager
+    button(window, "Open its folder").click()
+    assert shown_in_folder == [spreadsheet]  # its folder, with the file in it selected
 
     run(app, window)  # again the same day
     assert "Portfolio History: today's row was updated." in banner(window)[1]

@@ -140,6 +140,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - Updated or created: in green, with the time, the file and its folder, what was written to Current Holdings, whether today's history row was added or updated (or why not, and what it leaves out), and the backup copy's name.
   - Not updated: in red, with what happened and what to do.
   - It says so again after each later change that rewrites the spreadsheet (a rename, a value entered).
+  - Either way, "Open its folder" opens the folder the spreadsheet is in, with the file selected where the system allows it.
 
 ## G. Settings
 

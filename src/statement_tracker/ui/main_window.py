@@ -20,16 +20,19 @@ from PySide6.QtCore import (
     QDate,
     QLocale,
     QModelIndex,
+    QProcess,
     QStandardPaths,
     Qt,
     QThreadPool,
     QTimer,
+    QUrl,
     Signal,
 )
 from PySide6.QtGui import (
     QBrush,
     QCloseEvent,
     QColor,
+    QDesktopServices,
     QDragEnterEvent,
     QDragLeaveEvent,
     QDropEvent,
@@ -168,6 +171,18 @@ def _listed(names: list[str]) -> str:
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
+def show_in_folder(path: Path) -> None:
+    """Open the folder that holds ``path`` in the system's file manager, with the file selected where the
+    system can do that (Windows Explorer, the macOS Finder); elsewhere, just the folder."""
+    if sys.platform == "win32":
+        # Two arguments, so that a path with spaces reaches Explorer as one: /select, "C:\...\My file.xlsx".
+        QProcess.startDetached("explorer", ["/select,", str(path)])
+    elif sys.platform == "darwin":
+        QProcess.startDetached("open", ["-R", str(path)])
+    else:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent)))
+
+
 def spreadsheet_lines(report: Report, exported: ExportResult) -> list[str]:
     """What the result page says the update did to the spreadsheet, line by line (HTML)."""
     lines = [_file_text(Path(exported.destination))]
@@ -274,6 +289,9 @@ class MainWindow(QMainWindow):
             self, error, can_retry=True
         )
         self.show_settings: Callable[[SettingsDialog], object] = lambda dialog: dialog.exec()
+        self.show_in_folder: Callable[[Path], object] = show_in_folder
+        self._banner_file: Path | None = None
+        """The spreadsheet the banner is about, whose folder "Open its folder" opens."""
         self.ask_value: Callable[[list[dialogs.ValueChoice], str, str], tuple[str, Decimal] | None] = (
             lambda choices, selected, currency: dialogs.ask_value(self, choices, selected, currency)
         )
@@ -397,11 +415,21 @@ class MainWindow(QMainWindow):
         self.spreadsheet_banner_title.setWordWrap(True)
         self.spreadsheet_banner_text = QLabel()
         self.spreadsheet_banner_text.setWordWrap(True)
+        self.open_folder_button = QPushButton("&Open its folder")
+        self.open_folder_button.setToolTip("Open the folder your spreadsheet is in, with the file selected.")
+        self.open_folder_button.clicked.connect(
+            lambda: self.show_in_folder(self._banner_file) if self._banner_file else None
+        )
+        open_row = QHBoxLayout()
+        open_row.setContentsMargins(0, 4, 0, 0)
+        open_row.addWidget(self.open_folder_button)
+        open_row.addStretch(1)
         banner = QVBoxLayout(self.spreadsheet_banner)
         banner.setContentsMargins(14, 10, 14, 10)
         banner.setSpacing(4)
         banner.addWidget(self.spreadsheet_banner_title)
         banner.addWidget(self.spreadsheet_banner_text)
+        banner.addLayout(open_row)
         self.spreadsheet_banner.setVisible(False)
         self.progress_bar = QProgressBar()
         self.progress_bar.setFormat("%p%")
@@ -955,7 +983,10 @@ class MainWindow(QMainWindow):
             done = "created" if exported.created else "updated"
             at = self._locale.toString(self._now().astimezone().time(), QLocale.FormatType.ShortFormat)
             self._show_spreadsheet_banner(
-                "ok", f"✓ Your Excel spreadsheet was {done} at {at}", spreadsheet_lines(report, exported)
+                "ok",
+                f"✓ Your Excel spreadsheet was {done} at {at}",
+                spreadsheet_lines(report, exported),
+                Path(exported.destination),
             )
         elif export_error is not None:
             self._status("Your investments are shown below.", "error")  # the banner says what went wrong
@@ -963,6 +994,7 @@ class MainWindow(QMainWindow):
                 "error",
                 "✗ Your Excel spreadsheet was not updated",
                 [html.escape(export_error.what_happened), html.escape(export_error.what_to_do)],
+                spreadsheet,  # its folder helps here too: to find the file still open, for one
             )
         else:
             self._status("Done. Your investments are shown below.", "ok")
@@ -972,10 +1004,13 @@ class MainWindow(QMainWindow):
         # Measured once what was just shown has been laid out: until then Qt still sizes it as hidden.
         QTimer.singleShot(0, self, self._cap_size)
 
-    def _show_spreadsheet_banner(self, state: str, title: str, lines: list[str]) -> None:
-        """Say on its own what became of the spreadsheet: ``state`` is ok or error, ``lines`` are HTML."""
+    def _show_spreadsheet_banner(self, state: str, title: str, lines: list[str], file: Path | None) -> None:
+        """Say on its own what became of the spreadsheet: ``state`` is ok or error, ``lines`` are HTML, and
+        ``file`` is the spreadsheet, whose folder the banner's button opens."""
         self.spreadsheet_banner_title.setText(title)
         self.spreadsheet_banner_text.setText("<br>".join(lines))
+        self._banner_file = file
+        self.open_folder_button.setVisible(file is not None and file.parent.is_dir())
         theme.set_state(self.spreadsheet_banner, state)
         for label in (self.spreadsheet_banner_title, self.spreadsheet_banner_text):
             label.style().unpolish(label)  # the title's colour follows the banner's state

@@ -31,6 +31,7 @@ from PySide6.QtGui import (
     QCloseEvent,
     QColor,
     QDragEnterEvent,
+    QDragLeaveEvent,
     QDropEvent,
     QFont,
     QIcon,
@@ -87,7 +88,9 @@ from statement_tracker.workflow import (
 
 UNAVAILABLE = "unavailable"
 NOT_IN_TOTAL = "not in total"
-NO_STATEMENT = "No file chosen yet. You can also drag the file onto this window."
+NO_STATEMENT = "No file chosen yet."
+DROP_HINT = "Drag your statement file here"
+DROP_AGAIN_HINT = "Drag another statement here to use it instead"
 
 TABLE_HEADERS = ["Investment", "Invested", "% of invested", "Worth now", "% of worth now", "Gain or loss"]
 NAME_COLUMN = 0
@@ -111,11 +114,12 @@ MIN_TABLE_HEIGHT = 115
 """Room for the header and two rows: the result table never gets smaller; more rows scroll."""
 
 # The line at the top of each step: its text and the state the theme colours it by.
-STEP_TO_DO = ("To do: choose your statement file.", "todo")
+STEP_TO_DO = ("", "todo")
+"""Nothing: a step still to do says itself what to do (step 1's drop area, step 2's line about the file)."""
 STEP_DONE = ("✓ Done", "ok")
 STEP_OPTIONAL = ("Optional. You can skip this step.", "optional")
 STEP_REMEMBERED = ("✓ Already done: remembered from last time.", "ok")
-STEP_PICK_SPREADSHEET = ("To do: choose your spreadsheet or create a new one.", "todo")
+STEP_PICK_SPREADSHEET = STEP_TO_DO
 PICK_SPREADSHEET = "Choose an Excel file you already have, or let the app create a new one."
 
 Outcome = tuple[Report, ExportResult | None, UserFacingError | None]
@@ -259,26 +263,46 @@ class MainWindow(QMainWindow):
         intro = QLabel("See how your investments are doing in three steps.")
         intro.setObjectName("intro")  # object names are what ui/theme.py styles
 
-        # Step 1
-        self.statement_label = QLabel(NO_STATEMENT)
-        self.statement_label.setWordWrap(True)
+        # Step 1: a drop area, the file chooser's button inside it, and the file chosen. Files can be dropped
+        # anywhere on the window; the area shows that, and turns green while a file is dragged over.
+        self.drop_area = QFrame()
+        self.drop_area.setObjectName("dropArea")
+        self.drop_hint = QLabel(DROP_HINT)
+        self.drop_hint.setObjectName("dropHint")
+        self.drop_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        drop_or = QLabel("or")
+        drop_or.setObjectName("notes")
+        drop_or.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.choose_statement_button = QPushButton("&Choose statement file...")
         self.choose_statement_button.clicked.connect(self._choose_statement)
+        choose_row = QHBoxLayout()
+        choose_row.addStretch(1)
+        choose_row.addWidget(self.choose_statement_button)
+        choose_row.addStretch(1)
+        self.statement_label = QLabel(NO_STATEMENT)
+        self.statement_label.setWordWrap(True)
+        self.statement_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        drop_layout = QVBoxLayout(self.drop_area)
+        drop_layout.setContentsMargins(16, 14, 16, 14)
+        drop_layout.setSpacing(6)
+        drop_layout.addWidget(self.drop_hint)
+        drop_layout.addWidget(drop_or)
+        drop_layout.addLayout(choose_row)
+        drop_layout.addWidget(self.statement_label)
         help_button = QPushButton("&Where do I get this file?")
         help_button.clicked.connect(
             lambda: dialogs.show_text(self, "Where do I get this file?", dialogs.WHERE_IS_THE_FILE_TEXT)
         )
-        statement_buttons = QHBoxLayout()
-        statement_buttons.addWidget(self.choose_statement_button)
-        statement_buttons.addWidget(help_button)
-        statement_buttons.addStretch(1)
+        help_row = QHBoxLayout()
+        help_row.addWidget(help_button)
+        help_row.addStretch(1)
         statement_box = QGroupBox("Step 1: your Revolut statement")
         self.statement_badge = QLabel()
         self.statement_badge.setObjectName("badge")
         statement_layout = QVBoxLayout(statement_box)
         statement_layout.addWidget(self.statement_badge)
-        statement_layout.addWidget(self.statement_label)
-        statement_layout.addLayout(statement_buttons)
+        statement_layout.addWidget(self.drop_area)
+        statement_layout.addLayout(help_row)
 
         # Step 2
         self.spreadsheet_label = QLabel()
@@ -561,10 +585,19 @@ class MainWindow(QMainWindow):
             self.set_spreadsheet(path if path.suffix.lower() == ".xlsx" else path.with_name(path.name + ".xlsx"))
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
-        if any(url.isLocalFile() for url in event.mimeData().urls()):
+        files = [Path(url.toLocalFile()) for url in event.mimeData().urls() if url.isLocalFile()]
+        if files:
             event.acceptProposedAction()
+            # A statement on its way: step 1's area shows where it will go. (An Excel file goes to step 2.)
+            if any(file.suffix.lower() != ".xlsx" for file in files):
+                theme.set_state(self.drop_area, "dragging")
+
+    def dragLeaveEvent(self, event: QDragLeaveEvent) -> None:
+        theme.set_state(self.drop_area, "")
+        super().dragLeaveEvent(event)
 
     def dropEvent(self, event: QDropEvent) -> None:
+        theme.set_state(self.drop_area, "")
         for url in event.mimeData().urls():
             if url.isLocalFile():
                 self.drop_file(Path(url.toLocalFile()))
@@ -600,6 +633,7 @@ class MainWindow(QMainWindow):
     def _refresh(self) -> None:
         self.statement_label.setText(_file_text(self._statement) if self._statement else NO_STATEMENT)
         self.statement_label.setToolTip(str(self._statement) if self._statement else "")
+        self.drop_hint.setText(DROP_AGAIN_HINT if self._statement else DROP_HINT)
         self._badge(self.statement_badge, *(STEP_DONE if self._statement else STEP_TO_DO))
 
         using = self._spreadsheet is not None or self._wants_spreadsheet
@@ -740,8 +774,9 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _badge(label: QLabel, text: str, state: str) -> None:
-        """Show whether a step is done, still to do, or can be skipped."""
+        """Show whether a step is done, remembered, or can be skipped; a step still to do shows no line."""
         label.setText(text)
+        label.setVisible(bool(text))
         theme.set_state(label, state)
 
     def _status(self, text: str, state: str) -> None:

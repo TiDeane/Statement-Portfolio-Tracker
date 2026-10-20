@@ -97,8 +97,8 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
 - **F1.** The three steps:
   - step 3 is disabled until a statement is chosen;
   - step 2 is optional: no spreadsheet, an existing one, or a new one;
-  - each step says whether it is done, optional, or remembered from last time.
-- **F2.** Files are chosen with a dialog or dropped on the window. A CSV goes to step 1 and an .xlsx to step 2. The last folder used is remembered.
+  - each step says whether it is done, optional, or remembered from last time; a step still to do says only what to do.
+- **F2.** Files are chosen with a dialog or dropped on the window. A CSV goes to step 1 and an .xlsx to step 2. The last folder used is remembered. Step 1 is a drop area (a dashed outline saying "Drag your statement file here", with the button to choose one inside it), and it turns green while a statement is dragged over the window.
 - **F3.** Step 3 turns to the result page in the same window.
   - Its progress bar only moves forward, and counts each listing to find, each price and the spreadsheet.
   - While the app waits for the user's answer, the status says so.

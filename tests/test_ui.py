@@ -307,7 +307,8 @@ def test_step_2_shows_the_choice_as_options_and_the_files_as_actions(
     # Choosing "Update my Excel spreadsheet" shows them, and asks for a file before step 3 can run.
     window.spreadsheet_option.click()
     assert state() == (False, True, False) and files_shown()
-    assert window.spreadsheet_badge.text().startswith("To do")
+    assert not window.spreadsheet_badge.isVisibleTo(window)  # no line above: the step says itself what to do
+    assert window.spreadsheet_label.text() == "Choose an Excel file you already have, or let the app create a new one."
 
     # A cancelled file dialog changes nothing.
     monkeypatch.setattr(QtWidgets.QFileDialog, "getOpenFileName", lambda *args, **kwargs: ("", ""))
@@ -335,7 +336,7 @@ def test_each_step_says_whether_it_is_done_optional_or_remembered(app, tmp_path:
     # Spec F1.
     window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
 
-    assert window.statement_badge.text().startswith("To do")
+    assert not window.statement_badge.isVisibleTo(window)  # still to do: the drop area says what to do
     assert window.spreadsheet_badge.text() == "Optional. You can skip this step."
 
     drop(window, SAMPLE, tmp_path / "mine.xlsx")
@@ -351,6 +352,45 @@ def test_each_step_says_whether_it_is_done_optional_or_remembered(app, tmp_path:
     reopened.no_spreadsheet_option.click()
     assert reopened.spreadsheet_badge.text() == "Optional. You can skip this step."
     assert Settings.load(tmp_path / "settings.json").spreadsheet_path is None
+
+
+def drag_over(window: QtWidgets.QWidget, path: Path) -> None:
+    """Drag a file from the file manager over the window, without letting go."""
+    import warnings
+
+    data = QMimeData()
+    data.setUrls([QUrl.fromLocalFile(str(path))])
+    with warnings.catch_warnings():  # PySide6 marks the only constructor it has as deprecated
+        warnings.simplefilter("ignore", DeprecationWarning)
+        entered = QDragEnterEvent(window.rect().center(), Qt.DropAction.CopyAction, data,
+                                  Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)  # fmt: skip
+    QtWidgets.QApplication.sendEvent(window, entered)
+
+
+def test_step_1_is_a_place_to_drop_the_statement_and_shows_it_while_one_is_dragged(app, tmp_path: Path) -> None:
+    # Spec F1, F2: dropping is offered where the statement goes, with the button for those who prefer it.
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.show()
+    settle(app)
+    area = window.drop_area
+    texts = [label.text() for label in area.findChildren(QtWidgets.QLabel)]
+    assert "Drag your statement file here" in texts and "or" in texts and "No file chosen yet." in texts
+    assert button(window, "Choose statement file...") in area.findChildren(QtWidgets.QPushButton)  # in the area
+
+    drag_over(window, SAMPLE)
+    assert area.property("state") == "dragging"  # green, showing where it will go
+    QtWidgets.QApplication.sendEvent(window, QEvent(QEvent.Type.DragLeave))
+    assert area.property("state") == ""  # dragged away again: back as it was
+    drag_over(window, tmp_path / "mine.xlsx")
+    assert area.property("state") == ""  # an Excel file is for step 2, not this one
+    QtWidgets.QApplication.sendEvent(window, QEvent(QEvent.Type.DragLeave))
+
+    drop(window, SAMPLE)
+
+    assert area.property("state") == ""
+    texts = [label.text() for label in area.findChildren(QtWidgets.QLabel)]
+    assert "Drag another statement here to use it instead" in texts
+    assert shows(window.statement_label, SAMPLE) and window.statement_label.parent() is area
 
 
 def test_dropped_files_go_to_the_right_step_and_the_folder_is_remembered(app, tmp_path: Path) -> None:

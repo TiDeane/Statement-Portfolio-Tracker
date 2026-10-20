@@ -78,7 +78,6 @@ def stylesheet(colours: Palette) -> str:
     QLabel#intro {{ font-size: 15pt; font-weight: 600; }}
     QLabel#notes {{ color: {c.muted}; }}
     QGroupBox QLabel#badge {{ font-weight: 600; }}
-    QLabel#badge[state="todo"] {{ color: {c.text}; }}
     QLabel#badge[state="optional"] {{ color: {c.muted}; }}
     QLabel#badge[state="ok"] {{ color: {c.good}; }}
     QLabel#backup[state="on"] {{ color: {c.muted}; }}
@@ -87,6 +86,13 @@ def stylesheet(colours: Palette) -> str:
     QLabel#status[state="busy"] {{ color: {c.accent}; }}
     QLabel#status[state="ok"] {{ color: {c.good}; }}
     QLabel#status[state="error"] {{ color: {c.bad}; }}
+
+    /* Step 1's drop area: a dashed outline, the usual sign of a place to drop a file, green while a file
+       is dragged over the window. */
+    QFrame#dropArea {{ background: {c.background}; border: 2px dashed {c.border}; border-radius: 10px; }}
+    QFrame#dropArea[state="dragging"] {{ background: {c.table_header}; border-color: {c.accent}; }}
+    QLabel#dropHint {{ font-size: 12pt; font-weight: 600; }}
+
 
     QGroupBox {{
         background: {c.card};

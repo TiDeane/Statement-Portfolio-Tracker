@@ -20,6 +20,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 QtWidgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+QtGui = pytest.importorskip("PySide6.QtGui", exc_type=ImportError)
 
 from fakes import SAMPLE, FakeProvider, ranges_around, write_statement  # noqa: E402
 from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, Qt, QTimer, QUrl  # noqa: E402
@@ -140,6 +141,14 @@ def button(widget: QtWidgets.QWidget, label: str) -> QtWidgets.QPushButton:
 
 def cells(table: QtWidgets.QTableWidget) -> list[list[str]]:
     return [[table.item(row, column).text() for column in range(table.columnCount())] for row in range(table.rowCount())]
+
+
+def banner(window: MainWindow) -> tuple[str, str] | None:
+    """What the result page says about the spreadsheet, title and text as read; None when it says nothing."""
+    if not window.spreadsheet_banner.isVisibleTo(window):
+        return None
+    text = QtGui.QTextDocumentFragment.fromHtml(window.spreadsheet_banner_text.text()).toPlainText()
+    return window.spreadsheet_banner_title.text(), text
 
 
 def cell_centre(table: QtWidgets.QTableWidget, row: int, column: int) -> QPoint:
@@ -1037,7 +1046,10 @@ def test_locked_spreadsheet_still_shows_the_investments(app, tmp_path: Path, mon
 
     assert "open in another program" in errors[0].what_happened
     assert cells(window.table)[0][0] == "(EQQB) Nasdaq fund"
-    assert "spreadsheet was not updated" in window.status_label.text()
+    title, text = banner(window)  # the result page says so on its own, in red, with what to do
+    assert title == "✗ Your Excel spreadsheet was not updated"
+    assert "open in another program" in text and "Close the spreadsheet in Excel" in text
+    assert window.spreadsheet_banner.property("state") == "error"
 
 
 def test_try_again_saves_the_spreadsheet_without_fetching_prices_again(
@@ -1072,7 +1084,7 @@ def test_try_again_saves_the_spreadsheet_without_fetching_prices_again(
     assert len(asked) == 2 and all("open in another program" in text for text in asked)
     assert [call for call in provider.calls if call[0] == "quote"] == [("quote", "EQQB.DE")]  # once, not per attempt
     assert spreadsheet.exists()
-    assert "Your spreadsheet was created" in window.status_label.text()
+    assert banner(window)[0].startswith("✓ Your Excel spreadsheet was created at ")
 
 
 def test_back_to_the_steps_stops_a_run_without_saving_anything(app, tmp_path: Path) -> None:
@@ -1129,12 +1141,49 @@ def test_with_a_spreadsheet_it_is_created_and_remembered(app, tmp_path: Path) ->
     run(app, window)
 
     assert errors == []
-    assert "Your spreadsheet was created" in window.status_label.text()
+    assert banner(window)[0].startswith("✓ Your Excel spreadsheet was created at ")
     assert load_workbook(spreadsheet).sheetnames == ["Current Holdings", "Portfolio History"]
     assert load_workbook(spreadsheet)["Current Holdings"]["A2"].value == "(EQQB) Nasdaq fund"
 
     reopened, _ = make_window(tmp_path, provider_with("EQQB.DE"))
     assert shows(reopened.spreadsheet_label, spreadsheet)
+
+
+def test_the_result_says_on_its_own_what_was_done_to_the_spreadsheet(app, tmp_path: Path) -> None:
+    # Spec F13.
+    noon = datetime(TODAY.year, TODAY.month, TODAY.day, 12).astimezone()
+    provider = provider_with("EQQB.DE")
+    window, _ = make_window(tmp_path, provider, now=noon)
+    window.show()
+    drop(window, SAMPLE)
+    run(app, window)
+    assert banner(window) is None  # no spreadsheet chosen: nothing to say about one
+
+    spreadsheet = tmp_path / "mine.xlsx"
+    Workbook().save(spreadsheet)  # the user's own
+    drop(window, spreadsheet)
+    run(app, window)
+
+    title, text = banner(window)
+    assert title.startswith("✓ Your Excel spreadsheet was updated at ")
+    assert window.spreadsheet_banner.property("state") == "ok"  # in green
+    assert "mine.xlsx" in text and str(tmp_path) in text  # which file, and where
+    assert "Current Holdings: 1 investment and the Total." in text
+    assert "Portfolio History: today's row was added." in text
+    assert "Backup copy of the file as it was before today's first update: mine_backup_2026-10-12.xlsx" in text
+
+    run(app, window)  # again the same day
+    assert "Portfolio History: today's row was updated." in banner(window)[1]
+
+    provider.offline = True
+    run(app, window)  # Yahoo unreachable: no row from an earlier day's price
+    title, text = banner(window)
+    assert title.startswith("✓ Your Excel spreadsheet was updated")  # the sheet itself still was
+    assert "Portfolio History: no row for today, because some prices are from an earlier day" in text
+
+    window.ask_value = lambda choices, selected, currency: ("EQQB", Decimal("600"))
+    button(window, "Enter its value...").click()  # entered today: today's row counts again, and says so
+    assert "Portfolio History: today's row was updated." in banner(window)[1]
 
 
 def test_step_2_says_whether_a_backup_is_made_and_settings_change_it(app, tmp_path: Path) -> None:
@@ -1186,7 +1235,7 @@ def test_with_backups_turned_off_no_copy_is_made(app, tmp_path: Path) -> None:
     run(app, window)
 
     assert errors == []
-    assert "Your spreadsheet was updated" in window.status_label.text()
+    assert banner(window)[0].startswith("✓ Your Excel spreadsheet was updated at ")
     assert sorted(file.name for file in tmp_path.glob("*.xlsx")) == ["mine.xlsx"]
 
 

@@ -420,7 +420,9 @@ class ExcelExporter:
             raise
         if made_now:
             self._drop_old_backups()
-        return ExportResult(str(self.path), created, written, history_action, tuple(notes))
+        return ExportResult(
+            str(self.path), created, written, history_action, tuple(notes), backup.name if backup else None
+        )
 
     # -- workbook handling -------------------------------------------------------
 

@@ -168,6 +168,34 @@ def _listed(names: list[str]) -> str:
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
+def spreadsheet_lines(report: Report, exported: ExportResult) -> list[str]:
+    """What the result page says the update did to the spreadsheet, line by line (HTML)."""
+    lines = [_file_text(Path(exported.destination))]
+    if exported.holdings_written:
+        investments = "1 investment" if exported.holdings_written == 1 else f"{exported.holdings_written} investments"
+        lines.append(f"Current Holdings: {investments} and the Total.")
+    else:
+        lines.append("Current Holdings: no investments you still hold.")
+    valuation = report.valuation
+    if exported.history == "skipped":
+        if valuation.total_market_value is None:
+            why = "no investment has a current value"
+        elif valuation.uses_last_known_prices:
+            why = "some prices are from an earlier day: Yahoo Finance could not be reached"
+        else:
+            why = "a value you entered is from an earlier day"
+        lines.append(f"Portfolio History: no row for today, because {why}.")
+    else:
+        history = f"Portfolio History: today's row was {exported.history}"
+        left_out = [holding.position.ticker for holding in valuation.left_out]
+        if left_out:
+            history += f". It leaves out {_listed(left_out)}, which {'has' if len(left_out) == 1 else 'have'} no value"
+        lines.append(html.escape(history) + ".")
+    if exported.backup:
+        lines.append(html.escape(f"Backup copy of the file as it was before today's first update: {exported.backup}"))
+    return lines
+
+
 def _default_provider() -> PriceProvider:
     from statement_tracker.core.market_data.yahoo_provider import YahooProvider
 
@@ -361,6 +389,20 @@ class MainWindow(QMainWindow):
         self.status_label = QLabel("")
         self.status_label.setObjectName("status")
         self.status_label.setWordWrap(True)
+        # What became of the spreadsheet, on its own: green when it was updated, red when it was not.
+        self.spreadsheet_banner = QFrame()
+        self.spreadsheet_banner.setObjectName("banner")
+        self.spreadsheet_banner_title = QLabel()
+        self.spreadsheet_banner_title.setObjectName("bannerTitle")
+        self.spreadsheet_banner_title.setWordWrap(True)
+        self.spreadsheet_banner_text = QLabel()
+        self.spreadsheet_banner_text.setWordWrap(True)
+        banner = QVBoxLayout(self.spreadsheet_banner)
+        banner.setContentsMargins(14, 10, 14, 10)
+        banner.setSpacing(4)
+        banner.addWidget(self.spreadsheet_banner_title)
+        banner.addWidget(self.spreadsheet_banner_text)
+        self.spreadsheet_banner.setVisible(False)
         self.progress_bar = QProgressBar()
         self.progress_bar.setFormat("%p%")
         self.progress_bar.setTextVisible(True)
@@ -435,6 +477,7 @@ class MainWindow(QMainWindow):
         result.addLayout(result_header)
         result.addWidget(self.progress_bar)
         result.addWidget(self.status_label)
+        result.addWidget(self.spreadsheet_banner)
         result.addWidget(self.table, stretch=1)
         self._filler = QWidget()  # takes the table's place when there is nothing to list
         result.addWidget(self._filler, stretch=1)
@@ -753,6 +796,7 @@ class MainWindow(QMainWindow):
         self.table.setVisible(False)
         self._filler.setVisible(True)
         self.price_bar.setVisible(False)
+        self.spreadsheet_banner.setVisible(False)  # until this run has updated the spreadsheet, or failed to
         self._show_result_page()
         self._show_progress(0, 0, "Starting...")
         self._refresh()
@@ -907,16 +951,36 @@ class MainWindow(QMainWindow):
 
         # The window shows no notes: the marks in the table explain themselves in their tooltips.
         if exported is not None:
+            self._status("Done. Your investments are shown below.", "ok")
             done = "created" if exported.created else "updated"
-            self._status(f"Done. Your spreadsheet was {done}: {exported.destination}", "ok")
+            at = self._locale.toString(self._now().astimezone().time(), QLocale.FormatType.ShortFormat)
+            self._show_spreadsheet_banner(
+                "ok", f"✓ Your Excel spreadsheet was {done} at {at}", spreadsheet_lines(report, exported)
+            )
         elif export_error is not None:
-            self._status("Your investments are shown below, but the spreadsheet was not updated.", "error")
+            self._status("Your investments are shown below.", "error")  # the banner says what went wrong
+            self._show_spreadsheet_banner(
+                "error",
+                "✗ Your Excel spreadsheet was not updated",
+                [html.escape(export_error.what_happened), html.escape(export_error.what_to_do)],
+            )
         else:
             self._status("Done. Your investments are shown below.", "ok")
+            self.spreadsheet_banner.setVisible(False)
         if not report.valuation.holdings:
             self._status("Done. The statement has no investments that you still hold.", "ok")
         # Measured once what was just shown has been laid out: until then Qt still sizes it as hidden.
         QTimer.singleShot(0, self, self._cap_size)
+
+    def _show_spreadsheet_banner(self, state: str, title: str, lines: list[str]) -> None:
+        """Say on its own what became of the spreadsheet: ``state`` is ok or error, ``lines`` are HTML."""
+        self.spreadsheet_banner_title.setText(title)
+        self.spreadsheet_banner_text.setText("<br>".join(lines))
+        theme.set_state(self.spreadsheet_banner, state)
+        for label in (self.spreadsheet_banner_title, self.spreadsheet_banner_text):
+            label.style().unpolish(label)  # the title's colour follows the banner's state
+            label.style().polish(label)
+        self.spreadsheet_banner.setVisible(True)
 
     # -- showing the result ------------------------------------------------------
 

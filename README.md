@@ -205,7 +205,7 @@ The app keeps a value you entered for the next times, so you don't have to type 
 
 ## Your Excel spreadsheet
 
-If you chose a spreadsheet in step 2, each time you press the green button the app writes your results into two sheets of it, **Current Holdings** and **Portfolio History**, creating them the first time. Close the file in Excel before you press the green button: the app cannot save a file that Excel has open, and tells you if that happens.
+If you chose a spreadsheet in step 2, each time you press the green button the app writes your results into two sheets of it, **Current Holdings** and **Portfolio History**, creating them the first time. A box above the table then says what happened: in green, the file, what was written to each sheet and the name of the backup copy; in red, if the file could not be saved, and what to do. Close the file in Excel before you press the green button: the app cannot save a file that Excel has open.
 
 ### New or existing spreadsheet
 

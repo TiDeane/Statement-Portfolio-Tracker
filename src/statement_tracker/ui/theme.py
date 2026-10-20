@@ -93,6 +93,13 @@ def stylesheet(colours: Palette) -> str:
     QFrame#dropArea[state="dragging"] {{ background: {c.table_header}; border-color: {c.accent}; }}
     QLabel#dropHint {{ font-size: 12pt; font-weight: 600; }}
 
+    /* The result page's word on the spreadsheet: green when it was updated, red when it was not. */
+    QFrame#banner {{ border: 1px solid {c.border}; border-radius: 8px; }}
+    QFrame#banner[state="ok"] {{ background: {c.table_header}; border-color: {c.good}; }}
+    QFrame#banner[state="error"] {{ background: {c.missing}; border-color: {c.bad}; }}
+    QLabel#bannerTitle {{ font-size: 12pt; font-weight: 700; }}
+    QFrame#banner[state="ok"] QLabel#bannerTitle {{ color: {c.good}; }}
+    QFrame#banner[state="error"] QLabel#bannerTitle {{ color: {c.bad}; }}
 
     QGroupBox {{
         background: {c.card};

@@ -19,6 +19,9 @@ class ExportResult:
     history: str
     """``added``, ``updated`` or ``skipped`` (skipped when totals are unavailable)."""
     notes: tuple[str, ...] = ()
+    backup: str | None = None
+    """The file name of today's backup copy, the spreadsheet as it was before the day's first update; None
+    when there is none (a new spreadsheet, or backups turned off)."""
 
 
 class Exporter(Protocol):

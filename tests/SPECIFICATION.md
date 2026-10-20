@@ -136,6 +136,10 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - buttons are only highlighted when reached with the keyboard.
 - **F11.** "Where do I get this file?" gives the Revolut steps and asks for All time. "About and privacy" shows the version and the releases link.
 - **F12.** The window and its dialogs show the app's icon, and the Windows program, its installer and the macOS app show the same one.
+- **F13.** When a spreadsheet is used, the result page says on its own, apart from the table, what became of it.
+  - Updated or created: in green, with the time, the file and its folder, what was written to Current Holdings, whether today's history row was added or updated (or why not, and what it leaves out), and the backup copy's name.
+  - Not updated: in red, with what happened and what to do.
+  - It says so again after each later change that rewrites the spreadsheet (a rename, a value entered).
 
 ## G. Settings
 

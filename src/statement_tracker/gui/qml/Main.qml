@@ -59,6 +59,15 @@ ApplicationWindow {
 
     Connections {
         target: dialogs
+        // A question settled by the app itself (or the window closing) takes its dialog off the screen.
+        function onOpenChanged() {
+            if (!dialogs.isOpen) {
+                messageDialog.close()
+                valueDialog.close()
+                listingDialog.close()
+                helpDialog.close()
+            }
+        }
         function onOpened(kind, data) {
             if (kind === "message")
                 messageDialog.show(data)

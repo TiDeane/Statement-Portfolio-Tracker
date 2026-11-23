@@ -45,15 +45,18 @@ class DialogHost(QObject):
 
     @Slot("QVariantMap")
     def answer(self, result: dict[str, Any]) -> None:
-        """The dialog was answered (called from QML)."""
-        self._result = dict(result)
-        self._finish()
+        """The dialog was answered. Once a question is settled, a later answer or cancel changes nothing
+        (a dialog closing after being answered cancels, too late)."""
+        if self._waiting:
+            self._result = dict(result)
+            self._finish()
 
     @Slot()
     def cancel(self) -> None:
         """The dialog was cancelled or closed, or the window is closing."""
-        self._result = None
-        self._finish()
+        if self._waiting:
+            self._result = None
+            self._finish()
 
     def _finish(self) -> None:
         if self._waiting:

@@ -54,3 +54,20 @@ def test_errors_say_what_happened_and_what_to_do_and_copy_their_details(app, tmp
     assert seen == [True, False]
     assert QGuiApplication.clipboard().text() == "Traceback: line 1"
     assert not shows(shell.window, "It broke.")
+
+
+def test_a_dialog_answered_or_cancelled_by_the_app_closes_and_keeps_its_answer(app, tmp_path: Path) -> None:
+    # Spec F11: a dialog never stays on screen once its question is settled.
+    shell = open_app(tmp_path, FakeProvider(), real_dialogs=True)
+
+    def answer_from_the_app() -> None:
+        shell.session.dialogs.answer({"symbol": "ABCD.DE", "always": False})
+
+    when_a_dialog_opens(shell, answer_from_the_app)
+    answer = shell.session.ask_listing(type("R", (), {"ticker": "ABCD", "confidence": None, "candidates": ()})())
+
+    assert answer == ("ABCD.DE", False)
+    from quick_driver import settle
+
+    settle(app)
+    assert not shows(shell.window, "Which one is ABCD?")

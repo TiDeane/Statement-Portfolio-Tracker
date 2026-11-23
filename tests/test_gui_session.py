@@ -89,3 +89,18 @@ def test_a_dialog_wanted_while_another_is_open_waits_its_turn(app) -> None:
 
     assert first == {"n": 1}
     assert second == [{"n": 2}]
+
+
+def test_enter_confirms_a_question_and_a_message(app, tmp_path: Path) -> None:
+    # Spec F11: Esc closes dialogs and Enter confirms them.
+    from PySide6.QtCore import Qt
+    from quick_driver import press
+
+    shell = open_app(tmp_path, FakeProvider(), real_dialogs=True)
+    when_a_dialog_opens(shell, lambda: press(shell.window, Qt.Key.Key_Return))
+    assert shell.session.confirm("Forget ABCD?\n\nIt is removed.", "Forget") is True
+
+    when_a_dialog_opens(shell, lambda: press(shell.window, Qt.Key.Key_Return))
+    from test_gui_listing import ambiguous
+
+    assert shell.session.ask_listing(ambiguous()) == ("EQQB.DE", False)

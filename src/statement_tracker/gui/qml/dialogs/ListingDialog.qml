@@ -48,6 +48,9 @@ Popup {
 
     contentItem: ColumnLayout {
         spacing: 16
+        focus: true
+        Keys.onReturnPressed: if (dialog.hasOptions || field.text.trim() !== "") dialog.finish(true)
+        Keys.onEnterPressed: if (dialog.hasOptions || field.text.trim() !== "") dialog.finish(true)
 
         Text {
             text: dialog.question.title || ""

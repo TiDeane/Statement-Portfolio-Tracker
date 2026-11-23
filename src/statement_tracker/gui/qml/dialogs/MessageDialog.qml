@@ -48,6 +48,9 @@ Popup {
 
     contentItem: ColumnLayout {
         spacing: 16
+        focus: true
+        Keys.onReturnPressed: dialog.finish(true)
+        Keys.onEnterPressed: dialog.finish(true)
         Text {
             text: dialog.heading
             color: Theme.text

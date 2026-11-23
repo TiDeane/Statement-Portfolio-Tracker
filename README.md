@@ -332,7 +332,7 @@ The file stays an Excel file. **File > Save as Google Sheets** makes a separate 
 
 ## Settings
 
-Press **Settings** at the top of Home. Changes are saved at once; **Your portfolio** takes you back.
+Press **Settings** at the top of Home. Changes are saved at once; **Your portfolio** takes you back. The list on the left names the parts below and stays in place while you scroll: click one to go straight to it.
 
 ### Your investments
 

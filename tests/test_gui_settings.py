@@ -298,6 +298,43 @@ def test_forgetting_the_statement_starts_first_launch_afresh(app, tmp_path: Path
     assert not find(shell.window, "Continue").isEnabled()
 
 
+def chapters(window) -> dict:
+    """The side menu's chapters, by name, from top to bottom."""
+    from PySide6.QtCore import QPointF
+
+    from quick_driver import _items, _shown
+
+    shown = [item for item in _items(window) if item.objectName() == "chapter" and _shown(item)]
+    shown.sort(key=lambda item: item.mapToScene(QPointF(0, 0)).y())
+    return {item.property("text"): item for item in shown}
+
+
+def current_chapter(window) -> str:
+    return next(name for name, item in chapters(window).items() if item.property("current"))
+
+
+def test_the_chapters_stay_in_place_mark_the_one_being_read_and_scroll_to_theirs(app, tmp_path: Path) -> None:
+    # Spec G1.
+    from PySide6.QtCore import QPointF
+
+    from quick_driver import scroll_to
+
+    shell = home(app, tmp_path, spreadsheet=tmp_path / "mine.xlsx")
+    to_settings(shell)
+    shown = chapters(shell.window)
+    assert list(shown) == ["Your investments", "Your statement", "Your spreadsheet", "Appearance", "About and privacy"]
+    assert current_chapter(shell.window) == "Your investments"
+    where = shown["Your investments"].mapToScene(QPointF(0, 0))
+
+    scroll_to(find(shell.window, "New versions"))  # read down to the end of the page
+    wait_until(app, lambda: current_chapter(shell.window) == "About and privacy")
+    assert chapters(shell.window)["Your investments"].mapToScene(QPointF(0, 0)) == where  # it stayed in place
+
+    click(chapters(shell.window)["Your spreadsheet"])
+    wait_until(app, lambda: current_chapter(shell.window) == "Your spreadsheet")
+    assert shows(shell.window, "Backup copies to keep")
+
+
 def test_appearance_can_be_light_or_dark_and_is_remembered(app, tmp_path: Path) -> None:
     # Spec G1, F11.
     shell = home(app, tmp_path)

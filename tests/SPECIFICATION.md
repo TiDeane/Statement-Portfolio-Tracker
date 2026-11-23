@@ -152,7 +152,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
 
 ## G. Settings
 
-- **G1.** Settings is a page, reached from Home's **Settings** and left with **← Your portfolio** (first launch when no statement is kept). A side menu goes to its sections.
+- **G1.** Settings is a page, reached from Home's **Settings** and left with **← Your portfolio** (first launch when no statement is kept). A side menu of its chapters (Your investments, Your statement, Your spreadsheet, Appearance, About and privacy) stays in place while the page scrolls, marks the chapter being read, and scrolls to a chapter when it is clicked.
   - **Your investments:** every investment the app keeps something about, with its name, "TICKER · symbol, exchange, currency" and a status (Chosen by you, Matched automatically, Asks you next time, Not matched yet, and "value entered by you"). Its **⋯** menu offers **Rename**, **Choose the listing next time** and **Forget…** (asks first; removes the listing, the name and the value entered). **Forget all investments…** asks first and keeps the spreadsheet, the statement and the last prices. The switch **Take the first listing without asking**. With nothing kept, the list says why. Ctrl+Z takes back the last change (F10).
   - **Your statement:** its latest transaction, **Use a newer one…** and **Forget it…** (asks first; then first launch asks for a statement again). With none kept, it says so.
   - **Your spreadsheet:** its name and folder, **Open folder**, **Choose another…** and **Stop using it**; without one, **Choose spreadsheet…** and **Create a new one…**. **Backup copies to keep**, from 0 to 99, with **−** and **+**.

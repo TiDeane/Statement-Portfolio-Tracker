@@ -8,9 +8,46 @@ Item {
     id: page
     readonly property var settings: session.settingsPage
 
-    function scrollTo(section) {
+    // The page's frame: centred, at most 992 wide. The title and the chapter menu stay in place;
+    // only the chapters themselves scroll.
+    readonly property real frameWidth: Math.min(width - 48, 992)
+    readonly property real frameX: (width - frameWidth) / 2
+    readonly property bool withMenu: width > 760
+    readonly property var chapterCards: [investmentsCard, statementCard, sheetCard, appearanceCard, aboutCard]
+    readonly property var chapterNames: ["Your investments", "Your statement", "Your spreadsheet", "Appearance", "About and privacy"]
+    readonly property var chapterIcons: ["trend", "file", "sheet", "contrast", "info"]
+
+    property int chosenChapter: -1  // clicked in the menu: marked until the page is scrolled by hand
+    readonly property int currentChapter: {
+        if (chosenChapter >= 0)
+            return chosenChapter
         var flick = scroll.contentItem
-        flick.contentY = Math.max(0, Math.min(section.y, flick.contentHeight - flick.height))
+        if (flick.contentY >= flick.contentHeight - flick.height - 2)
+            return chapterCards.length - 1  // at the end, the last chapter is the one being read
+        var found = 0
+        for (var i = 0; i < chapterCards.length; i++)
+            if (chapterCards[i].y <= flick.contentY + 24)
+                found = i
+        return found
+    }
+
+    function scrollTo(index) {
+        var flick = scroll.contentItem
+        chosenChapter = index
+        glide.to = Math.max(0, Math.min(chapterCards[index].y, flick.contentHeight - flick.height))
+        glide.restart()
+    }
+
+    NumberAnimation {
+        id: glide
+        target: scroll.contentItem
+        property: "contentY"
+        duration: 220
+        easing.type: Easing.OutCubic
+    }
+    Connections {
+        target: scroll.contentItem
+        function onContentYChanged() { if (!glide.running) page.chosenChapter = -1 }
     }
 
     component SectionTitle: Text {
@@ -25,50 +62,99 @@ Item {
         Layout.fillWidth: true
     }
 
-    ScrollView {
-        id: scroll
-        anchors.fill: parent
-        contentWidth: availableWidth
+    ColumnLayout {  // the title, fixed
+        id: header
+        x: page.frameX
+        width: page.frameWidth
+        spacing: 8
+        Item { Layout.preferredHeight: 4 }
+        TextButton {
+            text: "Your portfolio"
+            iconName: "arrowLeft"
+            Layout.leftMargin: -10
+            onClicked: page.settings.back()
+        }
+        Text {
+            text: "Settings"
+            color: Theme.text
+            font.pixelSize: 26
+            font.weight: Font.DemiBold
+        }
+        Item { Layout.preferredHeight: 12 }
+    }
 
-        ColumnLayout {
-            width: Math.min(scroll.availableWidth - 48, 992)
-            x: (scroll.availableWidth - width) / 2
-            spacing: 8
-
-            Item { Layout.preferredHeight: 4 }
-            TextButton {
-                text: "Your portfolio"
-                iconName: "arrowLeft"
-                Layout.leftMargin: -10
-                onClicked: page.settings.back()
-            }
-            Text {
-                text: "Settings"
-                color: Theme.text
-                font.pixelSize: 26
-                font.weight: Font.DemiBold
-            }
-
-            RowLayout {
-                spacing: 24
-                Layout.fillWidth: true
-                Layout.topMargin: 12
-
-                ColumnLayout {  // the side menu
-                    visible: page.width > 760
-                    spacing: 2
-                    Layout.alignment: Qt.AlignTop
-                    Layout.preferredWidth: 200
-                    Repeater {
-                        model: [["Investments", investmentsCard], ["Statement", statementCard], ["Spreadsheet", sheetCard], ["About", aboutCard]]
-                        TextButton {
-                            required property var modelData
-                            text: modelData[0]
-                            Layout.alignment: Qt.AlignLeft
-                            onClicked: page.scrollTo(modelData[1])
-                        }
+    Column {  // the chapters, fixed beside the page
+        id: menu
+        visible: page.withMenu
+        x: page.frameX
+        y: header.y + header.height
+        width: 200
+        spacing: 2
+        Accessible.role: Accessible.PageTabList
+        Repeater {
+            model: page.chapterNames.length
+            AbstractButton {
+                id: chapter
+                required property int index
+                objectName: "chapter"
+                readonly property bool current: page.currentChapter === index
+                text: page.chapterNames[index]
+                width: menu.width
+                implicitHeight: 40
+                focusPolicy: Qt.StrongFocus
+                hoverEnabled: true
+                Accessible.role: Accessible.PageTab
+                Accessible.selected: current
+                onClicked: page.scrollTo(index)
+                background: Rectangle {
+                    radius: 8
+                    color: chapter.current ? Theme.accentSoft : chapter.hovered ? Theme.subtle : "transparent"
+                    border.width: chapter.visualFocus ? 2 : 0
+                    border.color: Theme.text
+                    Rectangle {  // the mark beside the chapter being read
+                        visible: chapter.current
+                        width: 3
+                        height: 18
+                        radius: 1.5
+                        x: 0
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: Theme.accent
                     }
                 }
+                contentItem: Item {}
+                Row {
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: 14
+                    spacing: 12
+                    Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        name: page.chapterIcons[chapter.index]
+                        color: chapter.current ? Theme.accentInk : Theme.muted
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: chapter.text
+                        color: chapter.current ? Theme.accentInk : Theme.text
+                        font.pixelSize: 14
+                        font.weight: chapter.current ? Font.DemiBold : Font.Normal
+                    }
+                }
+            }
+        }
+    }
+
+    ScrollView {  // the chapters' content, which scrolls; its scroll bar at the window's edge
+        id: scroll
+        x: page.withMenu ? page.frameX + 224 : page.frameX
+        y: header.y + header.height
+        width: page.width - x
+        height: page.height - y
+        contentWidth: availableWidth
+        clip: true  // what scrolls up goes under the title, not over it
+
+        ColumnLayout {
+            width: Math.min(scroll.availableWidth - 24, page.frameWidth - (page.withMenu ? 224 : 0))
+            spacing: 8
 
                 ColumnLayout {
                     id: sections
@@ -427,7 +513,6 @@ Item {
 
                     Item { Layout.preferredHeight: 16 }
                 }
-            }
         }
     }
 }

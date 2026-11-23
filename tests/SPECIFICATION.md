@@ -247,5 +247,10 @@ The window being built to replace F and G (design: `docs/superpowers/specs/2026-
   - **Continue** stays disabled until a statement has been read.
   - The file chooser opens in the folder used last time (F2's rule).
   - A line says that everything stays on this computer and only fund codes and dates go to Yahoo Finance, with **About and privacy**.
+- **K3.** First launch, step 2: keep a spreadsheet up to date?
+  - Three options, one chosen at a time: **Use a spreadsheet I have** (opens the file chooser), **Create a new one** (asks where to save it; ".xlsx" is added when missing) and **Not now**. A file chosen shows in its option with **Choose another…**; cancelling the chooser keeps the choice before. An .xlsx dropped on the window is a spreadsheet I have.
+  - A line says a backup copy is saved beside the file before each day's first change, and names the app's two sheets.
+  - **Back** returns to step 1 with the statement still chosen. **Show my investments**, enabled once an option is chosen, remembers the choice and opens Home.
+  - When a spreadsheet is already remembered (someone upgrading from the Widgets window), step 2 is skipped.
 - **K12.** Errors are in plain words: what happened, and what to do.
   - Details can be copied with **Copy details**; no stack trace is shown.

@@ -5,6 +5,8 @@ from pathlib import Path
 from fakes import SAMPLE, SAMPLES, FakeProvider
 from quick_driver import app, click, close_windows_afterwards, drop, find, open_app, shows  # noqa: F401
 
+from statement_tracker.settings import Settings
+
 
 def continue_enabled(shell) -> bool:
     return find(shell.window, "Continue").isEnabled()
@@ -67,3 +69,85 @@ def test_first_launch_says_what_leaves_the_computer(app, tmp_path: Path) -> None
 
     assert shows(shell.window, "Everything stays on this computer. Only fund codes and dates go to Yahoo Finance.")
     assert find(shell.window, "About and privacy").isEnabled()
+
+
+def to_step_2(shell) -> None:
+    drop(shell.window, SAMPLE)
+    click(find(shell.window, "Continue"))
+
+
+def test_step_2_remembers_a_spreadsheet_i_have(app, tmp_path: Path) -> None:
+    # Spec K3.
+    shell = open_app(tmp_path, FakeProvider())
+    to_step_2(shell)
+    assert shows(shell.window, "Keep a spreadsheet up to date?", "Step 2 of 2", "backup copy")
+    assert not find(shell.window, "Show my investments").isEnabled()
+    shell.session.ask_open_file = lambda title, kinds, start: tmp_path / "mine.xlsx"
+
+    click(find(shell.window, "Use a spreadsheet I have"))
+
+    assert shows(shell.window, "mine.xlsx", "Choose another…")
+    click(find(shell.window, "Show my investments"))
+    assert Settings.load(tmp_path / "settings.json").spreadsheet_path == tmp_path / "mine.xlsx"
+    assert shows(shell.window, "Your portfolio")
+
+
+def test_create_a_new_one_adds_the_xlsx_ending(app, tmp_path: Path) -> None:
+    # Spec K3.
+    shell = open_app(tmp_path, FakeProvider())
+    to_step_2(shell)
+    shell.session.ask_save_file = lambda title, start: tmp_path / "Investments"
+
+    click(find(shell.window, "Create a new one"))
+    click(find(shell.window, "Show my investments"))
+
+    assert Settings.load(tmp_path / "settings.json").spreadsheet_path == tmp_path / "Investments.xlsx"
+
+
+def test_cancelling_the_file_chooser_keeps_the_choice_before(app, tmp_path: Path) -> None:
+    # Spec K3.
+    shell = open_app(tmp_path, FakeProvider())
+    to_step_2(shell)
+    click(find(shell.window, "Not now"))
+    shell.session.ask_open_file = lambda title, kinds, start: None
+
+    click(find(shell.window, "Use a spreadsheet I have"))
+    click(find(shell.window, "Show my investments"))
+
+    assert Settings.load(tmp_path / "settings.json").spreadsheet_path is None
+
+
+def test_not_now_leaves_no_spreadsheet_and_back_keeps_the_statement(app, tmp_path: Path) -> None:
+    # Spec K3.
+    shell = open_app(tmp_path, FakeProvider())
+    to_step_2(shell)
+
+    click(find(shell.window, "Back"))
+    assert shows(shell.window, "revolut_sample.csv", "Step 1 of 2")
+
+    click(find(shell.window, "Continue"))
+    click(find(shell.window, "Not now"))
+    click(find(shell.window, "Show my investments"))
+    assert Settings.load(tmp_path / "settings.json").spreadsheet_path is None
+    assert shows(shell.window, "Your portfolio")
+
+
+def test_a_spreadsheet_dropped_on_step_2_is_one_i_have(app, tmp_path: Path) -> None:
+    # Spec K3.
+    shell = open_app(tmp_path, FakeProvider())
+    to_step_2(shell)
+
+    drop(shell.window, tmp_path / "dropped.xlsx")
+
+    assert shows(shell.window, "dropped.xlsx")
+    assert find(shell.window, "Show my investments").isEnabled()
+
+
+def test_someone_with_a_remembered_spreadsheet_skips_step_2(app, tmp_path: Path) -> None:
+    # Spec K3.
+    shell = open_app(tmp_path, FakeProvider(), spreadsheet=tmp_path / "mine.xlsx")
+
+    to_step_2(shell)
+
+    assert shows(shell.window, "Your portfolio")
+    assert Settings.load(tmp_path / "settings.json").spreadsheet_path == tmp_path / "mine.xlsx"

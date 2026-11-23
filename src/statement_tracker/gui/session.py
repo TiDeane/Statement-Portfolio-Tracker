@@ -135,9 +135,11 @@ class Session(QObject):
         """Files dropped on the window, as file URLs: an Excel file is a spreadsheet, anything else a statement."""
         for url in urls:
             path = Path(QUrl(url).toLocalFile())
+            on_welcome = self._page == "welcome"
             if path.suffix.lower() == ".xlsx":
-                continue  # a spreadsheet dropped: taken by the spreadsheet steps (later tasks)
-            if self._page == "welcome" and self._welcome.step == "statement":
+                if on_welcome and self._welcome.step == "spreadsheet":
+                    self._welcome.use_spreadsheet(path)
+            elif on_welcome and self._welcome.step == "statement":
                 self._welcome.use_statement(path)
 
     @Slot(str)

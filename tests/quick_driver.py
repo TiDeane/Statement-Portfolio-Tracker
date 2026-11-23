@@ -74,6 +74,9 @@ def close_windows_afterwards(app):
 
 
 _OPENED: list[list[AppWindow]] = []
+"""The windows each running test opened, closed by ``close_windows_afterwards``."""
+_UNMANAGED: list[AppWindow] = []
+"""Windows opened outside a test (a script taking screenshots): never closed by the driver."""
 
 
 def provider_with(*symbols: str) -> FakeProvider:
@@ -112,8 +115,7 @@ def open_app(
     session = getattr(shell, "session", None)
     if session is not None and not real_dialogs:
         session.show_error = shell.errors.append
-    if _OPENED:
-        _OPENED[-1].append(shell)
+    (_OPENED[-1] if _OPENED else _UNMANAGED).append(shell)
     shell.show()
     settle(QGuiApplication.instance())
     return shell
@@ -232,7 +234,7 @@ def _window_of(item: QQuickItem) -> QQuickWindow:
     root = item
     while root.parentItem() is not None:
         root = root.parentItem()
-    for shells in _OPENED:
+    for shells in [*_OPENED, _UNMANAGED]:
         for shell in shells:
             if shell.window.contentItem() == root:
                 return shell.window

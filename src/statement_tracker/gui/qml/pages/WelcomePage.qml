@@ -266,6 +266,95 @@ Item {
                 }
             }
 
+            // Step 2: a spreadsheet?
+            ColumnLayout {
+                visible: !page.onStatement
+                spacing: 24
+                Layout.fillWidth: true
+
+                ColumnLayout {
+                    spacing: 8
+                    Layout.fillWidth: true
+                    Text {
+                        text: "Keep a spreadsheet up to date?"
+                        color: Theme.text
+                        font.pixelSize: 30
+                        font.weight: Font.DemiBold
+                        wrapMode: Text.Wrap
+                        Layout.fillWidth: true
+                    }
+                    Text {
+                        text: "Each time you update it, the app writes your investments and a row of history into an Excel file. Many people use this to follow their portfolio over the months."
+                        color: Theme.muted
+                        font.pixelSize: 15
+                        wrapMode: Text.Wrap
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: 680
+                    }
+                }
+
+                GridLayout {
+                    columns: page.width > 860 ? 3 : 1
+                    columnSpacing: 16
+                    rowSpacing: 16
+                    Layout.fillWidth: true
+
+                    OptionCard {
+                        text: "Use a spreadsheet I have"
+                        iconName: "folder"
+                        description: "Pick an Excel file (.xlsx). The app adds two sheets of its own and leaves yours alone."
+                        checked: welcome.spreadsheetChoice === "existing"
+                        fileName: checked ? welcome.spreadsheetName : ""
+                        fileFolder: checked ? welcome.spreadsheetFolder : ""
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        onClicked: welcome.chooseExisting()
+                        onChooseAnother: welcome.chooseExisting()
+                    }
+                    OptionCard {
+                        text: "Create a new one"
+                        iconName: "plusFile"
+                        description: "The app makes a new Excel file. You choose where it's saved."
+                        checked: welcome.spreadsheetChoice === "new"
+                        fileName: checked ? welcome.spreadsheetName : ""
+                        fileFolder: checked ? welcome.spreadsheetFolder : ""
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        onClicked: welcome.chooseNew()
+                        onChooseAnother: welcome.chooseNew()
+                    }
+                    OptionCard {
+                        text: "Not now"
+                        iconName: "close"
+                        neutralIcon: true
+                        description: "Just see your investments here. You can add a spreadsheet later, in Settings."
+                        checked: welcome.spreadsheetChoice === "none"
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        onClicked: welcome.chooseNone()
+                    }
+                }
+
+                RowLayout {
+                    spacing: 10
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: 720
+                    Icon {
+                        name: "shield"
+                        size: 16
+                        color: Theme.muted
+                        Layout.alignment: Qt.AlignTop
+                    }
+                    Text {
+                        text: "Before the first change each day, a backup copy of the file is saved beside it. The app's sheets are called “Current Holdings” and “Portfolio History”."
+                        color: Theme.muted
+                        font.pixelSize: 13
+                        wrapMode: Text.Wrap
+                        Layout.fillWidth: true
+                    }
+                }
+            }
+
             Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: 1
@@ -296,6 +385,12 @@ Item {
                         text: "About and privacy"
                         onClicked: session.goTo("settings")
                     }
+                }
+                SecondaryButton {
+                    visible: !page.onStatement
+                    text: "Back"
+                    iconName: "arrowLeft"
+                    onClicked: welcome.back()
                 }
                 Item {
                     visible: !page.onStatement

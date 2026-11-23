@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from statement_tracker.gui.session import Session
 
 STATEMENT_FILES = "Statement files (*.csv)"
+SPREADSHEET_FILES = "Excel spreadsheets (*.xlsx)"
+NEW_SPREADSHEET_NAME = "My investments.xlsx"
 
 
 def statement_facts(summary: StatementSummary) -> list[str]:
@@ -42,6 +44,9 @@ class Welcome(QObject):
         self._step = "statement"
         self._statement: Path | None = None
         self._facts: list[str] = []
+        self._choice = ""
+        """Step 2's option: "existing", "new" or "none"; "" until one is chosen."""
+        self._spreadsheet: Path | None = None
 
     # -- what is shown -------------------------------------------------------------
 
@@ -57,12 +62,27 @@ class Welcome(QObject):
     def _get_facts(self) -> list[str]:
         return self._facts
 
+    def _can_continue(self) -> bool:
+        return self._statement is not None if self._step == "statement" else self._choice != ""
+
+    def _get_choice(self) -> str:
+        return self._choice
+
+    def _get_sheet_name(self) -> str:
+        return self._spreadsheet.name if self._spreadsheet else ""
+
+    def _get_sheet_folder(self) -> str:
+        return f"in {self._spreadsheet.parent}" if self._spreadsheet else ""
+
     step = Property(str, _get_step, notify=changed)
     """"statement" or "spreadsheet"."""
     statementChosen = Property(bool, _get_chosen, notify=changed)
     statementName = Property(str, _get_name, notify=changed)
     statementFacts = Property(list, _get_facts, notify=changed)
-    canContinue = Property(bool, _get_chosen, notify=changed)
+    canContinue = Property(bool, _can_continue, notify=changed)
+    spreadsheetChoice = Property(str, _get_choice, notify=changed)
+    spreadsheetName = Property(str, _get_sheet_name, notify=changed)
+    spreadsheetFolder = Property(str, _get_sheet_folder, notify=changed)
     revolutSteps = Property(list, lambda self: list(REVOLUT_STEPS), constant=True)
     allTimeNote = Property(str, lambda self: ALL_TIME_NOTE, constant=True)
 
@@ -93,8 +113,57 @@ class Welcome(QObject):
 
     @Slot()
     def next(self) -> None:
-        """Continue: on to the spreadsheet."""
-        if self._statement is None:
+        """Continue: on to the spreadsheet, unless one is remembered already; from step 2, to Home."""
+        if not self._can_continue():
             return
-        self._step = "spreadsheet"
+        if self._step == "spreadsheet":
+            self._finish()
+        elif self._session.settings.spreadsheet_path is not None:
+            self._finish()  # upgrading from the Widgets window: the spreadsheet is known
+        else:
+            self._step = "spreadsheet"
+            self.changed.emit()
+
+    # -- step 2 ----------------------------------------------------------------------
+
+    def _sheet_folder(self) -> Path:
+        if self._spreadsheet is not None and self._spreadsheet.parent.exists():
+            return self._spreadsheet.parent
+        return self._session.start_folder()
+
+    @Slot()
+    def chooseExisting(self) -> None:
+        chosen = self._session.ask_open_file("Choose your Excel spreadsheet", SPREADSHEET_FILES, self._sheet_folder())
+        if chosen is not None:
+            self.use_spreadsheet(chosen)
+
+    def use_spreadsheet(self, path: Path) -> None:
+        """An Excel file the user has, chosen or dropped."""
+        self._choice, self._spreadsheet = "existing", path
         self.changed.emit()
+
+    @Slot()
+    def chooseNew(self) -> None:
+        chosen = self._session.ask_save_file("Where should the new spreadsheet be saved?", self._sheet_folder() / NEW_SPREADSHEET_NAME)
+        if chosen is not None:
+            self._choice = "new"
+            self._spreadsheet = chosen if chosen.suffix.lower() == ".xlsx" else chosen.with_name(chosen.name + ".xlsx")
+            self.changed.emit()
+
+    @Slot()
+    def chooseNone(self) -> None:
+        self._choice, self._spreadsheet = "none", None
+        self.changed.emit()
+
+    @Slot()
+    def back(self) -> None:
+        self._step = "statement"
+        self.changed.emit()
+
+    def _finish(self) -> None:
+        """Remember the spreadsheet chosen (if step 2 was shown) and open Home for the statement."""
+        if self._step == "spreadsheet":
+            self._session.settings.spreadsheet_path = self._spreadsheet if self._choice != "none" else None
+            self._session.save_settings()
+        self._session.statement = self._statement
+        self._session.open_home()

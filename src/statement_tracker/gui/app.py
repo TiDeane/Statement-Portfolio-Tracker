@@ -88,6 +88,8 @@ class AppWindow(QObject):
 
     def show(self) -> None:
         self.window.show()
+        self.session.start()
 
     def close(self) -> None:
+        self.session.stop_run()
         self.window.close()

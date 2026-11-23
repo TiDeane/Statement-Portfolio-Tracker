@@ -14,7 +14,7 @@ Rectangle {
     Text {
         id: label
         anchors.centerIn: parent
-        font.pixelSize: 12.5
+        font.pixelSize: 13
         font.weight: Font.DemiBold
         color: chip.tone === "warn" ? Theme.warnInk : chip.tone === "ok" ? Theme.accentInk : Theme.text
     }

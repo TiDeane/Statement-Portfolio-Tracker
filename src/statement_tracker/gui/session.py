@@ -7,21 +7,35 @@ that tests can stand in for the user's own answers, as they do for the Widgets w
 from __future__ import annotations
 
 import sys
+import threading
+import traceback
 from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
 
-from PySide6.QtCore import Property, QObject, QProcess, QStandardPaths, QUrl, Signal, Slot
+from PySide6.QtCore import Property, QObject, QProcess, QStandardPaths, QThreadPool, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.market_data.provider import PriceProvider
+from statement_tracker.core.models import Position
+from statement_tracker.core.ticker_resolver import Resolution
 from statement_tracker.gui.dialog_host import DialogHost
 from statement_tracker.kept_statement import KeptStatement, find_kept_statement
 from statement_tracker.settings import Settings
 from statement_tracker.ui.undo import ChangeHistory
+from statement_tracker.ui.workers import QuestionBridge, Task
+from statement_tracker.workflow import Report, build_report, read_statement, values_typed_in
 
 PAGES = ("welcome", "home", "settings")
+UNEXPECTED = UserFacingError(
+    "Something unexpected went wrong.",
+    'Please report this problem. "Copy details" copies the information needed to fix it.',
+)
+
+
+class RunStopped(Exception):
+    """A run the user stopped (or replaced) before it finished: nothing of it is saved or shown."""
 
 
 def default_start_folder() -> Path:
@@ -53,6 +67,10 @@ class Session(QObject):
     """The state behind the window. Exposed to QML as ``session``."""
 
     pageChanged = Signal()
+    busyChanged = Signal()
+    reportChanged = Signal()
+    progressed = Signal(int, int, str)
+    """A run's progress: steps done, steps in all (0 while unknown), what is being done."""
 
     def __init__(
         self,
@@ -74,6 +92,16 @@ class Session(QObject):
         self.statement: Path | None = self.kept.path if self.kept else None
         """The statement Home works out: the one kept from last time, or the one first launch chose."""
         self._page = "home" if self.kept else "welcome"
+        self.report: Report | None = None
+        """What the last finished run worked out."""
+        self.fetched_at: datetime | None = None
+        self.loading_positions: tuple[Position, ...] = ()
+        """The investments of the run going on, listed while their prices come in."""
+        self.loading_currency = ""
+        self._running: tuple[Task, threading.Event] | None = None
+        self._alive: set[Task] = set()
+        """Runs the thread pool has not finished yet, stopped ones included: kept alive until then."""
+        self._bridge = QuestionBridge(self._ask_during_run, self)
 
         # The user's answers. Replaced in tests, which stand in for the user.
         self.ask_open_file: Callable[[str, str, Path], Path | None] = self._ask_open_file
@@ -81,10 +109,15 @@ class Session(QObject):
         self.show_error: Callable[[UserFacingError], object] = self._show_error
         self.confirm: Callable[[str, str], bool] = self._confirm
         self.show_in_folder: Callable[[Path], object] = show_in_folder
+        self.ask_listing: Callable[[Resolution], tuple[str | None, bool]] = lambda resolution: (None, False)
+        """Which listing an investment is: (symbol or None to skip, "always take the first")."""
 
         from statement_tracker.gui.welcome import Welcome  # it needs this module's Session
 
+        from statement_tracker.gui.home import Home
+
         self._welcome = Welcome(self)
+        self._home = Home(self)
 
     # -- pages -------------------------------------------------------------------
 
@@ -102,10 +135,111 @@ class Session(QObject):
             self.pageChanged.emit()
 
     def open_home(self) -> None:
-        """Show Home, for the statement chosen."""
+        """Show Home, and fetch today's prices for the statement chosen."""
         self.goTo("home")
+        self.refresh()
+
+    def start(self) -> None:
+        """The window is showing: on Home, fetch today's prices."""
+        if self._page == "home":
+            self.refresh()
 
     welcome = Property(QObject, lambda self: self._welcome, constant=True)
+    home = Property(QObject, lambda self: self._home, constant=True)
+
+    # -- runs ----------------------------------------------------------------------
+
+    def _get_busy(self) -> bool:
+        return self._running is not None
+
+    busy = Property(bool, _get_busy, notify=busyChanged)
+
+    def refresh(self) -> None:
+        """Fetch today's prices for the statement, again if they were fetched before."""
+        if self.statement is not None:
+            self.start_run(self.statement)
+
+    def start_run(self, statement: Path) -> None:
+        """Read ``statement``, fetch prices and work out the report, without freezing the window.
+        A run going on is stopped first: nothing of it is saved or shown."""
+        self.stop_run()
+        try:
+            summary = read_statement(statement)
+        except UserFacingError as error:
+            self.show_error(error)
+            return
+        self.loading_positions, self.loading_currency = summary.positions, summary.currency
+        stop = threading.Event()
+        spreadsheet = self.settings.spreadsheet_path
+
+        def progress(done: int, total: int, text: str) -> None:
+            # On the run's thread, at each step: where a stopped run ends, before it saves anything.
+            if stop.is_set():
+                raise RunStopped
+            self.progressed.emit(done, total, text)
+
+        def work() -> Report:
+            typed, typed_at = values_typed_in(self.settings, spreadsheet)
+            return build_report(
+                statement,
+                self.provider_factory(),
+                self.settings,
+                chooser=self._bridge,
+                progress=progress,
+                typed_values=typed,
+                typed_at=typed_at,
+            )
+
+        task = Task(work)
+        task.signals.finished.connect(lambda report: self._finished(task, report))
+        task.signals.failed.connect(lambda error: self._failed(task, error))
+        self._running = (task, stop)
+        self._alive.add(task)
+        self.busyChanged.emit()
+        QThreadPool.globalInstance().start(task)
+
+    def stop_run(self) -> None:
+        """Stop the run going on, if any, at its next step. Nothing of it is saved or shown."""
+        if self._running is not None:
+            self._running[1].set()
+            self._running = None
+            self.busyChanged.emit()
+
+    def _is_current(self, task: Task) -> bool:
+        return self._running is not None and self._running[0] is task
+
+    def _finished(self, task: Task, report: Report) -> None:
+        self._alive.discard(task)
+        if not self._is_current(task):
+            return  # stopped: not this window's to show any more
+        self._running = None
+        self.report = report
+        self.fetched_at = self.now()
+        self.kept = find_kept_statement(self.settings.path)  # the run kept its statement
+        self.history.run_finished()
+        self.reportChanged.emit()
+        self.busyChanged.emit()
+
+    def _failed(self, task: Task, error: object) -> None:
+        self._alive.discard(task)
+        if not self._is_current(task) or isinstance(error, RunStopped):
+            return
+        self._running = None
+        self.history.run_finished()  # it may have saved listings before failing
+        self.busyChanged.emit()
+        if not isinstance(error, UserFacingError):
+            details = "".join(traceback.format_exception(error)) if isinstance(error, BaseException) else repr(error)
+            error = UserFacingError(UNEXPECTED.what_happened, UNEXPECTED.what_to_do, details=details)
+        self.show_error(error)
+
+    def _ask_during_run(self, resolution: Resolution) -> str | None:
+        """Which listing an investment is, asked while a run waits. "Always take the first" is saved at once:
+        the rest of this run already follows it."""
+        symbol, always_first = self.ask_listing(resolution)
+        if always_first and not self.settings.always_use_first_listing:
+            self.settings.always_use_first_listing = True
+            self.save_settings()
+        return symbol
 
     # -- files ---------------------------------------------------------------------
 

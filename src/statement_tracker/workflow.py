@@ -17,7 +17,7 @@ from statement_tracker.core.exporters.base import ExportResult
 from statement_tracker.core.exporters.excel import MISSING, ExcelExporter, typed_values
 from statement_tracker.core.market_data.pricing import RateBook, exchange_pair, price_in_currency
 from statement_tracker.core.market_data.provider import PriceProvider, PriceUnavailableError, Quote, SymbolInfo
-from statement_tracker.core.models import HoldingValuation, MarketPrice, Portfolio, PortfolioValuation, Statement
+from statement_tracker.core.models import HoldingValuation, MarketPrice, Portfolio, PortfolioValuation, Position, Statement
 from statement_tracker.core.parser import load_statement
 from statement_tracker.core.ticker_resolver import Confidence, Resolution, resolve_ticker
 from statement_tracker.kept_statement import is_kept_statement, keep_statement, latest_transaction_day
@@ -320,6 +320,8 @@ class StatementSummary:
     held: int
     """How many investments are still held at the end of it."""
     currency: str
+    positions: tuple[Position, ...] = ()
+    """The investments still held, with what was paid for them: Home lists them while prices come in."""
 
 
 def read_statement(path: Path, *, ignore_unknown_types: bool = False) -> StatementSummary:
@@ -327,9 +329,8 @@ def read_statement(path: Path, *, ignore_unknown_types: bool = False) -> Stateme
     Raises the same plain-language errors as ``build_report``."""
     statement = load_statement(path)
     portfolio = compute_portfolio(statement, ignore_unknown_types=ignore_unknown_types)
-    return StatementSummary(
-        len(statement.transactions), latest_transaction_day(statement), len(portfolio.open_positions), statement.currency
-    )
+    held = tuple(portfolio.open_positions)
+    return StatementSummary(len(statement.transactions), latest_transaction_day(statement), len(held), statement.currency, held)
 
 
 def needs_price(holding: HoldingValuation) -> bool:

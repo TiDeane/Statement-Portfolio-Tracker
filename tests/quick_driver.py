@@ -79,6 +79,17 @@ _UNMANAGED: list[AppWindow] = []
 """Windows opened outside a test (a script taking screenshots): never closed by the driver."""
 
 
+@pytest.fixture
+def english_computer():
+    """A computer set up for English in the United Kingdom: "1,001.00" and "14/11/2026"."""
+    from PySide6.QtCore import QLocale
+
+    before = QLocale()
+    QLocale.setDefault(QLocale(QLocale.Language.English, QLocale.Country.UnitedKingdom))
+    yield
+    QLocale.setDefault(before)
+
+
 def provider_with(*symbols: str) -> FakeProvider:
     """A provider that knows ``symbols`` as listings of the sample's EQQB, at 400 EUR."""
     provider = FakeProvider()
@@ -199,6 +210,13 @@ def find(window: QQuickWindow, text: str) -> QQuickItem:
     """The one visible item showing exactly ``text``."""
     found = find_all(window, text)
     assert len(found) == 1, f"{len(found)} visible items show {text!r}; shown: {texts(window)}"
+    return found[0]
+
+
+def find_starting(window: QQuickWindow, start: str) -> QQuickItem:
+    """The one visible item whose text starts with ``start`` (for texts too long to spell out)."""
+    found = [item for item in _with_text(window) if _text(item).startswith(start)]
+    assert len(found) == 1, f"{len(found)} visible items start with {start!r}"
     return found[0]
 
 

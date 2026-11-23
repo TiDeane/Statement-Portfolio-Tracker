@@ -163,6 +163,7 @@ def take(app: QGuiApplication, out: Path, scheme: str, work: Path) -> None:
 
     welcome = session.welcome
     welcome.use_statement(statement)
+    wait(app, lambda: not welcome.property("reading"))
     wait(app, lambda: False, 0.3)
     save(window, out / f"steps-{scheme}.png")
 
@@ -183,6 +184,7 @@ def take(app: QGuiApplication, out: Path, scheme: str, work: Path) -> None:
     welcome.next()  # "Show my investments": Home, fetching today's prices
     wait(app, lambda: not session.busy)
     session.home.updateSpreadsheet()
+    wait(app, lambda: not session.home.property("writing"))
     wait(app, lambda: False, 0.3)
     save(window, out / f"result-{scheme}.png")
     if scheme == "dark":

@@ -28,6 +28,7 @@ from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.models import MarketPrice
 from statement_tracker.core.ticker_resolver import Confidence, Resolution
 from statement_tracker.gui.formatting import day_text, parse_amount  # noqa: F401  (shared with the new window)
+from statement_tracker.gui.home import ValueChoice  # noqa: F401  (shared with the new window)
 from statement_tracker.gui.texts import PRIVACY_TEXT, RELEASES_URL, WHERE_IS_THE_FILE_TEXT  # noqa: F401
 
 ALWAYS_FIRST_TEXT = "Always choose the first option"
@@ -198,18 +199,6 @@ def ask_listing(parent: QWidget | None, resolution: Resolution) -> tuple[str | N
     if dialog.exec() == QDialog.DialogCode.Accepted:
         return dialog.chosen_symbol(), dialog.always_use_first()
     return None, False
-
-
-@dataclass(frozen=True)
-class ValueChoice:
-    """An investment the user may type its current value in for."""
-
-    ticker: str
-    label: str
-    """How the investment is shown, e.g. "(ABCD) World fund"."""
-    shares: Decimal
-    price: MarketPrice | None
-    """The price per share used now (last known or typed in before), or None if there is none."""
 
 
 class EnterValueDialog(QDialog):

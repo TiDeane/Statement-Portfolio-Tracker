@@ -11,6 +11,7 @@ import threading
 import traceback
 from collections.abc import Callable
 from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 
 from PySide6.QtCore import Property, QObject, QProcess, QStandardPaths, QThreadPool, QUrl, Signal, Slot
@@ -114,6 +115,8 @@ class Session(QObject):
         self.confirm: Callable[[str, str], bool] = self._confirm
         self.show_in_folder: Callable[[Path], object] = show_in_folder
         self.ask_listing: Callable[[Resolution], tuple[str | None, bool]] = lambda resolution: (None, False)
+        self.ask_value: Callable[[list, str, str], tuple[str, Decimal] | None] = self._ask_value
+        """What an investment is worth now: (ticker, value of the whole holding), or None."""
         """Which listing an investment is: (symbol or None to skip, "always take the first")."""
 
         from statement_tracker.gui.welcome import Welcome  # it needs this module's Session
@@ -246,6 +249,11 @@ class Session(QObject):
             error = UserFacingError(UNEXPECTED.what_happened, UNEXPECTED.what_to_do, details=details)
         self.show_error(error)
 
+    def set_report(self, report: Report) -> None:
+        """Show ``report``, worked out again from the last run without fetching (a value entered, say)."""
+        self.report = report
+        self.reportChanged.emit()
+
     def _ask_during_run(self, resolution: Resolution) -> str | None:
         """Which listing an investment is, asked while a run waits. "Always take the first" is saved at once:
         the rest of this run already follows it."""
@@ -317,6 +325,23 @@ class Session(QObject):
         title, _, text = question.partition("\n\n")
         answer = self.dialogs.ask("message", {"title": title, "text": text, "details": "", "confirm": confirm, "cancel": "Cancel"})
         return answer is not None
+
+    def _ask_value(self, choices: list, selected: str, currency: str) -> tuple[str, Decimal] | None:
+        """Ask what the ``selected`` investment is worth now, until an amount above zero is typed or the
+        dialog is cancelled."""
+        from statement_tracker.gui.formatting import parse_amount
+        from statement_tracker.gui.home import value_question
+
+        choice = next(choice for choice in choices if choice.ticker == selected)
+        question = value_question(choice, currency)
+        while True:
+            answer = self.dialogs.ask("value", question)
+            if answer is None:
+                return None
+            value = parse_amount(str(answer.get("text", "")))
+            if value is not None:
+                return choice.ticker, value
+            question = {**question, "error": "Type an amount above zero, like 2,040.00."}
 
     def _ask_open_file(self, title: str, kinds: str, start: Path) -> Path | None:
         answer = self.dialogs.ask(

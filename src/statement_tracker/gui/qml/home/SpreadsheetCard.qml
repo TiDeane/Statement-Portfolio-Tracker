@@ -81,6 +81,15 @@ Card {
         }
     }
 
+    Text {
+        visible: card.home.hasSpreadsheet && card.home.offlineSheetNote !== ""
+        text: card.home.offlineSheetNote
+        color: Theme.muted
+        font.pixelSize: 13
+        wrapMode: Text.Wrap
+        Layout.fillWidth: true
+    }
+
     Banner {
         visible: card.home.sheetResult !== ""
         tone: card.home.sheetResult === "ok" ? "ok" : "error"

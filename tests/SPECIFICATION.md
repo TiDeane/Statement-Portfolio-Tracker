@@ -268,5 +268,10 @@ The window being built to replace F and G (design: `docs/superpowers/specs/2026-
   - **Open folder** opens the folder the spreadsheet is in, with the file selected where the system allows it.
   - Without a spreadsheet, the card offers **Choose spreadsheet…** and **Create a new one…**. An .xlsx dropped on Home becomes the spreadsheet.
   - When backup copies are turned off, the card says so in red.
+- **K8.** Values that are not today's from Yahoo (replaces F5):
+  - An investment without a value is greyed: its Worth now reads "No price today", its share "Not in the total", and its gain is a button **Enter its value…**. Double-clicking the row does the same.
+  - Entering asks "What is <name> worth now?" for the whole investment, in the statement's currency, says how many shares that is and the last price found, and that the value is marked "your value" and kept until Yahoo Finance has a price again. Both 2,040.00 and 2.040,00 read as 2040; anything that is not an amount above zero is explained and asked again.
+  - A value entered shows "your value" under it; a last known price shows "price from <date>". Either can be replaced by double-clicking its row.
+  - When Yahoo Finance cannot be reached, the totals say so in amber: "Yahoo Finance can't be reached right now, so these values use the last prices found, from <date>.", with **Try again**. The spreadsheet card says updating then writes no history row.
 - **K12.** Errors are in plain words: what happened, and what to do.
   - Details can be copied with **Copy details**; no stack trace is shown.

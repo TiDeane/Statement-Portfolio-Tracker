@@ -8,7 +8,8 @@ from decimal import Decimal
 from PySide6.QtCore import QAbstractListModel, QByteArray, QModelIndex, QObject, QPersistentModelIndex, Qt
 
 from statement_tracker.core.models import Position
-from statement_tracker.gui.formatting import gain, money, share
+from statement_tracker.core.models import MarketPrice
+from statement_tracker.gui.formatting import day_text, gain, money, share
 from statement_tracker.settings import Settings
 from statement_tracker.workflow import Report
 
@@ -53,6 +54,17 @@ def name_and_detail(ticker: str, settings: Settings) -> tuple[str, str]:
     return name, f"{ticker} · {exchange}" if exchange else ticker
 
 
+def worth_note(price: MarketPrice | None) -> str:
+    """What is written under a value that is not today's from Yahoo."""
+    if price is None:
+        return ""
+    if price.entered:
+        return "your value"
+    if price.last_known:
+        return f"price from {day_text(price.as_of.date())}" if price.as_of else "price from an earlier day"
+    return ""
+
+
 def holding_rows(report: Report, settings: Settings) -> list[HoldingRow]:
     """Home's rows for a valued portfolio, in statement order."""
     rows = []
@@ -68,7 +80,7 @@ def holding_rows(report: Report, settings: Settings) -> list[HoldingRow]:
                 detail=detail,
                 invested=money(holding.position.cost_basis),
                 worth=money(holding.market_value) if priced else "",
-                worth_note="",
+                worth_note=worth_note(holding.price) if priced else "",
                 share=share(allocation) if allocation is not None else "",
                 share_fraction=float(allocation / 100) if allocation is not None else 0.0,
                 gain=gain(holding.unrealized_pnl, holding.percent_change) if holding.unrealized_pnl is not None else "",

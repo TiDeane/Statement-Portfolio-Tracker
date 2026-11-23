@@ -3,6 +3,7 @@ Exposed to QML as ``session.home``; every text is written out here."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -10,19 +11,57 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
-from statement_tracker.gui.formatting import day_text, gain, money, time_text
+from statement_tracker.core.models import MarketPrice
+from statement_tracker.gui.formatting import day_text, gain, money, shares_text, time_text
 from statement_tracker.gui.holdings_model import HoldingsModel, holding_rows, loading_rows, name_and_detail, total_row
 
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.exporters.base import ExportResult
 from statement_tracker.gui.welcome import NEW_SPREADSHEET_NAME, SPREADSHEET_FILES, STATEMENT_FILES
-from statement_tracker.workflow import Report, update_spreadsheet
+from statement_tracker.ui.undo import ENTERED
+from statement_tracker.workflow import Report, needs_price, update_spreadsheet, with_entered_prices
 
 if TYPE_CHECKING:
     from statement_tracker.gui.session import Session
 
 UNAVAILABLE = "unavailable"
 BACKUPS_OFF = "No backup copy will be made before it is changed: backups are turned off in Settings."
+NO_HISTORY_ROW = (
+    "Updating now writes these values, without a history row: Portfolio History only takes days with today's prices."
+)
+VALUE_NOTE = "It's marked \u201cyour value\u201d here and in the spreadsheet, and kept until Yahoo Finance has a price again."
+
+
+@dataclass(frozen=True)
+class ValueChoice:
+    """An investment the user may type its current value in for."""
+
+    ticker: str
+    label: str
+    """How the investment is named, e.g. "World fund"."""
+    shares: Decimal
+    price: MarketPrice | None
+    """The price per share used now (last known or typed in before), or None if there is none."""
+
+
+def value_question(choice: ValueChoice, currency: str) -> dict[str, str]:
+    """The texts of the dialog that asks what ``choice`` is worth now."""
+    hint = f"For all {shares_text(choice.shares)} shares you hold, as your Revolut app shows it."
+    price = choice.price
+    if price is not None and price.as_of is not None:
+        worth = money(price.price * choice.shares)
+        if price.entered:
+            hint += f" You entered {worth} {currency} on {day_text(price.as_of.astimezone().date())}."
+        else:
+            hint += f" The last price found was worth {worth} {currency}, on {day_text(price.as_of.date())}."
+    return {
+        "title": f"What is {choice.label} worth now?",
+        "subtitle": f"{choice.ticker} \u00b7 Yahoo Finance has no price for it today.",
+        "hint": hint,
+        "note": VALUE_NOTE,
+        "currency": currency,
+        "error": "",
+    }
 
 
 def listed(names: list[str]) -> str:
@@ -190,6 +229,22 @@ class Home(QObject):
         notify=changed,
     )
 
+    # -- prices that are not today's from Yahoo -------------------------------------
+
+    def _get_offline_text(self) -> str:
+        report = self._report()
+        if report is None or not report.valuation.uses_last_known_prices:
+            return ""
+        days = [holding.price.as_of for holding in report.valuation.holdings
+                if holding.price is not None and holding.price.last_known and holding.price.as_of]
+        when = f", from {day_text(min(days).date())}" if days else ""
+        return f"Yahoo Finance can't be reached right now, so these values use the last prices found{when}."
+
+    offlineText = Property(str, _get_offline_text, notify=changed)
+    offlineSheetNote = Property(
+        str, lambda self: NO_HISTORY_ROW if self._get_offline_text() and self._sheet() is not None else "", notify=changed
+    )
+
     busy = Property(bool, _get_busy, notify=changed)
     statementLine = Property(str, _get_statement_line, notify=changed)
     hasReport = Property(bool, lambda self: self._report() is not None, notify=changed)
@@ -247,6 +302,31 @@ class Home(QObject):
             self._sheet_lines, self._sheet_details = result_lines(report, exported), ""
             self._updated_at, self._updated_on = self._session.now(), self._session.today()
         self.changed.emit()
+
+    @Slot(int)
+    def enterValue(self, row: int) -> None:
+        """Let the user type in what the investment in ``row`` is worth now, when Yahoo has no current
+        price for it. Kept as a price per share; the values are worked out again without fetching."""
+        report = self._session.report
+        if report is None or self._session.busy:
+            return
+        holdings = report.valuation.holdings
+        if not (0 <= row < len(holdings) and needs_price(holdings[row])):
+            return
+        settings = self._session.settings
+        choices = [
+            ValueChoice(holding.position.ticker, name_and_detail(holding.position.ticker, settings)[0],
+                        holding.position.shares, holding.price)
+            for holding in holdings
+            if needs_price(holding)
+        ]
+        answer = self._session.ask_value(choices, holdings[row].position.ticker, report.statement.currency)
+        if not answer:
+            return
+        ticker, value = answer
+        shares = next(choice.shares for choice in choices if choice.ticker == ticker)
+        self._session.history.record(f"the value entered for {ticker}", [ticker], {ENTERED})
+        self._session.set_report(with_entered_prices(report, {ticker: value / shares}, settings, now=self._session.now()))
 
     @Slot()
     def openFolder(self) -> None:

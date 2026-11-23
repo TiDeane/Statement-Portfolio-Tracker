@@ -37,6 +37,7 @@ ApplicationWindow {
     }
 
     MessageDialog { id: messageDialog }
+    ValueDialog { id: valueDialog }
     FileDialogs { id: fileDialogs }
 
     Connections {
@@ -44,6 +45,8 @@ ApplicationWindow {
         function onOpened(kind, data) {
             if (kind === "message")
                 messageDialog.show(data)
+            else if (kind === "value")
+                valueDialog.show(data)
             else if (kind === "openFile")
                 fileDialogs.openFile(data)
             else if (kind === "saveFile")

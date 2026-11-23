@@ -115,9 +115,22 @@ Card {
         }
     }
 
+    // Yahoo Finance could not be reached: the last prices found, and trying again.
+    Banner {
+        visible: !card.waiting && card.home.offlineText !== ""
+        tone: "warn"
+        iconName: "wifiOff"
+        text: card.home.offlineText
+        Layout.fillWidth: true
+        SecondaryButton {
+            text: "Try again"
+            onClicked: card.home.refresh()
+        }
+    }
+
     // Then: where the prices come from, and what the totals leave out.
     RowLayout {
-        visible: !card.waiting && card.home.hasReport
+        visible: !card.waiting && card.home.hasReport && card.home.offlineText === ""
         spacing: 12
         Layout.fillWidth: true
         ColumnLayout {

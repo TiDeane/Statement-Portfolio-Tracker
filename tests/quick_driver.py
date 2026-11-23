@@ -133,9 +133,12 @@ def open_app(
 
 
 def settle(app) -> None:
-    """Let work queued for "once the current event is handled" run."""
-    for _ in range(4):
+    """Let work queued for "once the current event is handled" run, and Qt Quick lay out what changed
+    (it does so on its next frame, a few milliseconds later)."""
+    for _ in range(6):
         app.processEvents()
+        time.sleep(0.005)
+    app.processEvents()
 
 
 def wait_until(app, condition: Callable[[], bool], seconds: float = 20) -> None:
@@ -220,14 +223,28 @@ def find_starting(window: QQuickWindow, start: str) -> QQuickItem:
     return found[0]
 
 
+def row_items(window: QQuickWindow) -> list[QQuickItem]:
+    """The rows of the investments list (the Total last), top to bottom, to click or double-click."""
+    return sorted((item for item in _items(window) if item.objectName() == "investmentRow" and _shown(item)), key=_place)
+
+
 def rows(window: QQuickWindow) -> list[list[str]]:
     """The texts of each row of the investments list, left to right, top to bottom."""
     shown = set(_with_text(window))
     result = []
     for row in sorted((item for item in _items(window) if item.objectName() == "investmentRow" and _shown(item)), key=_place):
         cells = [item for item in shown if _inside(item, row)]
-        result.append([_text(item) for item in sorted(cells, key=lambda item: (_place(item)[1], _place(item)[0]))])
+        result.append([_text(item) for item in sorted(cells, key=lambda item: _cell_place(item, row))])
     return result
+
+
+def _cell_place(item: QQuickItem, row: QQuickItem) -> tuple[float, float]:
+    """Where a text sits in its row: its column's left edge, then its own height (a note under a value
+    comes after it, however it is aligned)."""
+    cell = item
+    while cell.parentItem() is not None and cell.parentItem().parentItem() is not row:
+        cell = cell.parentItem()
+    return cell.mapToScene(QPointF(0, 0)).x(), item.mapToScene(QPointF(0, 0)).y()
 
 
 def _inside(item: QQuickItem, container: QQuickItem) -> bool:
@@ -259,12 +276,29 @@ def _window_of(item: QQuickItem) -> QQuickWindow:
     raise AssertionError("the item is not in a window opened by open_app")
 
 
+def scroll_to(item: QQuickItem) -> None:
+    """Scroll the page (any scrolling area around ``item``) until ``item`` is in view, as a user would."""
+    parent = item.parentItem()
+    while parent is not None:
+        if parent.property("contentY") is not None and parent.property("contentHeight") is not None:
+            content = parent.property("contentItem")
+            top = item.mapToItem(content, QPointF(0, 0)).y()
+            shown_from, height = parent.property("contentY"), parent.height()
+            if top < shown_from or top + item.height() > shown_from + height:
+                limit = max(0.0, parent.property("contentHeight") - height)
+                parent.setProperty("contentY", max(0.0, min(top - height / 3, limit)))
+                settle(QGuiApplication.instance())
+        parent = parent.parentItem()
+
+
 def click(item: QQuickItem) -> None:
+    scroll_to(item)
     QTest.mouseClick(_window_of(item), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _centre(item))
     settle(QGuiApplication.instance())
 
 
 def double_click(item: QQuickItem) -> None:
+    scroll_to(item)
     QTest.mouseDClick(_window_of(item), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _centre(item))
     settle(QGuiApplication.instance())
 

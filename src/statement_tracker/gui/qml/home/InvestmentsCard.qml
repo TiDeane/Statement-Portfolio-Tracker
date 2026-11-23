@@ -48,6 +48,8 @@ Rectangle {
             model: card.home.holdings
             InvestmentRow {
                 required property var model
+                required property int index
+                onDoubleClicked: card.home.enterValue(index)
                 name: model.name
                 detail: model.detail
                 invested: model.invested

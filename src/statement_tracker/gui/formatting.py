@@ -26,6 +26,13 @@ def money_with_currency(amount: Decimal, currency: str, locale: QLocale | None =
     return f"{money(amount, locale)} {currency}"
 
 
+def shares_text(shares: Decimal, locale: QLocale | None = None) -> str:
+    """A number of shares, with as many decimals as it has (up to Revolut's 8): "1.47328346", "4"."""
+    text = _locale(locale).toString(float(shares), "f", 8)
+    point = _locale(locale).decimalPoint()
+    return text.rstrip("0").rstrip(point) if point in text else text
+
+
 def percent(value: Decimal, locale: QLocale | None = None) -> str:
     """A percentage with two decimals: "12.87 %"."""
     return f"{_locale(locale).toString(float(value), 'f', 2)} %"

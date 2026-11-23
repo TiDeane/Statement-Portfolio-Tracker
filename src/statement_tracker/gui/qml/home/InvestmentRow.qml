@@ -17,15 +17,23 @@ Rectangle {
     property string gain: ""
     property bool gainUp: true
     property string status: "priced"
+    signal doubleClicked()
 
     readonly property bool loading: status === "loading"
+    readonly property bool missing: status === "missing"
     readonly property bool header: mode === "header"
     readonly property bool total: mode === "total"
     readonly property int weight: total ? Font.Bold : Font.Normal
 
     objectName: header ? "investmentHeader" : "investmentRow"
     implicitHeight: header ? 38 : total ? 56 : 64
-    color: header || total ? Theme.subtle : Theme.surface
+    color: header || total || missing ? Theme.subtle : Theme.surface
+
+    MouseArea {  // double-clicking a row whose value is not today's from Yahoo lets the user enter it
+        anchors.fill: parent
+        enabled: row.mode === "holding" && !row.loading
+        onDoubleClicked: row.doubleClicked()
+    }
 
     Rectangle {  // the line above each row
         visible: !row.header
@@ -105,6 +113,12 @@ Rectangle {
                     visible: row.loading
                     Layout.alignment: Qt.AlignRight
                 }
+                Chip {
+                    visible: row.missing
+                    text: "No price today"
+                    tone: "warn"
+                    Layout.alignment: Qt.AlignRight
+                }
             }
         }
 
@@ -124,7 +138,13 @@ Rectangle {
                 implicitHeight: 6
             }
             Text {
-                visible: !row.loading
+                visible: row.missing
+                text: "Not in the total"
+                color: Theme.muted
+                font.pixelSize: 13
+            }
+            Text {
+                visible: !row.loading && !row.missing
                 text: row.share
                 color: row.header ? Theme.muted : row.total ? Theme.muted : Theme.muted
                 font.pixelSize: row.header ? 13 : 14
@@ -155,6 +175,14 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 implicitWidth: 120
+            }
+            SecondaryButton {
+                visible: row.missing
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                implicitHeight: 36
+                text: "Enter its value…"
+                onClicked: row.doubleClicked()
             }
         }
     }

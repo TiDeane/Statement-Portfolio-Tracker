@@ -13,6 +13,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 
 from statement_tracker import APP_NAME, __version__
 from statement_tracker.core.market_data.provider import PriceProvider
+from statement_tracker.gui.theme import Theme
 from statement_tracker.settings import Settings
 
 QML_DIR = Path(__file__).with_name("qml")
@@ -58,14 +59,17 @@ class AppWindow(QObject):
         now: Callable[[], datetime] = utc_now,
     ) -> None:
         super().__init__()
-        make_application([])
+        app = make_application([])
         self.settings = settings
         self._provider_factory = provider_factory
         self._today = today
         self._now = now
         self.qml_warnings: list[str] = []
         """What the QML engine reported, kept for tests and for the smoke test's report."""
+        self.theme = Theme(self)
+        self.theme.follow(app)
         self.engine = QQmlApplicationEngine()
+        self.engine.rootContext().setContextProperty("Theme", self.theme)
         self.engine.warnings.connect(lambda errors: self.qml_warnings.extend(error.toString() for error in errors))
         self.engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
         roots = self.engine.rootObjects()

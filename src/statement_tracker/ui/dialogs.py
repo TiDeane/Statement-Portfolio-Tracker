@@ -5,10 +5,9 @@ from __future__ import annotations
 import html
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
-from PySide6.QtCore import QDate, QLocale, QTimer
+from PySide6.QtCore import QLocale, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -28,55 +27,8 @@ from statement_tracker import APP_NAME, __version__
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.models import MarketPrice
 from statement_tracker.core.ticker_resolver import Confidence, Resolution
-
-RELEASES_URL = "https://github.com/TiDeane/Statement-Portfolio-Tracker/releases"
-
-
-def day_text(day: date, locale: QLocale | None = None) -> str:
-    """A date in figures, in the order and with the separators the computer uses: 14/11/2026 in
-    Portugal, 11/14/2026 in the United States.
-
-    Never with month or day names: the app's words are English, and names would be in the
-    computer's own language in the middle of an English sentence.
-    """
-    locale = locale or QLocale()
-    pattern = locale.dateFormat(QLocale.FormatType.ShortFormat)
-    if "MMM" in pattern or "ddd" in pattern:  # a name after all: the date as Revolut's statement writes it
-        pattern = "yyyy-MM-dd"
-    elif "yyyy" not in pattern:
-        pattern = pattern.replace("yy", "yyyy")  # 14/11/26 could be read as 2014 or 2026
-    return locale.toString(QDate(day.year, day.month, day.day), pattern)
-
-
-PRIVACY_TEXT = (
-    "Everything happens on this computer. There are no accounts and nothing is recorded about how you "
-    "use the app.\n\n"
-    "The only information sent anywhere is the ticker symbols of your investments and dates, which go to "
-    "Yahoo Finance to look up prices. Your amounts and your statement never leave this computer.\n\n"
-    "The app keeps a copy of the last statement you used in its own folder, so that next time it can "
-    "look up today's values without a new statement. It stays on this computer.\n\n"
-    "This app is unofficial and is not affiliated with Revolut. It is not financial advice. Prices are "
-    "read from Yahoo Finance's public web pages, which is unofficial; they may be delayed or wrong, and "
-    "are subject to Yahoo's terms."
-)
-
-WHERE_IS_THE_FILE_TEXT = (
-    "You need the statement of your stock and ETF trades from the Revolut app, saved as a CSV file.\n\n"
-    "In the Revolut app:\n"
-    "1. Open the Invest tab.\n"
-    "2. Tap More.\n"
-    "3. Tap Documents.\n"
-    "4. Tap Brokerage account.\n"
-    "5. Tap Account statement.\n"
-    "6. Choose CSV as the format.\n"
-    "7. Choose the date range All time.\n\n"
-    "The date range matters: the app needs your whole history, from your first trade until today. "
-    "The other choices, a range of months or a tax year, list only the buys and sells inside that "
-    "period, so they give wrong results or are rejected as incomplete.\n\n"
-    "Revolut may move these menus in a newer version of its app. Once you have the file on this "
-    "computer, choose it in step 1 or drag it onto the window."
-)
-
+from statement_tracker.gui.formatting import day_text, parse_amount  # noqa: F401  (shared with the new window)
+from statement_tracker.gui.texts import PRIVACY_TEXT, RELEASES_URL, WHERE_IS_THE_FILE_TEXT  # noqa: F401
 
 ALWAYS_FIRST_TEXT = "Always choose the first option"
 ALWAYS_FIRST_TIP = (
@@ -246,26 +198,6 @@ def ask_listing(parent: QWidget | None, resolution: Resolution) -> tuple[str | N
     if dialog.exec() == QDialog.DialogCode.Accepted:
         return dialog.chosen_symbol(), dialog.always_use_first()
     return None, False
-
-
-def parse_amount(text: str) -> Decimal | None:
-    """Read an amount typed in as people write it: 512.34, 512,34, 1,234.56 or 1.234,56.
-
-    Of a comma and a full stop, the last one is the decimal point and the other separates
-    thousands; either one alone is the decimal point. Returns None unless it is above zero.
-    """
-    text = text.strip().replace(" ", "").replace(" ", "")
-    if "," in text and "." in text:
-        decimal_point = "," if text.rfind(",") > text.rfind(".") else "."
-        text = text.replace("." if decimal_point == "," else ",", "")
-    text = text.replace(",", ".")
-    if not text or not all(character.isdigit() or character == "." for character in text):
-        return None
-    try:
-        price = Decimal(text)
-    except InvalidOperation:
-        return None
-    return price if price > 0 else None
 
 
 @dataclass(frozen=True)

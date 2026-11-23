@@ -9,6 +9,7 @@ ApplicationWindow {
     minimumWidth: 720
     minimumHeight: 560
     title: "Statement Portfolio Tracker"
+    color: Theme.bg
 
     // Called by the drop area below for files dropped on the window.
     function dropFiles(urls) {
@@ -23,6 +24,7 @@ ApplicationWindow {
         Label {
             id: heading
             text: "Your portfolio"
+            color: Theme.text
             font.pixelSize: 20
         }
 

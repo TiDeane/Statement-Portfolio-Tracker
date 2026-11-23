@@ -235,3 +235,11 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
 - **J4.** The packaged app's smoke test reads the sample offline and writes a spreadsheet.
 - **J5.** On Windows, the installer can tell that the app is open.
 - **J6.** Installing a newer version over an older one keeps everything: the settings, listings, names, entered values and last prices saved by any earlier version are read and used.
+
+## K. The new window (Qt Quick)
+
+The window being built to replace F and G (design: `docs/superpowers/specs/2026-11-23-qt-quick-redesign-design.md`). While both exist, F and G describe the Widgets window and K the new one; K then becomes the new F and G.
+
+- **K1.** Opening: with a statement kept from last time, the app opens on Home and fetches today's prices. With none, or one that can no longer be read, it opens on first launch, without an error message.
+- **K12.** Errors are in plain words: what happened, and what to do.
+  - Details can be copied with **Copy details**; no stack trace is shown.

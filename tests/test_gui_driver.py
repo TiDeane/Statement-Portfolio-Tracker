@@ -1,20 +1,9 @@
-"""The test driver itself: the new window can be read and acted on as a user would, offscreen."""
+"""The new window's start: the smoke test opens it when switched on. (Clicks, typing and drops are
+exercised by every window test from test_gui_session.py on.)"""
 
 from pathlib import Path
 
-from fakes import FakeProvider
-from quick_driver import app, click, close_windows_afterwards, drop, find, open_app, shows  # noqa: F401
-
-
-def test_the_driver_reads_clicks_and_drops(app, tmp_path: Path) -> None:
-    shell = open_app(tmp_path, FakeProvider())
-    assert shows(shell.window, "Your portfolio")
-
-    click(find(shell.window, "Try me"))
-    assert shows(shell.window, "Clicked")
-
-    drop(shell.window, tmp_path / "statement.csv")
-    assert shows(shell.window, "statement.csv")
+from quick_driver import app, close_windows_afterwards  # noqa: F401
 
 
 def test_the_smoke_test_opens_the_new_window_when_it_is_switched_on(app, tmp_path: Path, monkeypatch) -> None:

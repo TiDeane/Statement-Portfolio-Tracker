@@ -13,6 +13,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 
 from statement_tracker import APP_NAME, __version__
 from statement_tracker.core.market_data.provider import PriceProvider
+from statement_tracker.gui.session import Session
 from statement_tracker.gui.theme import Theme
 from statement_tracker.settings import Settings
 
@@ -71,7 +72,11 @@ class AppWindow(QObject):
         # so no binding is left reading an object already gone.
         self.theme = Theme(self.engine)
         self.theme.follow(app)
-        self.engine.rootContext().setContextProperty("Theme", self.theme)
+        self.session = Session(settings, provider_factory, today, now, self.engine)
+        context = self.engine.rootContext()
+        context.setContextProperty("Theme", self.theme)
+        context.setContextProperty("session", self.session)
+        context.setContextProperty("dialogs", self.session.dialogs)
         self.engine.warnings.connect(lambda errors: self.qml_warnings.extend(error.toString() for error in errors))
         self.engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))
         roots = self.engine.rootObjects()

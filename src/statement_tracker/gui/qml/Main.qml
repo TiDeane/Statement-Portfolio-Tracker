@@ -1,7 +1,9 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
+import "dialogs"
 
-// The window. For now a stand-in that proves the foundation: a heading, a button and dropping files.
+// The window: one page at a time (first launch, Home or Settings), files dropped anywhere on it,
+// and the dialogs the session opens.
 ApplicationWindow {
     id: root
     width: 1040
@@ -10,28 +12,18 @@ ApplicationWindow {
     minimumHeight: 560
     title: "Statement Portfolio Tracker"
     color: Theme.bg
+    onClosing: dialogs.cancel()
 
-    // Called by the drop area below for files dropped on the window.
+    readonly property var pages: ({ "welcome": "WelcomePage", "home": "HomePage", "settings": "SettingsPage" })
+
+    // Files dropped on the window, as local file URLs; the session decides what each is for.
     function dropFiles(urls) {
-        if (urls.length > 0)
-            heading.text = decodeURIComponent(urls[0].toString().split("/").pop())
+        session.dropFiles(Array.from(urls, (url) => url.toString()))
     }
 
-    Column {
-        anchors.centerIn: parent
-        spacing: 16
-
-        Label {
-            id: heading
-            text: "Your portfolio"
-            color: Theme.text
-            font.pixelSize: 20
-        }
-
-        Button {
-            text: "Try me"
-            onClicked: heading.text = "Clicked"
-        }
+    Loader {
+        anchors.fill: parent
+        source: "pages/" + root.pages[session.page] + ".qml"
     }
 
     DropArea {
@@ -39,6 +31,21 @@ ApplicationWindow {
         onDropped: (drop) => {
             root.dropFiles(drop.urls)
             drop.accept(Qt.CopyAction)
+        }
+    }
+
+    MessageDialog { id: messageDialog }
+    FileDialogs { id: fileDialogs }
+
+    Connections {
+        target: dialogs
+        function onOpened(kind, data) {
+            if (kind === "message")
+                messageDialog.show(data)
+            else if (kind === "openFile")
+                fileDialogs.openFile(data)
+            else if (kind === "saveFile")
+                fileDialogs.saveFile(data)
         }
     }
 }

@@ -27,7 +27,7 @@ QtWidgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
 QtQuick = pytest.importorskip("PySide6.QtQuick", exc_type=ImportError)
 
 from fakes import SAMPLE, FakeProvider, ranges_around  # noqa: E402
-from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, Qt, QUrl, qInstallMessageHandler  # noqa: E402
+from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, Qt, QTimer, QUrl, qInstallMessageHandler  # noqa: E402
 from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent, QGuiApplication, QKeyEvent  # noqa: E402
 from PySide6.QtQuick import QQuickItem, QQuickWindow  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
@@ -279,3 +279,14 @@ def drop(window: QQuickWindow, *paths: Path) -> None:
     for event in events:
         QGuiApplication.sendEvent(window, event)
     settle(QGuiApplication.instance())
+
+
+def when_a_dialog_opens(shell: AppWindow, act: Callable[[], object]) -> None:
+    """Run ``act`` (the user's clicks) once the next dialog shows. The call that opens a dialog waits for
+    its answer, so the test sets this up first, then makes that call."""
+
+    def opened(*_args: object) -> None:
+        shell.session.dialogs.opened.disconnect(opened)
+        QTimer.singleShot(0, lambda: (settle(QGuiApplication.instance()), act()))
+
+    shell.session.dialogs.opened.connect(opened)

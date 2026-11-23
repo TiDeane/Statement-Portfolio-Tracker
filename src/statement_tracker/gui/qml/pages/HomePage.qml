@@ -42,15 +42,22 @@ Item {
 
             // What goes in (the statement) and what comes out (the spreadsheet), side by side.
             GridLayout {
-                columns: page.width > 820 ? 2 : 1
+                id: sources
+                readonly property bool sideBySide: page.width > 820
+                columns: sideBySide ? 2 : 1
                 columnSpacing: 16
                 rowSpacing: 16
                 Layout.fillWidth: true
                 StatementCard {
+                    // A third of the row: the spreadsheet's longer texts must not squeeze it.
+                    Layout.fillWidth: !sources.sideBySide
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: sources.sideBySide ? Math.max(300, (sources.width - 16) * 0.36) : -1
+                }
+                SpreadsheetCard {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.preferredWidth: 1
-                    Layout.horizontalStretchFactor: 1
                 }
             }
             InvestmentsCard { Layout.fillWidth: true }

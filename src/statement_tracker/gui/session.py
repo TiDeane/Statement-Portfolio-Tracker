@@ -69,6 +69,8 @@ class Session(QObject):
     pageChanged = Signal()
     busyChanged = Signal()
     reportChanged = Signal()
+    settingsChanged = Signal()
+    """Something shown changed in the settings: the spreadsheet chosen, the backups, a name."""
     progressed = Signal(int, int, str)
     """A run's progress: steps done, steps in all (0 while unknown), what is being done."""
 
@@ -268,6 +270,12 @@ class Session(QObject):
             self.settings.last_folder = folder
             self.save_settings()
 
+    def use_spreadsheet(self, path: Path) -> None:
+        """Update this spreadsheet from now on (chosen, created or dropped on Home)."""
+        self.settings.spreadsheet_path = path
+        self.save_settings()
+        self.settingsChanged.emit()
+
     def save_settings(self) -> None:
         try:
             self.settings.save()
@@ -285,6 +293,8 @@ class Session(QObject):
             if path.suffix.lower() == ".xlsx":
                 if on_welcome and self._welcome.step == "spreadsheet":
                     self._welcome.use_spreadsheet(path)
+                elif self._page == "home":
+                    self.use_spreadsheet(path)
             elif on_welcome and self._welcome.step == "statement":
                 self._welcome.use_statement(path)
             elif self._page == "home":

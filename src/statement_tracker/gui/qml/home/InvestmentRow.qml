@@ -44,7 +44,7 @@ Rectangle {
             spacing: 1
             Layout.fillWidth: true
             Layout.preferredWidth: 1
-            Layout.horizontalStretchFactor: 22
+            Layout.horizontalStretchFactor: 20
             Text {
                 text: row.name
                 color: row.header ? Theme.muted : Theme.text
@@ -112,15 +112,15 @@ Rectangle {
             spacing: 10
             Layout.fillWidth: true
             Layout.preferredWidth: 1
-            Layout.horizontalStretchFactor: 11
+            Layout.horizontalStretchFactor: 13
             ProgressLine {
                 visible: row.mode === "holding" && !row.loading && row.share !== ""
                 fraction: row.shareFraction
-                Layout.preferredWidth: 72
+                Layout.preferredWidth: 56
             }
             Skeleton {
                 visible: row.loading
-                implicitWidth: 72
+                implicitWidth: 56
                 implicitHeight: 6
             }
             Text {

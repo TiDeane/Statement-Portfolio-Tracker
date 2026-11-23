@@ -58,6 +58,7 @@ The app reads the account statement CSV file you export from the Revolut app. It
   - [Your investments](#your-investments)
   - [Your statement](#your-statement)
   - [Your spreadsheet](#your-spreadsheet)
+  - [Appearance](#appearance)
   - [About and privacy](#about-and-privacy)
 - [Privacy](#privacy)
 - [Known limitations](#known-limitations)
@@ -352,6 +353,10 @@ The date of the latest transaction in the statement the app keeps, which lets it
 ### Your spreadsheet
 
 The spreadsheet the app updates, with **Open folder**, **Choose another...** and **Stop using it** (or, without one, **Choose spreadsheet...** and **Create a new one...**). **Backup copies to keep** sets, with **−** and **+**, how many [backup copies](#backup-copies) of it are kept in all.
+
+### Appearance
+
+**Use device theme** (the first time) makes the app light or dark as your computer is set, and follows it when that changes. **Light** or **Dark** keeps it that way whatever the computer does.
 
 ### About and privacy
 

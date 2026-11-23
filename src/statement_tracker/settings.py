@@ -20,6 +20,8 @@ from statement_tracker.core.exporters.excel import (
 from statement_tracker.core.ticker_resolver import DEFAULT_SUFFIXES
 
 APP_FOLDER = "StatementPortfolioTracker"
+APPEARANCES = ("system", "light", "dark")
+"""The window's look: as the computer is set, or always light, or always dark."""
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,8 @@ class Settings:
         self.history_sheet: str = DEFAULT_HISTORY_SHEET
         self.backups_kept: int = BACKUPS_KEPT
         """Backup copies kept next to the spreadsheet, at most one a day; 0 turns backups off. Set by the user."""
+        self.appearance: str = "system"
+        """Light or dark: "system" (as the computer is set), "light" or "dark". Set by the user."""
 
     @classmethod
     def load(cls, path: Path | None = None) -> Settings:
@@ -84,6 +88,8 @@ class Settings:
             settings.holdings_sheet = str(raw.get("holdings_sheet", DEFAULT_HOLDINGS_SHEET))
             settings.history_sheet = str(raw.get("history_sheet", DEFAULT_HISTORY_SHEET))
             settings.backups_kept = min(max(int(raw.get("backups_kept", BACKUPS_KEPT)), 0), MAX_BACKUPS_KEPT)
+            appearance = raw.get("appearance", "system")
+            settings.appearance = appearance if appearance in APPEARANCES else "system"
         except (OSError, ValueError, TypeError, AttributeError) as exc:
             raise UserFacingError(
                 "The app's saved settings could not be read.",
@@ -105,6 +111,7 @@ class Settings:
             "holdings_sheet": self.holdings_sheet,
             "history_sheet": self.history_sheet,
             "backups_kept": self.backups_kept,
+            "appearance": self.appearance,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(".tmp")

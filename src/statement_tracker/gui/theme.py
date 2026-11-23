@@ -1,7 +1,7 @@
 """The window's colours, light and dark, as the design sets them. QML reads them from ``Theme``.
 
-Light or dark follows the system and switches while the app is open. Every pair of text and
-background colour reaches a contrast of 4.5:1.
+Light or dark follows the system and switches while the app is open, unless the user chose one in
+Settings. Every pair of text and background colour reaches a contrast of 4.5:1.
 """
 
 from __future__ import annotations
@@ -77,6 +77,8 @@ class Theme(QObject):
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._dark = False
+        self._system_dark = False
+        self._choice = "system"
 
     def _is_dark(self) -> bool:
         return self._dark
@@ -84,12 +86,23 @@ class Theme(QObject):
     dark = Property(bool, _is_dark, notify=changed)
 
     def set_dark(self, dark: bool) -> None:
+        """The system is dark (or light) now: followed unless the user chose light or dark."""
+        self._system_dark = dark
+        self._apply()
+
+    def set_choice(self, choice: str) -> None:
+        """The user's choice in Settings: "system", "light" or "dark"."""
+        self._choice = choice
+        self._apply()
+
+    def _apply(self) -> None:
+        dark = self._choice == "dark" or (self._choice == "system" and self._system_dark)
         if dark != self._dark:
             self._dark = dark
             self.changed.emit()
 
     def follow(self, app: QGuiApplication) -> None:
-        """Be light or dark as the system is, now and whenever the user switches."""
+        """Be light or dark as the system is, now and whenever the user switches it."""
         hints = app.styleHints()
         self.set_dark(hints.colorScheme() == Qt.ColorScheme.Dark)
         hints.colorSchemeChanged.connect(lambda scheme: self.set_dark(scheme == Qt.ColorScheme.Dark))

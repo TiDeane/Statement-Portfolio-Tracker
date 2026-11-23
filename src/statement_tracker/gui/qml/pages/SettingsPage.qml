@@ -335,6 +335,59 @@ Item {
                     }
 
                     Card {
+                        id: appearanceCard
+                        spacing: 14
+                        Layout.fillWidth: true
+                        SectionTitle { text: "Appearance" }
+                        Flow {
+                            spacing: 8
+                            Layout.fillWidth: true
+                            Repeater {
+                                model: [["system", "Use device theme"], ["light", "Light"], ["dark", "Dark"]]
+                                AbstractButton {
+                                    id: look
+                                    required property var modelData
+                                    text: modelData[1]
+                                    checked: page.settings.appearance === modelData[0]
+                                    focusPolicy: Qt.StrongFocus
+                                    hoverEnabled: true
+                                    implicitHeight: 44
+                                    implicitWidth: lookRow.implicitWidth + 32
+                                    onClicked: page.settings.setAppearance(modelData[0])
+                                    background: Rectangle {
+                                        radius: 10
+                                        color: look.checked ? Theme.okBg : Theme.surface
+                                        border.width: look.checked || look.visualFocus ? 2 : 1
+                                        border.color: look.checked ? Theme.accent : look.visualFocus ? Theme.text : Theme.border
+                                    }
+                                    contentItem: Item {}
+                                    Row {
+                                        id: lookRow
+                                        anchors.centerIn: parent
+                                        spacing: 10
+                                        Rectangle {  // the radio mark
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: 18
+                                            height: 18
+                                            radius: 9
+                                            color: Theme.surface
+                                            border.width: look.checked ? 5 : 1.5
+                                            border.color: look.checked ? Theme.accent : Theme.borderStrong
+                                        }
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: look.text
+                                            color: Theme.text
+                                            font.pixelSize: 14
+                                            font.weight: Font.Medium
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Card {
                         id: aboutCard
                         spacing: 12
                         Layout.fillWidth: true

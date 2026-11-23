@@ -296,3 +296,20 @@ def test_forgetting_the_statement_starts_first_launch_afresh(app, tmp_path: Path
 
     assert shows(shell.window, "Step 1 of 2", "Drop your Revolut statement here")
     assert not find(shell.window, "Continue").isEnabled()
+
+
+def test_appearance_can_be_light_or_dark_and_is_remembered(app, tmp_path: Path) -> None:
+    # Spec G1, F11.
+    shell = home(app, tmp_path)
+    to_settings(shell)
+    assert find(shell.window, "Use device theme").property("checked")
+
+    click(find(shell.window, "Dark"))
+    assert shell.window.property("color").name().upper() == DARK["bg"]
+    assert saved(tmp_path).appearance == "dark"
+
+    click(find(shell.window, "Light"))
+    assert shell.window.property("color").name().upper() == LIGHT["bg"]
+
+    again = open_app(tmp_path, provider_with())
+    assert again.window.property("color").name().upper() == LIGHT["bg"] and saved(tmp_path).appearance == "light"

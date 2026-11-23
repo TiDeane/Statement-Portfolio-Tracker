@@ -145,7 +145,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - **Help** on Home (and **About and privacy** on first launch) shows where the statement comes from (the Revolut steps and All time), the privacy text and the version.
   - Tab reaches every button, field and investment name, with a visible outline; Esc closes dialogs and Enter confirms them.
   - One dialog at a time: a question or a message wanted while another dialog is open waits for it to close, and is never lost.
-  - Light and dark follow the system and switch while the app is open; the green buttons are #107C41 in light and #33C481 in dark.
+  - Light and dark follow the system and switch while the app is open, unless Settings says otherwise (G1); the green buttons are #107C41 in light and #33C481 in dark.
   - The window shows the app's icon.
   - Numbers follow the computer's locale, and the currency is the statement's, never assumed. Dates are written in figures in the computer's order with a four-digit year (14/11/2026 in Portugal, 11/14/2026 in the United States), never with month or day names, which would be in the computer's language among English words.
   - The Windows program, its installer and the macOS app show the same icon as the window.
@@ -156,6 +156,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - **Your investments:** every investment the app keeps something about, with its name, "TICKER · symbol, exchange, currency" and a status (Chosen by you, Matched automatically, Asks you next time, Not matched yet, and "value entered by you"). Its **⋯** menu offers **Rename**, **Choose the listing next time** and **Forget…** (asks first; removes the listing, the name and the value entered). **Forget all investments…** asks first and keeps the spreadsheet, the statement and the last prices. The switch **Take the first listing without asking**. With nothing kept, the list says why. Ctrl+Z takes back the last change (F10).
   - **Your statement:** its latest transaction, **Use a newer one…** and **Forget it…** (asks first; then first launch asks for a statement again). With none kept, it says so.
   - **Your spreadsheet:** its name and folder, **Open folder**, **Choose another…** and **Stop using it**; without one, **Choose spreadsheet…** and **Create a new one…**. **Backup copies to keep**, from 0 to 99, with **−** and **+**.
+  - **Appearance:** **Use device theme** (the default), **Light** or **Dark**, applied at once and remembered.
   - **About and privacy:** the version, where new versions are, the privacy text and the disclaimer.
   - Changes are saved at once and show on Home at once.
   - While prices are being fetched, Settings cannot be opened: a fetch reads and saves the same settings.

@@ -72,7 +72,9 @@ class AppWindow(QObject):
         # so no binding is left reading an object already gone.
         self.theme = Theme(self.engine)
         self.theme.follow(app)
+        self.theme.set_choice(settings.appearance)
         self.session = Session(settings, provider_factory, today, now, self.engine)
+        self.session.theme = self.theme
         context = self.engine.rootContext()
         context.setContextProperty("Theme", self.theme)
         context.setContextProperty("session", self.session)

@@ -15,7 +15,7 @@ from statement_tracker.gui.texts import PRIVACY_TEXT, RELEASES_URL
 from statement_tracker.gui.welcome import NEW_SPREADSHEET_NAME, SPREADSHEET_FILES, STATEMENT_FILES
 from statement_tracker.kept_statement import forget_kept_statement
 from statement_tracker.price_cache import PriceCache
-from statement_tracker.settings import Settings
+from statement_tracker.settings import APPEARANCES, Settings
 from statement_tracker.gui.undo import ASK_AGAIN, EVERYTHING, NAME
 from statement_tracker.workflow import with_entered_prices
 
@@ -154,6 +154,7 @@ class SettingsPage(QObject):
     backupsKept = Property(int, lambda self: self._settings.backups_kept, notify=changed)
     maxBackups = Property(int, lambda self: MAX_BACKUPS_KEPT, constant=True)
     backupsHelp = Property(str, lambda self: BACKUPS_HELP, constant=True)
+    appearance = Property(str, lambda self: self._settings.appearance, notify=changed)
     version = Property(str, lambda self: f"Version {__version__}", constant=True)
     releasesUrl = Property(str, lambda self: RELEASES_URL, constant=True)
     privacyText = Property(str, lambda self: PRIVACY_TEXT, constant=True)
@@ -235,6 +236,16 @@ class SettingsPage(QObject):
         self._settings.backups_kept = min(max(count, 0), MAX_BACKUPS_KEPT)
         self._session.save_settings()
         self._session.settingsChanged.emit()
+
+    @Slot(str)
+    def setAppearance(self, choice: str) -> None:
+        """Light, dark, or as the computer is: applied at once and remembered."""
+        if choice not in APPEARANCES:
+            return
+        self._settings.appearance = choice
+        self._session.theme.set_choice(choice)
+        self._session.save_settings()
+        self.changed.emit()
 
     @Slot()
     def useNewerStatement(self) -> None:

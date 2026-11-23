@@ -48,6 +48,11 @@ class Welcome(QObject):
         """Step 2's option: "existing", "new" or "none"; "" until one is chosen."""
         self._spreadsheet: Path | None = None
 
+    def reset(self) -> None:
+        """Start afresh: step 1, nothing chosen (first launch shown again after the statement is forgotten)."""
+        self._step, self._statement, self._facts, self._choice, self._spreadsheet = "statement", None, [], "", None
+        self.changed.emit()
+
     # -- what is shown -------------------------------------------------------------
 
     def _get_step(self) -> str:

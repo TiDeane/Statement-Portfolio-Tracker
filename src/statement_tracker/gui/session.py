@@ -207,6 +207,7 @@ class Session(QObject):
     def forget_statement(self) -> None:
         """The statement kept was forgotten (in Settings): the app asks for one again."""
         self.kept, self.statement, self.statement_latest = None, None, None
+        self._welcome.reset()
         self.settingsChanged.emit()
 
     # -- runs ----------------------------------------------------------------------

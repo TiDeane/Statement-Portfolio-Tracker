@@ -276,3 +276,23 @@ def test_settings_cannot_be_opened_while_prices_are_fetched(app, tmp_path: Path)
     provider.let_go.set()
     wait_until(app, lambda: not shell.session.home.property("busy"))
     assert find(shell.window, "Settings").isEnabled()
+
+
+def test_forgetting_the_statement_starts_first_launch_afresh(app, tmp_path: Path) -> None:
+    # Spec F2.
+    shell = open_app(tmp_path, provider_with("EQQB.DE"))
+    from quick_driver import drop
+
+    drop(shell.window, SAMPLE)
+    click(find(shell.window, "Continue"))
+    click(find(shell.window, "Not now"))
+    click(find(shell.window, "Show my investments"))
+    wait_until(app, lambda: not shell.session.home.property("busy"))
+    to_settings(shell)
+    shell.session.confirm = lambda question, label: True
+
+    click(find(shell.window, "Forget it…"))
+    click(find(shell.window, "Your portfolio"))
+
+    assert shows(shell.window, "Step 1 of 2", "Drop your Revolut statement here")
+    assert not find(shell.window, "Continue").isEnabled()

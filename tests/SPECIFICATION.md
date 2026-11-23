@@ -156,6 +156,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - **Your spreadsheet:** its name and folder, **Open folder**, **Choose another…** and **Stop using it**; without one, **Choose spreadsheet…** and **Create a new one…**. **Backup copies to keep**, from 0 to 99, with **−** and **+**.
   - **About and privacy:** the version, where new versions are, the privacy text and the disclaimer.
   - Changes are saved at once and show on Home at once.
+  - While prices are being fetched, Settings cannot be opened: a fetch reads and saves the same settings.
 
 ## H. The spreadsheet
 

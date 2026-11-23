@@ -261,3 +261,18 @@ def test_the_program_the_installer_and_the_mac_app_use_the_same_icon_as_the_wind
     spec = (root / "packaging" / "statement_tracker.spec").read_text(encoding="utf-8")
     assert '"app.icns"' in spec and '"app.ico"' in spec and "WINDOW_ICON" in spec
     assert "SetupIconFile=icon\\app.ico" in (root / "packaging" / "windows_installer.iss").read_text(encoding="utf-8")
+
+
+def test_settings_cannot_be_opened_while_prices_are_fetched(app, tmp_path: Path) -> None:
+    # Spec G1: a fetch reads and saves the same settings.
+    from test_gui_home import slow_eqqb
+
+    provider = slow_eqqb()
+    shell = open_app(tmp_path, provider, kept=SAMPLE)
+    wait_until(app, lambda: shows(shell.window, "current prices"))
+
+    assert not find(shell.window, "Settings").isEnabled()
+
+    provider.let_go.set()
+    wait_until(app, lambda: not shell.session.home.property("busy"))
+    assert find(shell.window, "Settings").isEnabled()

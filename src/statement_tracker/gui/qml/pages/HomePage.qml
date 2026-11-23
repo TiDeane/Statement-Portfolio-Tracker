@@ -39,6 +39,7 @@ Item {
                 SecondaryButton {
                     text: "Settings"
                     iconName: "settings"
+                    enabled: !session.busy  // a fetch reads and saves the same settings
                     onClicked: session.goTo("settings")
                 }
             }

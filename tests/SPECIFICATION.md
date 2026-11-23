@@ -241,5 +241,11 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
 The window being built to replace F and G (design: `docs/superpowers/specs/2026-11-23-qt-quick-redesign-design.md`). While both exist, F and G describe the Widgets window and K the new one; K then becomes the new F and G.
 
 - **K1.** Opening: with a statement kept from last time, the app opens on Home and fetches today's prices. With none, or one that can no longer be read, it opens on first launch, without an error message.
+- **K2.** First launch, step 1: the statement.
+  - A drop area ("Drop your Revolut statement here", with **Choose statement file…**) beside "Where do I get it?": the Revolut steps and "Always pick All time".
+  - Dropping a statement anywhere on the window or choosing one reads it at once. One that reads shows its file name, "<n> transactions, the latest on <date>" and "<n> investments you still hold", with **Choose another file…**. One that does not read is explained (K12) and the step stays as it was.
+  - **Continue** stays disabled until a statement has been read.
+  - The file chooser opens in the folder used last time (F2's rule).
+  - A line says that everything stays on this computer and only fund codes and dates go to Yahoo Finance, with **About and privacy**.
 - **K12.** Errors are in plain words: what happened, and what to do.
   - Details can be copied with **Copy details**; no stack trace is shown.

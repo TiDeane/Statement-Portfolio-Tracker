@@ -11,7 +11,7 @@ from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
 
-from PySide6.QtCore import Property, QObject, QProcess, QUrl, Signal, Slot
+from PySide6.QtCore import Property, QObject, QProcess, QStandardPaths, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
 from statement_tracker.core.errors import UserFacingError
@@ -22,6 +22,19 @@ from statement_tracker.settings import Settings
 from statement_tracker.ui.undo import ChangeHistory
 
 PAGES = ("welcome", "home", "settings")
+
+
+def default_start_folder() -> Path:
+    """Return the folder file dialogs open in before the user has picked anything.
+
+    Run from source, that is the folder the app was started from (the project
+    folder during development). The installed app has no such folder, so it
+    opens in Downloads, where an exported statement usually lands.
+    """
+    if not getattr(sys, "frozen", False):
+        return Path.cwd()
+    downloads = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DownloadLocation)
+    return Path(downloads) if downloads and Path(downloads).exists() else Path.home()
 
 
 def show_in_folder(path: Path) -> None:
@@ -69,6 +82,10 @@ class Session(QObject):
         self.confirm: Callable[[str, str], bool] = self._confirm
         self.show_in_folder: Callable[[Path], object] = show_in_folder
 
+        from statement_tracker.gui.welcome import Welcome  # it needs this module's Session
+
+        self._welcome = Welcome(self)
+
     # -- pages -------------------------------------------------------------------
 
     def _get_page(self) -> str:
@@ -88,11 +105,40 @@ class Session(QObject):
         """Show Home, for the statement chosen."""
         self.goTo("home")
 
+    welcome = Property(QObject, lambda self: self._welcome, constant=True)
+
+    # -- files ---------------------------------------------------------------------
+
+    def start_folder(self) -> Path:
+        """Where file dialogs open: the last folder used, else a sensible first guess."""
+        folder = self.settings.last_folder
+        if folder and folder.exists():
+            return folder
+        return default_start_folder()
+
+    def remember_folder(self, folder: Path) -> None:
+        """Open file dialogs in ``folder`` from now on."""
+        if self.settings.last_folder != folder:
+            self.settings.last_folder = folder
+            self.save_settings()
+
+    def save_settings(self) -> None:
+        try:
+            self.settings.save()
+        except OSError:
+            pass  # not being able to remember a choice must never stop the user
+
     # -- from the window ---------------------------------------------------------
 
     @Slot(list)
     def dropFiles(self, urls: list) -> None:
-        """Files dropped on the window. Each page says what it does with them (later tasks)."""
+        """Files dropped on the window, as file URLs: an Excel file is a spreadsheet, anything else a statement."""
+        for url in urls:
+            path = Path(QUrl(url).toLocalFile())
+            if path.suffix.lower() == ".xlsx":
+                continue  # a spreadsheet dropped: taken by the spreadsheet steps (later tasks)
+            if self._page == "welcome" and self._welcome.step == "statement":
+                self._welcome.use_statement(path)
 
     @Slot(str)
     def copyText(self, text: str) -> None:

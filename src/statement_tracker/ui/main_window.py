@@ -20,7 +20,6 @@ from PySide6.QtCore import (
     QLocale,
     QModelIndex,
     QProcess,
-    QStandardPaths,
     Qt,
     QThreadPool,
     QTimer,
@@ -73,6 +72,7 @@ from statement_tracker.core.exporters.base import ExportResult
 from statement_tracker.core.market_data.provider import PriceProvider
 from statement_tracker.core.models import MarketPrice
 from statement_tracker.core.ticker_resolver import Resolution
+from statement_tracker.gui.session import default_start_folder
 from statement_tracker.kept_statement import find_kept_statement, latest_transaction_day
 from statement_tracker.settings import Settings
 from statement_tracker.ui import dialogs, theme
@@ -141,19 +141,6 @@ def backup_text(spreadsheet: Path | None, kept: int) -> str:
         return ""  # a new file has nothing to back up yet
     newest = "only the most recent is kept" if kept == 1 else f"the {kept} most recent are kept"
     return f"Before it is changed, a backup copy of it is saved in the same folder (at most one a day); {newest}."
-
-
-def default_start_folder() -> Path:
-    """Return the folder file dialogs open in before the user has picked anything.
-
-    Run from source, that is the folder the app was started from (the project
-    folder during development). The installed app has no such folder, so it
-    opens in Downloads, where an exported statement usually lands.
-    """
-    if not getattr(sys, "frozen", False):
-        return Path.cwd()
-    downloads = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DownloadLocation)
-    return Path(downloads) if downloads and Path(downloads).exists() else Path.home()
 
 
 def _file_text(path: Path, remark: str = "") -> str:

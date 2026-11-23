@@ -15,6 +15,7 @@ ApplicationWindow {
     onClosing: dialogs.cancel()
 
     readonly property var pages: ({ "welcome": "WelcomePage", "home": "HomePage", "settings": "SettingsPage" })
+    readonly property bool dragging: dropArea.containsDrag
 
     // Files dropped on the window, as local file URLs; the session decides what each is for.
     function dropFiles(urls) {
@@ -27,6 +28,7 @@ ApplicationWindow {
     }
 
     DropArea {
+        id: dropArea
         anchors.fill: parent
         onDropped: (drop) => {
             root.dropFiles(drop.urls)

@@ -310,6 +310,28 @@ def build_report(
     return replace(report, from_kept_statement=from_kept)
 
 
+@dataclass(frozen=True)
+class StatementSummary:
+    """What a statement holds, as first launch shows it, before any price is fetched."""
+
+    transactions: int
+    latest: date
+    """The day of its latest transaction, in the computer's time zone."""
+    held: int
+    """How many investments are still held at the end of it."""
+    currency: str
+
+
+def read_statement(path: Path, *, ignore_unknown_types: bool = False) -> StatementSummary:
+    """Read and work out a statement without fetching anything, to check it and say what it holds.
+    Raises the same plain-language errors as ``build_report``."""
+    statement = load_statement(path)
+    portfolio = compute_portfolio(statement, ignore_unknown_types=ignore_unknown_types)
+    return StatementSummary(
+        len(statement.transactions), latest_transaction_day(statement), len(portfolio.open_positions), statement.currency
+    )
+
+
 def needs_price(holding: HoldingValuation) -> bool:
     """True if the user may type in a price for this holding: Yahoo had no current price for it."""
     return holding.price is None or holding.price.last_known or holding.price.entered

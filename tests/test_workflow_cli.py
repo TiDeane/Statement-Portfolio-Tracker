@@ -988,3 +988,15 @@ def test_a_report_from_the_kept_statement_says_so_after_a_value_is_entered(tmp_p
     assert not fresh.from_kept_statement
     assert again.from_kept_statement
     assert with_entered_prices(again, {}, settings).from_kept_statement
+
+
+def test_read_statement_summarises_a_statement_without_fetching_anything(tmp_path: Path) -> None:
+    # Spec K2: what first launch says about the statement chosen.
+    from statement_tracker.workflow import read_statement
+
+    summary = read_statement(SAMPLE)
+
+    assert (summary.transactions, summary.held, summary.currency) == (18, 1, "EUR")
+    assert summary.latest == max(t.timestamp for t in load_statement(SAMPLE).transactions).astimezone().date()
+    with pytest.raises(UserFacingError):
+        read_statement(write_statement(tmp_path, "2025-01-06T10:00:00.000Z,ABCD,SOMETHING ELSE,1,EUR 1,EUR 1,EUR,1"))

@@ -107,7 +107,8 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - investments the user named show their own name;
   - columns: Investment, Invested, % of invested, Worth now, % of worth now, Gain or loss;
   - a gain shows a sign and an arrow as well as a colour;
-  - numbers follow the computer's locale, and the currency is the statement's, never assumed.
+  - numbers follow the computer's locale, and the currency is the statement's, never assumed;
+  - dates, here and in every window, are written in figures in the computer's order and with a four-digit year (14/11/2026 in Portugal, 11/14/2026 in the United States). They never use month or day names, which would be in the computer's language among English words.
 - **F5.** Values that are not today's from Yahoo:
   - an unavailable value is grey, marked "not in total", and its Worth now cell is red;
   - a last known value is marked `*`, with a dated tooltip;

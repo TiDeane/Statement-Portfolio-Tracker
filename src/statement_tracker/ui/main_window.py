@@ -17,7 +17,6 @@ from pathlib import Path
 import shiboken6
 from PySide6.QtCore import (
     QAbstractItemModel,
-    QDate,
     QLocale,
     QModelIndex,
     QProcess,
@@ -751,7 +750,7 @@ class MainWindow(QMainWindow):
         self.new_option.setChecked(not use_kept)
         if kept is not None:
             self.kept_label.setText(
-                f"Its latest transaction is on {self._long_date(kept.latest)}. Anything bought, sold or added "
+                f"Its latest transaction is on {self._day_text(kept.latest)}. Anything bought, sold or added "
                 "since then is not included."
             )
         # The drop area belongs to "Use a new statement": indented under it, and only shown while it is chosen.
@@ -1110,11 +1109,11 @@ class MainWindow(QMainWindow):
         """The status line once a result is shown; it says when the result comes from the statement from last time."""
         if not report.from_kept_statement:
             return DONE
-        latest = self._long_date(latest_transaction_day(report.statement))
+        latest = self._day_text(latest_transaction_day(report.statement))
         return f"{DONE[:-1]}, from your statement from last time (latest transaction on {latest})."
 
-    def _long_date(self, day: date) -> str:
-        return self._locale.toString(QDate(day.year, day.month, day.day), QLocale.FormatType.LongFormat)
+    def _day_text(self, day: date) -> str:
+        return dialogs.day_text(day, self._locale)
 
     def _worth_mark(self, price: MarketPrice | None) -> tuple[str, str | None]:
         """The mark after a holding's "Worth now", and its tooltip, saying where the price came from."""
@@ -1124,10 +1123,10 @@ class MainWindow(QMainWindow):
             if price.as_of is None:
                 tip = "Last known price from an earlier day: Yahoo could not be reached."
             else:
-                tip = f"Last known price, from {self._long_date(price.as_of.date())}: Yahoo could not be reached."
+                tip = f"Last known price, from {self._day_text(price.as_of.date())}: Yahoo could not be reached."
             return LAST_KNOWN_MARK, f"{tip} {DOUBLE_CLICK_TO_ENTER}"
         if price.entered:
-            when = f" on {self._long_date(price.as_of.astimezone().date())}" if price.as_of else ""
+            when = f" on {self._day_text(price.as_of.astimezone().date())}" if price.as_of else ""
             return ENTERED_MARK, (
                 f"Value you entered{when}, used until Yahoo Finance has a price. Double-click to change it."
             )

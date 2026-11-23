@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from PySide6.QtCore import QDate, QLocale, QTimer
@@ -29,6 +30,22 @@ from statement_tracker.core.models import MarketPrice
 from statement_tracker.core.ticker_resolver import Confidence, Resolution
 
 RELEASES_URL = "https://github.com/TiDeane/Statement-Portfolio-Tracker/releases"
+
+
+def day_text(day: date, locale: QLocale | None = None) -> str:
+    """A date in figures, in the order and with the separators the computer uses: 14/11/2026 in
+    Portugal, 11/14/2026 in the United States.
+
+    Never with month or day names: the app's words are English, and names would be in the
+    computer's own language in the middle of an English sentence.
+    """
+    locale = locale or QLocale()
+    pattern = locale.dateFormat(QLocale.FormatType.ShortFormat)
+    if "MMM" in pattern or "ddd" in pattern:  # a name after all: the date as Revolut's statement writes it
+        pattern = "yyyy-MM-dd"
+    elif "yyyy" not in pattern:
+        pattern = pattern.replace("yy", "yyyy")  # 14/11/26 could be read as 2014 or 2026
+    return locale.toString(QDate(day.year, day.month, day.day), pattern)
 
 
 PRIVACY_TEXT = (
@@ -360,7 +377,7 @@ class EnterValueDialog(QDialog):
         if price.as_of is None:
             return "an earlier day"
         day = price.as_of.astimezone().date() if price.entered else price.as_of.date()
-        return self._locale.toString(QDate(day.year, day.month, day.day), QLocale.FormatType.LongFormat)
+        return day_text(day, self._locale)
 
     def _number(self, value: Decimal) -> str:
         """An amount as this computer writes numbers, with 2 decimals and no thousands separator."""

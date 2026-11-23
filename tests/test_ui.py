@@ -585,16 +585,16 @@ def test_statement_alone_shows_the_investments(app, tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("language", "country", "invested", "gain", "month"),
+    ("language", "country", "invested", "gain", "day"),
     [
-        ("English", "UnitedStates", "12,345.60 EUR", ("+654.90", "5.30 %"), "October"),
-        ("Portuguese", "Portugal", "345,60 EUR", ("+654,90", "5,30 %"), "outubro"),  # 12 345,60: spaced thousands
+        ("English", "UnitedStates", "12,345.60 EUR", ("+654.90", "5.30 %"), "10/12/2026"),
+        ("Portuguese", "Portugal", "345,60 EUR", ("+654,90", "5,30 %"), "12/10/2026"),  # 12 345,60: spaced thousands
     ],
 )
 def test_numbers_and_dates_are_shown_as_the_computer_is_set_up(
-    app, tmp_path: Path, language: str, country: str, invested: str, gain: tuple[str, str], month: str
+    app, tmp_path: Path, language: str, country: str, invested: str, gain: tuple[str, str], day: str
 ) -> None:
-    # Spec F4: the words stay English; numbers and dates follow the computer's own settings.
+    # Spec F4: the words stay English; numbers and dates follow the computer's own settings, dates in figures.
     from PySide6.QtCore import QLocale
 
     before = QLocale()
@@ -615,7 +615,9 @@ def test_numbers_and_dates_are_shown_as_the_computer_is_set_up(
         abcd = cells(window.table)[0]
         assert abcd[1].endswith(invested) and "12,345.60" not in abcd[1].replace(invested, "")
         assert all(part in abcd[5] for part in gain)  # 13,000.50 against 12,345.60
-        assert month in window.table.item(0, 3).toolTip()  # "Value you entered on <the day>"
+        tip = window.table.item(0, 3).toolTip()  # "Value you entered on <the day>"
+        assert day in tip
+        assert not {"October", "outubro", "Monday", "segunda-feira"} & set(tip.replace(",", " ").split())
     finally:
         QLocale.setDefault(before)
 
@@ -2131,15 +2133,26 @@ def test_packaging_smoke_test_reads_the_sample_and_writes_a_spreadsheet(app, tmp
 # -- the statement kept from last time (Spec F14) ---------------------------------------------------------
 
 
+@pytest.fixture
+def portuguese_computer():
+    """A computer set up for Portugal, as the maintainer's is: the app's words stay English."""
+    before = QtCore.QLocale()
+    QtCore.QLocale.setDefault(QtCore.QLocale(QtCore.QLocale.Language.Portuguese, QtCore.QLocale.Country.Portugal))
+    yield
+    QtCore.QLocale.setDefault(before)
+
+
 def long_date(day: date) -> str:
-    """A date as the computer's settings write it out in full."""
-    return QtCore.QLocale().toString(QtCore.QDate(day.year, day.month, day.day), QtCore.QLocale.FormatType.LongFormat)
+    """A date as a computer set up for Portugal writes it: in figures, day first, never "de junho de"."""
+    return f"{day.day:02d}/{day.month:02d}/{day.year}"
 
 
 SAMPLE_LATEST = max(transaction.timestamp for transaction in load_statement(SAMPLE).transactions).astimezone().date()
 
 
-def test_next_time_step_1_offers_the_statement_from_last_time_or_a_new_one(app, tmp_path: Path) -> None:
+def test_next_time_step_1_offers_the_statement_from_last_time_or_a_new_one(
+    app, tmp_path: Path, portuguese_computer
+) -> None:
     # Spec F14, F1.
     statement = tmp_path / "downloads" / "statement.csv"
     statement.parent.mkdir()
@@ -2204,7 +2217,7 @@ def test_a_new_statement_is_chosen_instead_of_the_one_from_last_time(app, tmp_pa
     assert reopened.status_label.text() == "Done. Your investments are shown below."
 
 
-def test_settings_forget_the_statement_from_last_time(app, tmp_path: Path) -> None:
+def test_settings_forget_the_statement_from_last_time(app, tmp_path: Path, portuguese_computer) -> None:
     # Spec G7, F14, F7.
     window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
     drop(window, SAMPLE)

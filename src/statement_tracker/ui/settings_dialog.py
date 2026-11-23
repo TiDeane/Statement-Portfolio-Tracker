@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QDate, QEvent, QLocale, QModelIndex, QPersistentModelIndex, Qt, QTimer
+from PySide6.QtCore import QEvent, QModelIndex, QPersistentModelIndex, Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -301,8 +301,7 @@ class SettingsDialog(QDialog):
         if kept is None:
             self.statement_label.setText(NO_STATEMENT_KEPT)
         else:
-            day = QDate(kept.latest.year, kept.latest.month, kept.latest.day)
-            self.statement_label.setText(STATEMENT_KEPT.format(QLocale().toString(day, QLocale.FormatType.LongFormat)))
+            self.statement_label.setText(STATEMENT_KEPT.format(dialogs.day_text(kept.latest)))
         self.forget_statement_button.setEnabled(kept is not None)
 
         self.always_first.blockSignals(True)  # showing the setting is not changing it

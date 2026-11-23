@@ -274,5 +274,9 @@ The window being built to replace F and G (design: `docs/superpowers/specs/2026-
   - A value entered shows "your value" under it; a last known price shows "price from <date>". Either can be replaced by double-clicking its row.
   - When Yahoo Finance cannot be reached, the totals say so in amber: "Yahoo Finance can't be reached right now, so these values use the last prices found, from <date>.", with **Try again**. The spreadsheet card says updating then writes no history row.
 - **K9.** Which listing is it? When the app cannot tell, a dialog "Which one is <ticker>?" says why and lists the listings found: name, exchange, currency and symbol, with "Matches your purchases" on those that fit; the first is chosen. A Yahoo Finance symbol can be typed instead. "From now on, take the first listing without asking" is offered whenever there is a listing. **Use this listing** uses the one chosen (or typed) and remembers it; **Skip this investment** leaves it without a value. While the dialog is open, Home says it is waiting for the user (F3).
+- **K10.** Renaming and undoing (replaces F6 and F7):
+  - Double-clicking an investment's name, or pressing F2 (Return on a Mac) on it, opens it for typing. Enter saves the name, Esc cancels, and an empty name goes back to Yahoo's. The name is saved at once. Double-clicking elsewhere in a row without a price enters a value (K8).
+  - Once the spreadsheet has been updated while the app is open, a new name or a value entered is written to it at once, and the card says so again. Before that, nothing is written: the change goes in with the next update.
+  - Ctrl+Z and Ctrl+Y undo and redo changes to investments, in one history shared by Home and Settings, as F7 says; never during a fetch.
 - **K12.** Errors are in plain words: what happened, and what to do.
   - Details can be copied with **Copy details**; no stack trace is shown.

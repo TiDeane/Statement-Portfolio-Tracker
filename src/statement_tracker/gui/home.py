@@ -18,7 +18,7 @@ from statement_tracker.gui.holdings_model import HoldingsModel, holding_rows, lo
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.exporters.base import ExportResult
 from statement_tracker.gui.welcome import NEW_SPREADSHEET_NAME, SPREADSHEET_FILES, STATEMENT_FILES
-from statement_tracker.ui.undo import ENTERED
+from statement_tracker.ui.undo import ENTERED, NAME
 from statement_tracker.workflow import Report, needs_price, update_spreadsheet, with_entered_prices
 
 if TYPE_CHECKING:
@@ -301,6 +301,7 @@ class Home(QObject):
             self._sheet_title = "Your spreadsheet was created" if exported.created else "Your spreadsheet is up to date"
             self._sheet_lines, self._sheet_details = result_lines(report, exported), ""
             self._updated_at, self._updated_on = self._session.now(), self._session.today()
+            self._session.updated_this_session = sheet
         self.changed.emit()
 
     @Slot(int)
@@ -327,6 +328,32 @@ class Home(QObject):
         shares = next(choice.shares for choice in choices if choice.ticker == ticker)
         self._session.history.record(f"the value entered for {ticker}", [ticker], {ENTERED})
         self._session.set_report(with_entered_prices(report, {ticker: value / shares}, settings, now=self._session.now()))
+        self.rewrite_spreadsheet()
+
+    @Slot(int, str)
+    def rename(self, row: int, name: str) -> None:
+        """Show ``name`` for the investment in ``row`` from now on, here and in the spreadsheet. An empty
+        name goes back to the fund's name from Yahoo Finance."""
+        report = self._session.report
+        if report is None or not 0 <= row < len(report.valuation.holdings):
+            return
+        ticker, name = report.valuation.holdings[row].position.ticker, name.strip()
+        settings = self._session.settings
+        if name == (settings.index_name(ticker) or ""):
+            return  # nothing changed
+        self._session.history.record(f"the new name of {ticker}", [ticker], {NAME})
+        if name:
+            settings.index_names[ticker] = name
+        else:
+            settings.index_names.pop(ticker, None)
+        self._session.save_settings()
+        self._session.settingsChanged.emit()
+        self.rewrite_spreadsheet()
+
+    def rewrite_spreadsheet(self) -> None:
+        """Write a change to the spreadsheet at once, if it was updated while the app is open (K10)."""
+        if self._session.updated_this_session is not None and self._session.updated_this_session == self._sheet():
+            self.updateSpreadsheet()
 
     @Slot()
     def openFolder(self) -> None:

@@ -36,6 +36,21 @@ ApplicationWindow {
         }
     }
 
+    // Ctrl+Z and Ctrl+Y: changes to investments, on Home and in Settings, never during a fetch.
+    Shortcut {
+        sequences: [StandardKey.Undo]
+        enabled: session.page !== "welcome" && !session.busy
+        onActivated: session.undo()
+    }
+    Shortcut {
+        // Ctrl+Y everywhere, as well as the system's own Redo (which may be Ctrl+Y already: then the two
+        // are "ambiguous" to Qt, and redo is still what is meant).
+        sequences: [StandardKey.Redo, "Ctrl+Y"]
+        enabled: session.page !== "welcome" && !session.busy
+        onActivated: session.redo()
+        onActivatedAmbiguously: session.redo()
+    }
+
     MessageDialog { id: messageDialog }
     ValueDialog { id: valueDialog }
     ListingDialog { id: listingDialog }

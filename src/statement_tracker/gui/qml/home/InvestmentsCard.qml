@@ -32,6 +32,11 @@ Rectangle {
                 font.weight: Font.DemiBold
             }
             Item { Layout.fillWidth: true }
+            Text {
+                text: "Double-click a name to rename it"
+                color: Theme.muted
+                font.pixelSize: 13
+            }
         }
 
         InvestmentRow {
@@ -60,7 +65,9 @@ Rectangle {
                 gain: model.gain
                 gainUp: model.gainUp
                 status: model.status
+                editName: model.editName
                 Layout.fillWidth: true
+                onRenamed: (name) => card.home.rename(index, name)
             }
         }
 

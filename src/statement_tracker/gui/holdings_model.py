@@ -33,6 +33,8 @@ class HoldingRow:
     gain_up: bool
     status: str
     """"priced", "missing" (no value, left out of the totals) or "loading" (prices on their way)."""
+    edit_name: str = ""
+    """The name to start typing from when renaming: the one shown, unless that is only the ticker."""
 
 
 def _camel(name: str) -> str:
@@ -86,6 +88,7 @@ def holding_rows(report: Report, settings: Settings) -> list[HoldingRow]:
                 gain=gain(holding.unrealized_pnl, holding.percent_change) if holding.unrealized_pnl is not None else "",
                 gain_up=holding.unrealized_pnl is None or holding.unrealized_pnl >= 0,
                 status="priced" if priced else "missing",
+                edit_name=settings.index_name(ticker) or "",
             )
         )
     return rows

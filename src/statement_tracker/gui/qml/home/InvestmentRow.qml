@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import "../components"
 
@@ -17,7 +18,9 @@ Rectangle {
     property string gain: ""
     property bool gainUp: true
     property string status: "priced"
+    property string editName: ""
     signal doubleClicked()
+    signal renamed(string name)
 
     readonly property bool loading: status === "loading"
     readonly property bool missing: status === "missing"
@@ -48,26 +51,98 @@ Rectangle {
         anchors.rightMargin: 20
         spacing: 16
 
-        ColumnLayout {
-            spacing: 1
+        // The name: double-click it, or press F2 (Return on a Mac) on it, to type a new one.
+        FocusScope {
+            id: nameCell
+            property bool editing: false
+            readonly property bool editable: row.mode === "holding" && !row.loading
+
+            implicitHeight: nameColumn.implicitHeight
+            activeFocusOnTab: editable
+            Accessible.name: row.name
             Layout.fillWidth: true
             Layout.preferredWidth: 1
             Layout.horizontalStretchFactor: 20
-            Text {
-                text: row.name
-                color: row.header ? Theme.muted : Theme.text
-                font.pixelSize: row.header ? 13 : 14
-                font.weight: row.header ? Font.DemiBold : row.total ? Font.Bold : Font.DemiBold
-                elide: Text.ElideRight
-                Layout.fillWidth: true
+
+            function startEditing() {
+                if (!editable)
+                    return
+                editor.text = row.editName
+                editing = true
+                editor.forceActiveFocus()
+                editor.selectAll()
             }
-            Text {
-                visible: row.detail !== ""
-                text: row.detail
-                color: Theme.muted
-                font.pixelSize: 13
-                elide: Text.ElideRight
-                Layout.fillWidth: true
+
+            Keys.onPressed: (event) => {
+                var mac = Qt.platform.os === "osx"
+                var renameKey = event.key === Qt.Key_F2 || (mac && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter))
+                if (renameKey && !editing) {
+                    startEditing()
+                    event.accepted = true
+                }
+            }
+
+            Rectangle {  // where the keyboard is
+                anchors.fill: parent
+                anchors.margins: -4
+                radius: 6
+                color: "transparent"
+                border.width: 2
+                border.color: Theme.text
+                visible: nameCell.activeFocus && !nameCell.editing
+            }
+            MouseArea {
+                anchors.fill: parent
+                enabled: nameCell.editable && !nameCell.editing
+                onClicked: nameCell.forceActiveFocus()
+                onDoubleClicked: nameCell.startEditing()
+            }
+            ColumnLayout {
+                id: nameColumn
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 1
+                Text {
+                    visible: !nameCell.editing
+                    text: row.name
+                    color: row.header ? Theme.muted : Theme.text
+                    font.pixelSize: row.header ? 13 : 14
+                    font.weight: row.header ? Font.DemiBold : row.total ? Font.Bold : Font.DemiBold
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+                TextField {
+                    id: editor
+                    objectName: "nameEditor"
+                    visible: nameCell.editing
+                    Accessible.name: "New name for " + row.name
+                    color: Theme.text
+                    font.pixelSize: 14
+                    implicitHeight: 30
+                    leftPadding: 6
+                    Layout.fillWidth: true
+                    background: Rectangle {
+                        radius: 6
+                        color: Theme.surface
+                        border.width: 2
+                        border.color: Theme.accent
+                    }
+                    onAccepted: {
+                        nameCell.editing = false
+                        row.renamed(text)
+                    }
+                    Keys.onEscapePressed: nameCell.editing = false
+                    onActiveFocusChanged: if (!activeFocus) nameCell.editing = false
+                }
+                Text {
+                    visible: row.detail !== ""
+                    text: row.detail
+                    color: Theme.muted
+                    font.pixelSize: 13
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
             }
         }
 

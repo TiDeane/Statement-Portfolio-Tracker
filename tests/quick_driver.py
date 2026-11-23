@@ -236,6 +236,13 @@ def find_starting(window: QQuickWindow, start: str) -> QQuickItem:
     return found[0]
 
 
+def editor(window: QQuickWindow) -> QQuickItem:
+    """The text field open for typing an investment's name."""
+    found = [item for item in _items(window) if item.objectName() == "nameEditor" and _shown(item)]
+    assert len(found) == 1, f"{len(found)} name editors are open"
+    return found[0]
+
+
 def row_items(window: QQuickWindow) -> list[QQuickItem]:
     """The rows of the investments list (the Total last), top to bottom, to click or double-click."""
     return sorted((item for item in _items(window) if item.objectName() == "investmentRow" and _shown(item)), key=_place)

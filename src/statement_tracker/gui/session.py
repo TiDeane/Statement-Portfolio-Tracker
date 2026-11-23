@@ -26,7 +26,7 @@ from statement_tracker.kept_statement import KeptStatement, find_kept_statement
 from statement_tracker.settings import Settings
 from statement_tracker.ui.undo import ChangeHistory
 from statement_tracker.ui.workers import QuestionBridge, Task
-from statement_tracker.workflow import Report, build_report, read_statement, values_typed_in
+from statement_tracker.workflow import Report, build_report, read_statement, values_typed_in, with_entered_prices
 
 PAGES = ("welcome", "home", "settings")
 UNEXPECTED = UserFacingError(
@@ -138,6 +138,8 @@ class Session(QObject):
         self._alive: set[Task] = set()
         """Runs the thread pool has not finished yet, stopped ones included: kept alive until then."""
         self._bridge = QuestionBridge(self._ask_during_run, self)
+        self.updated_this_session: Path | None = None
+        """The spreadsheet updated while the app is open: changes made since are written to it at once."""
 
         # The user's answers. Replaced in tests, which stand in for the user.
         self.ask_open_file: Callable[[str, str, Path], Path | None] = self._ask_open_file
@@ -280,6 +282,25 @@ class Session(QObject):
             error = UserFacingError(UNEXPECTED.what_happened, UNEXPECTED.what_to_do, details=details)
         self.show_error(error)
 
+    @Slot()
+    def undo(self) -> None:
+        """Take back the last change to an investment, made on Home or in Settings (not during a fetch)."""
+        self._went_back(self.history.undo)
+
+    @Slot()
+    def redo(self) -> None:
+        """Make the last change undone again."""
+        self._went_back(self.history.redo)
+
+    def _went_back(self, step: Callable[[], str | None]) -> None:
+        if self.busy or self._page == "welcome" or step() is None:
+            return
+        self.save_settings()
+        if self.report is not None:
+            self.set_report(with_entered_prices(self.report, {}, self.settings, now=self.now(), remember_listings=False))
+            self._home.rewrite_spreadsheet()
+        self.settingsChanged.emit()
+
     def set_report(self, report: Report) -> None:
         """Show ``report``, worked out again from the last run without fetching (a value entered, say)."""
         self.report = report
@@ -312,6 +333,8 @@ class Session(QObject):
 
     def use_spreadsheet(self, path: Path) -> None:
         """Update this spreadsheet from now on (chosen, created or dropped on Home)."""
+        if path != self.settings.spreadsheet_path:
+            self.updated_this_session = None
         self.settings.spreadsheet_path = path
         self.save_settings()
         self.settingsChanged.emit()

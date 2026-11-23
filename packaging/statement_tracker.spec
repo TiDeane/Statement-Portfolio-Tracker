@@ -17,24 +17,46 @@ EXE_NAME = "StatementPortfolioTracker"
 BUNDLE_ID = "io.github.tideane.statementportfoliotracker"
 ICONS = ROOT / "packaging" / "icon"  # drawn by packaging/make_icon.py
 WINDOW_ICON = ROOT / "src" / "statement_tracker" / "ui" / "icon.png"
+QML_FILES = ROOT / "src" / "statement_tracker" / "gui" / "qml"
 
-# Qt pieces a Widgets-only app never loads. Dropping them trims the download.
+# Qt pieces the app never loads. Dropping them trims the download.
 UNUSED_QT_FRAGMENTS = (
     "opengl32sw",
     "Qt6Pdf",
-    "Qt6Qml",
-    "Qt6Quick",
     "Qt6VirtualKeyboard",
     "QtPdf",
-    "QtQml",
-    "QtQuick",
     "QtVirtualKeyboard",
     "qtvirtualkeyboard",
     "qpdf",
-    # Prices are fetched with Python's own HTTP client, never through Qt, so Qt's networking,
-    # its TLS backends and its network-status plugins are never loaded.
-    "QtNetwork",
-    "Qt6Network",
+    # Qt Quick libraries for parts of Qt Quick the window does not use: other control styles, 3D,
+    # particles, timelines, vector images, the virtual keyboard.
+    "Qt6QuickControls2Fusion",
+    "Qt6QuickControls2Imagine",
+    "Qt6QuickControls2Material",
+    "Qt6QuickControls2Universal",
+    "Qt6QuickControls2FluentWinUI3",
+    "Qt6QuickControls2Windows",
+    "Qt6QuickControls2MacOS",
+    "Qt6QuickControls2IOS",
+    "Qt6Quick3D",
+    "Qt6QuickParticles",
+    "Qt6QuickTimeline",
+    "Qt6QuickVectorImage",
+    "Qt6QuickEffects",
+    "Qt6QuickTest",
+    "Qt6QuickWidgets",
+    "Qt6QuickShapesDesignHelpers",
+    "Qt6WaylandCompositor",
+    "Qt6Labs",
+    "Qt6Test",
+    "Qt6Sql",
+    "Qt6QmlLocalStorage",
+    "Qt6QmlNetwork",
+    "Qt6QmlCore",
+    "plugins/qmltooling/",  # QML debugging and profiling
+    # Prices are fetched with Python's own HTTP client, never through Qt. Qt's network library and its
+    # Python module ship, because Qt's QML engine and PySide's QtQml module need them, but not its TLS
+    # backends or its network-status plugins.
     "plugins/tls/",
     "plugins/networkinformation/",
     # The app shows no pictures. Kept: SVG and ICO, which icons and icon themes can use.
@@ -55,23 +77,49 @@ UNUSED_QT_FRAGMENTS = (
 )
 
 
+# The QML modules the window imports (and what they need); every other one under Qt's qml folder is left out.
+QML_MODULES = (
+    "qml/QtQml/Base/",
+    "qml/QtQml/Models/",
+    "qml/QtQml/WorkerScript/",
+    "qml/QtQuick/Controls/Basic/",
+    "qml/QtQuick/Controls/impl/",
+    "qml/QtQuick/Templates/",
+    "qml/QtQuick/Layouts/",
+    "qml/QtQuick/Shapes/",
+    "qml/QtQuick/Dialogs/",
+    "qml/QtQuick/Window/",
+)
+QML_ROOT_FILES = ("qml/QtQml/", "qml/QtQuick/", "qml/QtQuick/Controls/")
+"""Folders whose own files (plugin, qmldir, type info) are needed, but not all their subfolders."""
+
+
+def _wanted_qml(destination: str) -> bool:
+    if any(module in destination for module in QML_MODULES):
+        return True
+    folder = destination.rsplit("/", 1)[0] + "/"
+    return any(folder.endswith(root) for root in QML_ROOT_FILES)
+
+
 def _wanted(entry) -> bool:
     destination = str(entry[0]).replace("\\", "/")
     if "/translations/" in destination and "PySide6" in destination:
         return False  # the app is English only in v1
+    if "PySide6/Qt/qml/" in destination or "PySide6/qml/" in destination:
+        return _wanted_qml(destination)
     return not any(fragment in destination for fragment in UNUSED_QT_FRAGMENTS)
 
 
 a = Analysis(
     [str(ROOT / "packaging" / "entry.py")],
     pathex=[str(ROOT / "src")],
-    # The window's icon, next to the code that loads it (statement_tracker/ui/main_window.py).
-    datas=[(str(WINDOW_ICON), "statement_tracker/ui")],
+    # The window's icon, next to the code that loads it (statement_tracker/ui/main_window.py), and the
+    # Qt Quick window's QML files (statement_tracker/gui/qml).
+    datas=[(str(WINDOW_ICON), "statement_tracker/ui"), (str(QML_FILES), "statement_tracker/gui/qml")],
     # Heavy libraries the app does not use. Listed so that an installed copy (from another
     # package in the build environment) can never end up in the download.
     excludes=[
         "tkinter", "matplotlib", "IPython", "pytest", "pandas", "numpy", "yfinance", "curl_cffi", "lxml",
-        "PySide6.QtNetwork",
     ],
     noarchive=False,
 )

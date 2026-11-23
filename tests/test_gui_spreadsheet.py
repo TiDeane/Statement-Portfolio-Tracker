@@ -136,3 +136,16 @@ def test_a_spreadsheet_dropped_on_home_is_the_one_updated(app, tmp_path: Path) -
 
     assert Settings.load(tmp_path / "settings.json").spreadsheet_path == tmp_path / "dropped.xlsx"
     assert load_workbook(tmp_path / "dropped.xlsx").sheetnames == SHEETS
+
+
+def test_another_spreadsheet_is_not_said_to_be_up_to_date(app, tmp_path: Path) -> None:
+    # Spec F7: the card speaks of the spreadsheet it names.
+    shell = home_with_spreadsheet(app, tmp_path)
+    update(shell)
+    assert shows(shell.window, "Updated today at")
+
+    drop(shell.window, tmp_path / "other.xlsx")
+
+    assert shows(shell.window, "other.xlsx", "It doesn't exist yet: updating creates it.")
+    assert not shows(shell.window, "Updated today at")
+    assert not shows(shell.window, "Your spreadsheet was created")

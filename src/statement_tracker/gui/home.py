@@ -116,6 +116,7 @@ class Home(QObject):
         self._updated_on = None
         """The day of the last successful update, by the same calendar the update itself used."""
         session.reportChanged.connect(self._clear_sheet_result)
+        session.spreadsheetChanged.connect(self._other_spreadsheet)
         session.reportChanged.connect(self._update)
         session.settingsChanged.connect(self._update)
         session.busyChanged.connect(self._update)
@@ -378,6 +379,12 @@ class Home(QObject):
         chosen = self._session.ask_save_file("Where should the new spreadsheet be saved?", start / NEW_SPREADSHEET_NAME)
         if chosen is not None:
             self._session.use_spreadsheet(chosen if chosen.suffix.lower() == ".xlsx" else chosen.with_name(chosen.name + ".xlsx"))
+
+    def _other_spreadsheet(self) -> None:
+        """What was said of the spreadsheet before is not about this one."""
+        self._clear_sheet_result()
+        self._updated_at, self._updated_on = None, None
+        self.changed.emit()
 
     def _clear_sheet_result(self) -> None:
         """New values: what an earlier update wrote is not what is shown any more."""

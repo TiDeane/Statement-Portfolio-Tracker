@@ -102,6 +102,8 @@ class Session(QObject):
     busyChanged = Signal()
     reportChanged = Signal()
     settingsChanged = Signal()
+    spreadsheetChanged = Signal()
+    """Another spreadsheet (or none) is to be updated from now on."""
     """Something shown changed in the settings: the spreadsheet chosen, the backups, a name."""
     progressed = Signal(int, int, str)
     """A run's progress: steps done, steps in all (0 while unknown), what is being done."""
@@ -363,10 +365,13 @@ class Session(QObject):
 
     def use_spreadsheet(self, path: Path | None) -> None:
         """Update this spreadsheet from now on (chosen, created or dropped), or none."""
-        if path != self.settings.spreadsheet_path:
+        changed = path != self.settings.spreadsheet_path
+        if changed:
             self.updated_this_session = None
         self.settings.spreadsheet_path = path
         self.save_settings()
+        if changed:
+            self.spreadsheetChanged.emit()
         self.settingsChanged.emit()
 
     def save_settings(self) -> None:

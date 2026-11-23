@@ -155,9 +155,11 @@ class Session(QObject):
         from statement_tracker.gui.welcome import Welcome  # it needs this module's Session
 
         from statement_tracker.gui.home import Home
+        from statement_tracker.gui.settings_page import SettingsPage
 
         self._welcome = Welcome(self)
         self._home = Home(self)
+        self._settings_page = SettingsPage(self)
 
     # -- pages -------------------------------------------------------------------
 
@@ -186,6 +188,26 @@ class Session(QObject):
 
     welcome = Property(QObject, lambda self: self._welcome, constant=True)
     home = Property(QObject, lambda self: self._home, constant=True)
+    settingsPage = Property(QObject, lambda self: self._settings_page, constant=True)
+
+    @Slot()
+    def showHelp(self) -> None:
+        """Where the statement comes from, the privacy text and the version."""
+        from statement_tracker import __version__
+        from statement_tracker.gui.texts import ALL_TIME_NOTE, PRIVACY_TEXT, RELEASES_URL, REVOLUT_STEPS
+
+        self.dialogs.ask("help", {
+            "steps": list(REVOLUT_STEPS),
+            "allTime": ALL_TIME_NOTE,
+            "privacy": PRIVACY_TEXT,
+            "version": f"Statement Portfolio Tracker, version {__version__}",
+            "releases": RELEASES_URL,
+        })
+
+    def forget_statement(self) -> None:
+        """The statement kept was forgotten (in Settings): the app asks for one again."""
+        self.kept, self.statement, self.statement_latest = None, None, None
+        self.settingsChanged.emit()
 
     # -- runs ----------------------------------------------------------------------
 
@@ -199,12 +221,14 @@ class Session(QObject):
         if self.statement is not None:
             self.start_run(self.statement)
 
-    def use_statement(self, statement: Path) -> None:
+    def use_statement(self, statement: Path) -> bool:
         """A newer statement, chosen or dropped on Home: fetch its prices; it becomes the one kept.
-        One that does not read is explained, and the statement shown stays."""
+        One that does not read is explained, and the statement shown stays (False)."""
         self.remember_folder(statement.parent)
-        if self.start_run(statement):
-            self.statement = statement
+        if not self.start_run(statement):
+            return False
+        self.statement = statement
+        return True
 
     def start_run(self, statement: Path) -> bool:
         """Read ``statement``, fetch prices and work out the report, without freezing the window.
@@ -331,8 +355,8 @@ class Session(QObject):
             self.settings.last_folder = folder
             self.save_settings()
 
-    def use_spreadsheet(self, path: Path) -> None:
-        """Update this spreadsheet from now on (chosen, created or dropped on Home)."""
+    def use_spreadsheet(self, path: Path | None) -> None:
+        """Update this spreadsheet from now on (chosen, created or dropped), or none."""
         if path != self.settings.spreadsheet_path:
             self.updated_this_session = None
         self.settings.spreadsheet_path = path

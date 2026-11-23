@@ -54,6 +54,7 @@ ApplicationWindow {
     MessageDialog { id: messageDialog }
     ValueDialog { id: valueDialog }
     ListingDialog { id: listingDialog }
+    HelpDialog { id: helpDialog }
     FileDialogs { id: fileDialogs }
 
     Connections {
@@ -65,6 +66,8 @@ ApplicationWindow {
                 valueDialog.show(data)
             else if (kind === "listing")
                 listingDialog.show(data)
+            else if (kind === "help")
+                helpDialog.show(data)
             else if (kind === "openFile")
                 fileDialogs.openFile(data)
             else if (kind === "saveFile")

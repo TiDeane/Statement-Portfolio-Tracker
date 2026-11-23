@@ -278,5 +278,15 @@ The window being built to replace F and G (design: `docs/superpowers/specs/2026-
   - Double-clicking an investment's name, or pressing F2 (Return on a Mac) on it, opens it for typing. Enter saves the name, Esc cancels, and an empty name goes back to Yahoo's. The name is saved at once. Double-clicking elsewhere in a row without a price enters a value (K8).
   - Once the spreadsheet has been updated while the app is open, a new name or a value entered is written to it at once, and the card says so again. Before that, nothing is written: the change goes in with the next update.
   - Ctrl+Z and Ctrl+Y undo and redo changes to investments, in one history shared by Home and Settings, as F7 says; never during a fetch.
+- **K11.** Settings is a page (replaces G), reached from Home's **Settings** and left with **← Your portfolio** (first launch when no statement is kept). A side menu goes to its sections.
+  - **Your investments:** every investment the app keeps something about, with its name, "TICKER · symbol, exchange, currency" and a status (Chosen by you, Matched automatically, Asks you next time, Not matched yet, and "value entered by you"). Its **⋯** menu offers **Rename**, **Choose the listing next time** and **Forget…** (asks first; removes the listing, the name and the value entered). **Forget all investments…** asks first and keeps the spreadsheet, the statement and the last prices. The switch **Take the first listing without asking**. With nothing kept, the list says why. Ctrl+Z takes back the last change (K10).
+  - **Your statement:** its latest transaction, **Use a newer one…** and **Forget it…** (asks first; then first launch asks for a statement again). With none kept, it says so.
+  - **Your spreadsheet:** its name and folder, **Open folder**, **Choose another…** and **Stop using it**; without one, **Choose spreadsheet…** and **Create a new one…**. **Backup copies to keep**, from 0 to 99, with **−** and **+**.
+  - **About and privacy:** the version, where new versions are, the privacy text and the disclaimer.
+  - Changes are saved at once and show on Home at once (G5).
 - **K12.** Errors are in plain words: what happened, and what to do.
   - Details can be copied with **Copy details**; no stack trace is shown.
+  - **Help** on Home (and **About and privacy** on first launch) shows where the statement comes from (the Revolut steps and All time), the privacy text and the version.
+  - Tab reaches every button, field and investment name, with a visible outline; Esc closes dialogs and Enter confirms them.
+  - Light and dark follow the system and switch while the app is open; the green buttons are #107C41 in light and #33C481 in dark.
+  - The window shows the app's icon.

@@ -31,6 +31,11 @@ Item {
                     font.weight: Font.DemiBold
                 }
                 Item { Layout.fillWidth: true }
+                IconButton {
+                    text: "Help"
+                    iconName: "help"
+                    onClicked: session.showHelp()
+                }
                 SecondaryButton {
                     text: "Settings"
                     iconName: "settings"

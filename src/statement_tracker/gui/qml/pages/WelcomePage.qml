@@ -383,7 +383,7 @@ Item {
                     }
                     TextButton {
                         text: "About and privacy"
-                        onClicked: session.goTo("settings")
+                        onClicked: session.showHelp()
                     }
                 }
                 SecondaryButton {

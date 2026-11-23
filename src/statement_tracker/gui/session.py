@@ -98,6 +98,8 @@ class Session(QObject):
         self.loading_positions: tuple[Position, ...] = ()
         """The investments of the run going on, listed while their prices come in."""
         self.loading_currency = ""
+        self.statement_latest: date | None = self.kept.latest if self.kept else None
+        """The day of the latest transaction in the statement Home shows."""
         self._running: tuple[Task, threading.Event] | None = None
         self._alive: set[Task] = set()
         """Runs the thread pool has not finished yet, stopped ones included: kept alive until then."""
@@ -159,16 +161,25 @@ class Session(QObject):
         if self.statement is not None:
             self.start_run(self.statement)
 
-    def start_run(self, statement: Path) -> None:
+    def use_statement(self, statement: Path) -> None:
+        """A newer statement, chosen or dropped on Home: fetch its prices; it becomes the one kept.
+        One that does not read is explained, and the statement shown stays."""
+        self.remember_folder(statement.parent)
+        if self.start_run(statement):
+            self.statement = statement
+
+    def start_run(self, statement: Path) -> bool:
         """Read ``statement``, fetch prices and work out the report, without freezing the window.
-        A run going on is stopped first: nothing of it is saved or shown."""
-        self.stop_run()
+        A run going on is stopped first: nothing of it is saved or shown. False if the statement
+        does not read (the user is told why, and nothing changes)."""
         try:
             summary = read_statement(statement)
         except UserFacingError as error:
             self.show_error(error)
-            return
+            return False
+        self.stop_run()
         self.loading_positions, self.loading_currency = summary.positions, summary.currency
+        self.statement_latest = summary.latest
         stop = threading.Event()
         spreadsheet = self.settings.spreadsheet_path
 
@@ -197,6 +208,7 @@ class Session(QObject):
         self._alive.add(task)
         self.busyChanged.emit()
         QThreadPool.globalInstance().start(task)
+        return True
 
     def stop_run(self) -> None:
         """Stop the run going on, if any, at its next step. Nothing of it is saved or shown."""
@@ -275,6 +287,8 @@ class Session(QObject):
                     self._welcome.use_spreadsheet(path)
             elif on_welcome and self._welcome.step == "statement":
                 self._welcome.use_statement(path)
+            elif self._page == "home":
+                self.use_statement(path)
 
     @Slot(str)
     def copyText(self, text: str) -> None:

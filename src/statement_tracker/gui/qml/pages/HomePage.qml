@@ -39,6 +39,20 @@ Item {
             }
 
             TotalsCard { Layout.fillWidth: true }
+
+            // What goes in (the statement) and what comes out (the spreadsheet), side by side.
+            GridLayout {
+                columns: page.width > 820 ? 2 : 1
+                columnSpacing: 16
+                rowSpacing: 16
+                Layout.fillWidth: true
+                StatementCard {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 1
+                    Layout.horizontalStretchFactor: 1
+                }
+            }
             InvestmentsCard { Layout.fillWidth: true }
 
             Item { Layout.preferredHeight: 16 }

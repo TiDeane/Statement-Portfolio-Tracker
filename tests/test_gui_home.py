@@ -1,14 +1,17 @@
 """Home in the new window, driven as a user would. Rule numbers refer to tests/SPECIFICATION.md."""
 
 import threading
+import time
+from datetime import date
 from pathlib import Path
 
-from fakes import SAMPLE, FakeProvider, ranges_around, write_statement
+from fakes import SAMPLE, SAMPLES, FakeProvider, ranges_around, write_statement
 from quick_driver import (  # noqa: F401
     EQQB_BUYS,
     app,
     click,
     close_windows_afterwards,
+    drop,
     english_computer,
     find,
     find_starting,
@@ -20,6 +23,9 @@ from quick_driver import (  # noqa: F401
     wait_until,
 )
 
+from statement_tracker.core.parser import load_statement
+from statement_tracker.gui.formatting import day_text
+from statement_tracker.kept_statement import find_kept_statement
 from statement_tracker.settings import Settings, TickerChoice
 
 TWO_FUNDS = (
@@ -134,3 +140,113 @@ def test_many_investments_scroll_and_long_names_are_cut_short(app, tmp_path: Pat
     assert len(rows(shell.window)) == 21  # twenty investments and the total
     assert shell.window.height() == height
     assert find_starting(shell.window, "A fund with a very long name").property("truncated") is True
+
+
+LATER_DAY = date(2026, 11, 14)
+
+
+def newer_statement(tmp_path: Path) -> Path:
+    """The sample with one more EQQB buy, on LATER_DAY: 1.57328346 shares in all."""
+    folder = tmp_path / "downloads"
+    folder.mkdir(exist_ok=True)
+    newer = folder / "newer.csv"
+    newer.write_text(SAMPLE.read_text(encoding="utf-8").rstrip("\n") + "\n"
+                     "2026-11-14T10:00:00.000Z,EQQB,BUY - MARKET,0.1,EUR 380.00,EUR 38.00,EUR,1\n", encoding="utf-8")
+    return newer
+
+
+class Slow(FakeProvider):
+    """Yahoo taking its time: each price waits until the test lets it go."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.let_go = threading.Event()
+
+    def quote(self, symbol: str):
+        self.let_go.wait(10)
+        return super().quote(symbol)
+
+
+def slow_eqqb() -> Slow:
+    provider = Slow()
+    provider.add("EQQB.DE", "EUR", price="400", ranges=ranges_around(EQQB_BUYS), name="Nasdaq fund", exchange="XETRA")
+    return provider
+
+
+def test_home_says_which_statement_the_values_come_from(app, tmp_path: Path) -> None:
+    # Spec K6.
+    shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
+    settled(app, shell)
+
+    latest = max(t.timestamp for t in load_statement(SAMPLE).transactions).astimezone().date()
+    assert shows(shell.window, "Your statement", f"Latest transaction {day_text(latest)}. Anything after it isn't included.")
+    assert shows(shell.window, "Use a newer statement…", "or drop it on this window")
+
+
+def test_a_newer_statement_replaces_the_kept_one(app, tmp_path: Path) -> None:
+    # Spec K6, F14.
+    shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
+    settled(app, shell)
+
+    drop(shell.window, newer_statement(tmp_path))
+    settled(app, shell)
+
+    assert shows(shell.window, f"Latest transaction {day_text(LATER_DAY)}", "629.31")  # 1.57328346 shares at 400
+    assert find_kept_statement(tmp_path / "settings.json").latest == LATER_DAY
+
+
+def test_use_a_newer_statement_asks_for_the_file(app, tmp_path: Path) -> None:
+    # Spec K6.
+    shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
+    settled(app, shell)
+    newer = newer_statement(tmp_path)
+    shell.session.ask_open_file = lambda title, kinds, start: newer
+
+    click(find(shell.window, "Use a newer statement…"))
+    settled(app, shell)
+
+    assert shows(shell.window, "629.31")
+
+
+def test_a_statement_that_does_not_read_keeps_the_one_shown(app, tmp_path: Path) -> None:
+    # Spec K6, K12.
+    shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
+    settled(app, shell)
+
+    drop(shell.window, SAMPLES / "unknown_type.csv")
+    settled(app, shell)
+
+    assert len(shell.errors) == 1
+    assert shows(shell.window, "589.31")
+    assert find_kept_statement(tmp_path / "settings.json").latest != LATER_DAY
+
+
+def test_a_new_statement_during_a_fetch_stops_that_fetch(app, tmp_path: Path) -> None:
+    # Spec K6 (Review Focus 1).
+    provider = slow_eqqb()
+    shell = open_app(tmp_path, provider, kept=SAMPLE)
+    wait_until(app, lambda: shows(shell.window, "current prices"))
+
+    drop(shell.window, newer_statement(tmp_path))
+    provider.let_go.set()
+    settled(app, shell)
+
+    assert shows(shell.window, "629.31") and not shows(shell.window, "589.31")
+    assert shell.errors == []
+
+
+def test_closing_the_window_during_a_fetch_saves_nothing(app, tmp_path: Path) -> None:
+    # Spec K6 (Review Focus 1).
+    provider = slow_eqqb()
+    shell = open_app(tmp_path, provider, kept=SAMPLE)
+    wait_until(app, lambda: shows(shell.window, "current prices"))
+
+    shell.close()
+    provider.let_go.set()
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline:  # time for the stopped run to end, and for anything it might do
+        app.processEvents()
+        time.sleep(0.01)
+
+    assert not (tmp_path / "last_prices.json").exists()
+    assert Settings.load(tmp_path / "settings.json").ticker_choices == {}

@@ -259,5 +259,8 @@ The window being built to replace F and G (design: `docs/superpowers/specs/2026-
 - **K5.** Home, the investments list: one row per investment held, then a bold **Total**.
   - Columns: Investment, Invested, Worth now, Share of total, Gain or loss. The investment's name comes first (the user's own, else Yahoo's, else its ticker), with "TICKER · exchange" under it.
   - Many investments scroll with the page; the window keeps its size and long names are cut short.
+- **K6.** Home, the statement: a card "Your statement" with "Latest transaction <date>. Anything after it isn't included." and **Use a newer statement…**, "or drop it on this window".
+  - A statement chosen or dropped anywhere on Home is read, prices are fetched for it, and it becomes the one kept (F14). One that does not read is explained and the one shown stays.
+  - A new statement, **Refresh prices** or closing the window while prices are being fetched stops that fetch: nothing of it is saved or shown (replaces F8).
 - **K12.** Errors are in plain words: what happened, and what to do.
   - Details can be copied with **Copy details**; no stack trace is shown.

@@ -8,8 +8,10 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
-from statement_tracker.gui.formatting import gain, money, time_text
+from statement_tracker.gui.formatting import day_text, gain, money, time_text
 from statement_tracker.gui.holdings_model import HoldingsModel, holding_rows, loading_rows, name_and_detail, total_row
+
+from statement_tracker.gui.welcome import STATEMENT_FILES
 
 if TYPE_CHECKING:
     from statement_tracker.gui.session import Session
@@ -106,7 +108,12 @@ class Home(QObject):
         report = self._report()
         return total_row(report) if report and report.valuation.holdings else []
 
+    def _get_statement_line(self) -> str:
+        latest = self._session.statement_latest
+        return f"Latest transaction {day_text(latest)}. Anything after it isn't included." if latest else ""
+
     busy = Property(bool, _get_busy, notify=changed)
+    statementLine = Property(str, _get_statement_line, notify=changed)
     hasReport = Property(bool, lambda self: self._report() is not None, notify=changed)
     progressText = Property(str, _get_progress_text, notify=changed)
     progressFraction = Property(float, _get_progress_fraction, notify=changed)
@@ -144,3 +151,10 @@ class Home(QObject):
     def refresh(self) -> None:
         """Fetch today's prices again."""
         self._session.refresh()
+
+    @Slot()
+    def chooseStatement(self) -> None:
+        """Use a newer statement, picked in the file chooser."""
+        chosen = self._session.ask_open_file("Choose your Revolut statement", STATEMENT_FILES, self._session.start_folder())
+        if chosen is not None:
+            self._session.use_statement(chosen)

@@ -239,7 +239,8 @@ class SettingsPage(QObject):
     @Slot()
     def useNewerStatement(self) -> None:
         chosen = self._session.ask_open_file("Choose your Revolut statement", STATEMENT_FILES, self._session.start_folder())
-        if chosen is not None and self._session.use_statement(chosen):
+        if chosen is not None:
+            self._session.use_statement(chosen)
             self._session.goTo("home")
 
     @Slot()

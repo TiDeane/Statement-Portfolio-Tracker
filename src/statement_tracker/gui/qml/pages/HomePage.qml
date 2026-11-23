@@ -39,7 +39,7 @@ Item {
                 SecondaryButton {
                     text: "Settings"
                     iconName: "settings"
-                    enabled: !session.busy  // a fetch reads and saves the same settings
+                    enabled: !session.busy && !session.home.writing  // a fetch and the spreadsheet use the same settings
                     onClicked: session.goTo("settings")
                 }
             }

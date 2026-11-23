@@ -1,9 +1,10 @@
 """First launch in the new window, driven as a user would. Rule numbers refer to tests/SPECIFICATION.md."""
 
+import time
 from pathlib import Path
 
 from fakes import SAMPLE, SAMPLES, FakeProvider
-from quick_driver import app, click, close_windows_afterwards, drop, find, open_app, shows  # noqa: F401
+from quick_driver import app, click, close_windows_afterwards, drop, find, open_app, shows, wait_until  # noqa: F401
 
 from statement_tracker.settings import Settings
 
@@ -151,3 +152,19 @@ def test_someone_with_a_remembered_spreadsheet_skips_step_2(app, tmp_path: Path)
 
     assert shows(shell.window, "Your portfolio")
     assert Settings.load(tmp_path / "settings.json").spreadsheet_path == tmp_path / "mine.xlsx"
+
+
+def test_reading_a_statement_does_not_freeze_the_window(app, tmp_path: Path, monkeypatch) -> None:
+    # Spec F2: "Reading your statement…" with a moving bar meanwhile.
+    from test_gui_spreadsheet import held_back
+
+    shell = open_app(tmp_path, FakeProvider())
+    let_go = held_back(monkeypatch, "statement_tracker.gui.welcome.read_statement")
+
+    started = time.monotonic()
+    drop(shell.window, SAMPLE, wait=False)
+
+    assert time.monotonic() - started < 2  # the window answered at once
+    assert shows(shell.window, "Reading your statement…")
+    let_go.set()
+    wait_until(app, lambda: shows(shell.window, "18 transactions"))

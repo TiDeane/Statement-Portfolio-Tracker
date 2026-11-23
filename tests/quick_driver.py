@@ -310,10 +310,35 @@ def scroll_to(item: QQuickItem) -> None:
         parent = parent.parentItem()
 
 
-def click(item: QQuickItem) -> None:
+def _shell_of(window: QQuickWindow) -> AppWindow | None:
+    for shells in [*_OPENED, _UNMANAGED]:
+        for shell in shells:
+            if shell.window == window:
+                return shell
+    return None
+
+
+def _finish_quick_work(window: QQuickWindow) -> None:
+    """Wait, as a user watching the moving bar does, for what a click or a drop started in the background:
+    reading a statement on first launch, writing the spreadsheet. (A fetch is waited for by the tests.)"""
+    shell = _shell_of(window)
+    if shell is None:
+        return
+    session = shell.session
+    wait_until(
+        QGuiApplication.instance(),
+        lambda: not session.welcome.property("reading") and not session.home.property("writing"),
+    )
+
+
+def click(item: QQuickItem, wait: bool = True) -> None:
+    """Click ``item``; unless ``wait`` is False, wait for what it started in the background (see above)."""
     scroll_to(item)
-    QTest.mouseClick(_window_of(item), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _centre(item))
+    window = _window_of(item)
+    QTest.mouseClick(window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _centre(item))
     settle(QGuiApplication.instance())
+    if wait:
+        _finish_quick_work(window)
 
 
 def double_click(item: QQuickItem) -> None:
@@ -336,8 +361,9 @@ def type_text(window: QQuickWindow, text: str) -> None:
     settle(QGuiApplication.instance())
 
 
-def drop(window: QQuickWindow, *paths: Path) -> None:
-    """Drag files from the file manager and drop them on the middle of the window."""
+def drop(window: QQuickWindow, *paths: Path, wait: bool = True) -> None:
+    """Drag files from the file manager and drop them on the middle of the window; unless ``wait`` is False,
+    wait for what that started in the background."""
     data = QMimeData()
     data.setUrls([QUrl.fromLocalFile(str(path)) for path in paths])
     where = QPointF(window.width() / 2, window.height() / 2)
@@ -352,6 +378,8 @@ def drop(window: QQuickWindow, *paths: Path) -> None:
     for event in events:
         QGuiApplication.sendEvent(window, event)
     settle(QGuiApplication.instance())
+    if wait:
+        _finish_quick_work(window)
 
 
 def when_a_dialog_opens(shell: AppWindow, act: Callable[[], object]) -> None:

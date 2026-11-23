@@ -6,11 +6,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Property, QObject, Signal, Slot
+from PySide6.QtCore import Property, QObject, QThreadPool, Signal, Slot
 
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.gui.formatting import day_text
 from statement_tracker.gui.texts import ALL_TIME_NOTE, REVOLUT_STEPS
+from statement_tracker.gui.workers import Task
 from statement_tracker.workflow import StatementSummary, read_statement
 
 if TYPE_CHECKING:
@@ -47,6 +48,8 @@ class Welcome(QObject):
         self._choice = ""
         """Step 2's option: "existing", "new" or "none"; "" until one is chosen."""
         self._spreadsheet: Path | None = None
+        self._reading: Task | None = None
+        """The statement being read, on the thread pool."""
 
     def reset(self) -> None:
         """Start afresh: step 1, nothing chosen (first launch shown again after the statement is forgotten)."""
@@ -68,6 +71,8 @@ class Welcome(QObject):
         return self._facts
 
     def _can_continue(self) -> bool:
+        if self._reading is not None:
+            return False
         return self._statement is not None if self._step == "statement" else self._choice != ""
 
     def _get_choice(self) -> str:
@@ -85,6 +90,7 @@ class Welcome(QObject):
     statementName = Property(str, _get_name, notify=changed)
     statementFacts = Property(list, _get_facts, notify=changed)
     canContinue = Property(bool, _can_continue, notify=changed)
+    reading = Property(bool, lambda self: self._reading is not None, notify=changed)
     spreadsheetChoice = Property(str, _get_choice, notify=changed)
     spreadsheetName = Property(str, _get_sheet_name, notify=changed)
     spreadsheetFolder = Property(str, _get_sheet_folder, notify=changed)
@@ -105,16 +111,32 @@ class Welcome(QObject):
             self.use_statement(chosen)
 
     def use_statement(self, path: Path) -> None:
-        """Read ``path``; if it reads, it is the statement chosen. If not, say why and keep what was there."""
-        self._session.remember_folder(path.parent)
-        try:
-            summary = read_statement(path)
-        except UserFacingError as error:
-            self._session.show_error(error)
+        """Read ``path`` off the window's thread; if it reads, it is the statement chosen. If not, say why
+        and keep what was there. A statement dropped while another is being read waits for nothing: it is
+        ignored, as the drop area says it is busy."""
+        if self._reading is not None:
             return
+        self._session.remember_folder(path.parent)
+        task = Task(lambda: read_statement(path))
+        task.signals.finished.connect(lambda summary: self._read(path, summary))
+        task.signals.failed.connect(self._not_read)
+        self._reading = task
+        self.changed.emit()
+        QThreadPool.globalInstance().start(task)
+
+    def _read(self, path: Path, summary: StatementSummary) -> None:
+        self._reading = None
         self._statement = path
         self._facts = statement_facts(summary)
         self.changed.emit()
+
+    def _not_read(self, error: object) -> None:
+        self._reading = None
+        self.changed.emit()
+        if isinstance(error, UserFacingError):
+            self._session.show_error(error)
+        else:
+            self._session.unexpected(error)
 
     @Slot()
     def next(self) -> None:

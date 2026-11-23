@@ -9,7 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Property, QObject, Signal, Slot
+from PySide6.QtCore import Property, QObject, QThreadPool, Signal, Slot
 
 from statement_tracker.core.models import MarketPrice
 from statement_tracker.gui.formatting import day_text, gain, money, shares_text, time_text
@@ -19,6 +19,7 @@ from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.exporters.base import ExportResult
 from statement_tracker.gui.welcome import NEW_SPREADSHEET_NAME, SPREADSHEET_FILES, STATEMENT_FILES
 from statement_tracker.gui.undo import ENTERED, NAME
+from statement_tracker.gui.workers import Task
 from statement_tracker.workflow import Report, needs_price, update_spreadsheet, with_entered_prices
 
 if TYPE_CHECKING:
@@ -114,6 +115,10 @@ class Home(QObject):
         self._sheet_details = ""
         self._updated_at: datetime | None = None
         self._updated_on = None
+        self._writing: Task | None = None
+        """The spreadsheet being written, on the thread pool."""
+        self._write_again = False
+        """A change came in while writing: written once more when that ends."""
         """The day of the last successful update, by the same calendar the update itself used."""
         session.reportChanged.connect(self._clear_sheet_result)
         session.spreadsheetChanged.connect(self._other_spreadsheet)
@@ -205,6 +210,8 @@ class Home(QObject):
         sheet = self._sheet()
         if sheet is None:
             return ""
+        if self._writing is not None:
+            return "Updating your spreadsheet…"
         if self._sheet_result == "error":
             return "Not updated today"
         if self._updated_at is not None and self._updated_on == self._session.today():
@@ -220,7 +227,10 @@ class Home(QObject):
     sheetName = Property(str, lambda self: self._sheet().name if self._sheet() else "", notify=changed)
     sheetLine = Property(str, _get_sheet_line, notify=changed)
     sheetButton = Property(str, lambda self: "Try again" if self._sheet_result == "error" else "Update my spreadsheet", notify=changed)
-    canUpdate = Property(bool, lambda self: not self._session.busy and self._session.report is not None, notify=changed)
+    canUpdate = Property(
+        bool, lambda self: not self._session.busy and self._writing is None and self._session.report is not None, notify=changed
+    )
+    writing = Property(bool, lambda self: self._writing is not None, notify=changed)
     sheetResult = Property(str, lambda self: self._sheet_result, notify=changed)
     sheetResultTitle = Property(str, lambda self: self._sheet_title, notify=changed)
     sheetResultLines = Property(list, lambda self: self._sheet_lines, notify=changed)
@@ -288,22 +298,46 @@ class Home(QObject):
 
     @Slot()
     def updateSpreadsheet(self) -> None:
-        """Write the values shown to the spreadsheet, without fetching again, and say what was done."""
+        """Write the values shown to the spreadsheet, without fetching again, and say what was done.
+        The writing happens off the window's thread, so the window stays responsive meanwhile."""
         report, sheet = self._session.report, self._sheet()
         if report is None or sheet is None or self._session.busy:
             return
-        try:
-            exported = update_spreadsheet(report, self._session.settings, sheet, self._session.today())
-        except UserFacingError as error:
+        if self._writing is not None:
+            self._write_again = True  # a change while writing: written once more afterwards
+            return
+        settings, today = self._session.settings, self._session.today()
+        task = Task(lambda: update_spreadsheet(report, settings, sheet, today))
+        task.signals.finished.connect(lambda exported: self._written(task, report, sheet, exported))
+        task.signals.failed.connect(lambda error: self._not_written(task, error))
+        self._writing = task
+        self.changed.emit()
+        QThreadPool.globalInstance().start(task)
+
+    def _written(self, task: Task, report: Report, sheet: Path, exported: ExportResult) -> None:
+        self._writing = None
+        self._sheet_result = "ok"
+        self._sheet_title = "Your spreadsheet was created" if exported.created else "Your spreadsheet is up to date"
+        self._sheet_lines, self._sheet_details = result_lines(report, exported), ""
+        self._updated_at, self._updated_on = self._session.now(), self._session.today()
+        self._session.updated_this_session = sheet
+        self._wrote()
+
+    def _not_written(self, task: Task, error: object) -> None:
+        self._writing = None
+        if isinstance(error, UserFacingError):
             self._sheet_result, self._sheet_title = "error", "Your spreadsheet wasn't updated"
             self._sheet_lines, self._sheet_details = [error.what_happened, error.what_to_do], error.details
+            self._wrote()
         else:
-            self._sheet_result = "ok"
-            self._sheet_title = "Your spreadsheet was created" if exported.created else "Your spreadsheet is up to date"
-            self._sheet_lines, self._sheet_details = result_lines(report, exported), ""
-            self._updated_at, self._updated_on = self._session.now(), self._session.today()
-            self._session.updated_this_session = sheet
+            self.changed.emit()
+            self._session.unexpected(error)
+
+    def _wrote(self) -> None:
         self.changed.emit()
+        if self._write_again:
+            self._write_again = False
+            self.updateSpreadsheet()
 
     @Slot(int)
     def enterValue(self, row: int) -> None:

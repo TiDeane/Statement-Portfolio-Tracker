@@ -49,6 +49,12 @@ Card {
         }
     }
 
+    ProgressLine {
+        visible: card.home.writing
+        indeterminate: true
+        Layout.fillWidth: true
+    }
+
     Text {
         visible: card.home.backupsOff !== ""
         text: card.home.backupsOff
@@ -77,6 +83,7 @@ Card {
             text: "Open folder"
             iconName: "folder"
             implicitHeight: 44
+            enabled: !card.home.writing
             onClicked: card.home.openFolder()
         }
     }

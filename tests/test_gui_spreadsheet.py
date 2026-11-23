@@ -1,5 +1,6 @@
 """Home's spreadsheet card in the new window, driven as a user would. Rule numbers refer to tests/SPECIFICATION.md."""
 
+import time
 from pathlib import Path
 
 import pytest
@@ -149,3 +150,35 @@ def test_another_spreadsheet_is_not_said_to_be_up_to_date(app, tmp_path: Path) -
     assert shows(shell.window, "other.xlsx", "It doesn't exist yet: updating creates it.")
     assert not shows(shell.window, "Updated today at")
     assert not shows(shell.window, "Your spreadsheet was created")
+
+
+def held_back(monkeypatch, target: str):
+    """Make ``target`` (a function the window calls) wait until the test lets it go, as a slow disk would."""
+    import threading
+
+    let_go = threading.Event()
+    module, name = target.rsplit(".", 1)
+    real = getattr(__import__(module, fromlist=[name]), name)
+
+    def slow(*args, **kwargs):
+        let_go.wait(5)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(target, slow)
+    return let_go
+
+
+def test_updating_the_spreadsheet_does_not_freeze_the_window(app, tmp_path: Path, monkeypatch) -> None:
+    # Spec F7: a moving bar while it writes; its buttons and Settings wait.
+    shell = home_with_spreadsheet(app, tmp_path)
+    let_go = held_back(monkeypatch, "statement_tracker.gui.home.update_spreadsheet")
+
+    started = time.monotonic()
+    click(find(shell.window, "Update my spreadsheet"), wait=False)
+
+    assert time.monotonic() - started < 2  # the window answered at once
+    assert shows(shell.window, "Updating your spreadsheet…")
+    assert not find(shell.window, "Settings").isEnabled()
+    let_go.set()
+    wait_until(app, lambda: shows(shell.window, "Your spreadsheet was created"))
+    assert find(shell.window, "Settings").isEnabled()

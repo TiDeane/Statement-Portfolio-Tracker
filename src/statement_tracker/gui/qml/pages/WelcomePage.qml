@@ -10,7 +10,8 @@ Item {
     id: page
     readonly property var welcome: session.welcome
     readonly property bool onStatement: welcome.step === "statement"
-    readonly property bool chosen: welcome.statementChosen
+    readonly property bool chosen: welcome.statementChosen && !welcome.reading
+    readonly property bool reading: welcome.reading
     readonly property bool dragging: ApplicationWindow.window ? ApplicationWindow.window.dragging : false
 
     ScrollView {
@@ -120,7 +121,23 @@ Item {
                             width: parent.width - 48
                             spacing: 12
 
+                            Text {
+                                visible: page.reading
+                                text: "Reading your statement\u2026"
+                                color: Theme.text
+                                font.pixelSize: 18
+                                font.weight: Font.DemiBold
+                                horizontalAlignment: Text.AlignHCenter
+                                Layout.fillWidth: true
+                            }
+                            ProgressLine {
+                                visible: page.reading
+                                indeterminate: true
+                                Layout.alignment: Qt.AlignHCenter
+                                Layout.preferredWidth: 240
+                            }
                             Rectangle {
+                                visible: !page.reading
                                 Layout.alignment: Qt.AlignHCenter
                                 implicitWidth: 56
                                 implicitHeight: 56
@@ -134,7 +151,7 @@ Item {
                                 }
                             }
                             Text {
-                                visible: !page.chosen
+                                visible: !page.chosen && !page.reading
                                 text: "Drop your Revolut statement here"
                                 color: Theme.text
                                 font.pixelSize: 18
@@ -144,7 +161,7 @@ Item {
                                 Layout.fillWidth: true
                             }
                             Text {
-                                visible: !page.chosen
+                                visible: !page.chosen && !page.reading
                                 text: "A CSV file from the Revolut app"
                                 color: Theme.muted
                                 font.pixelSize: 14
@@ -152,7 +169,7 @@ Item {
                                 Layout.fillWidth: true
                             }
                             Text {
-                                visible: !page.chosen
+                                visible: !page.chosen && !page.reading
                                 text: "or"
                                 color: Theme.muted
                                 font.pixelSize: 13
@@ -160,7 +177,7 @@ Item {
                                 Layout.fillWidth: true
                             }
                             SecondaryButton {
-                                visible: !page.chosen
+                                visible: !page.chosen && !page.reading
                                 text: "Choose statement file…"
                                 Layout.alignment: Qt.AlignHCenter
                                 onClicked: welcome.chooseStatement()

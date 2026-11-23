@@ -250,3 +250,21 @@ def test_closing_the_window_during_a_fetch_saves_nothing(app, tmp_path: Path) ->
 
     assert not (tmp_path / "last_prices.json").exists()
     assert Settings.load(tmp_path / "settings.json").ticker_choices == {}
+
+
+def test_a_newer_statement_is_read_without_freezing_the_window(app, tmp_path: Path, monkeypatch) -> None:
+    # Spec F6, F4: reading the statement is the fetch's first step, shown as it.
+    from test_gui_spreadsheet import held_back
+
+    shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
+    settled(app, shell)
+    let_go = held_back(monkeypatch, "statement_tracker.gui.session.read_statement")
+
+    started = time.monotonic()
+    drop(shell.window, newer_statement(tmp_path), wait=False)
+
+    assert time.monotonic() - started < 2  # the window answered at once
+    assert shows(shell.window, "Reading your statement")
+    let_go.set()
+    settled(app, shell)
+    assert shows(shell.window, "629.31")

@@ -98,7 +98,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - Once a fetch has read a statement to the end, a copy of it is kept in the app's own folder, replacing the one kept before. One that cannot be read, or a fetch that is stopped, keeps the one from before.
 - **F2.** First launch, step 1: the statement.
   - A drop area ("Drop your Revolut statement here", with **Choose statement file…**) beside "Where do I get it?": the Revolut steps and "Always pick All time".
-  - Dropping a statement anywhere on the window or choosing one reads it at once. One that reads shows its file name, "<n> transactions, the latest on <date>" and "<n> investments you still hold", with **Choose another file…**. One that does not read is explained (F11) and the step stays as it was.
+  - Dropping a statement anywhere on the window or choosing one reads it at once, without freezing the window: the drop area says "Reading your statement…" with a moving bar meanwhile. One that reads shows its file name, "<n> transactions, the latest on <date>" and "<n> investments you still hold", with **Choose another file…**. One that does not read is explained (F11) and the step stays as it was.
   - **Continue** stays disabled until a statement has been read.
   - The file chooser opens in the folder used last time.
   - A line says that everything stays on this computer and only fund codes and dates go to Yahoo Finance, with **About and privacy**.
@@ -119,7 +119,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - A statement chosen or dropped anywhere on Home is read, prices are fetched for it, and it becomes the one kept (F1). One that does not read is explained and the one shown stays.
   - A new statement, **Refresh prices** or closing the window while prices are being fetched stops that fetch: nothing of it is saved or shown.
 - **F7.** Home, the spreadsheet: a card with the file's name and one of "Last changed <date>", "Updated today at <time>", "Not updated today", "Ready once today's prices are in" or "It doesn't exist yet: updating creates it.", with **Open folder** and **Update my spreadsheet**.
-  - **Update my spreadsheet** writes the values shown, without fetching again; it waits for the prices. The card then says "Your spreadsheet is up to date" (or "Your spreadsheet was created") in green, with what was written to Current Holdings, whether today's history row was added or updated (or why not, and what it leaves out) and the backup copy's name.
+  - **Update my spreadsheet** writes the values shown, without fetching again; it waits for the prices. Writing does not freeze the window: the card says "Updating your spreadsheet…" with a moving bar, and its buttons and Settings wait. The card then says "Your spreadsheet is up to date" (or "Your spreadsheet was created") in green, with what was written to Current Holdings, whether today's history row was added or updated (or why not, and what it leaves out) and the backup copy's name.
   - A spreadsheet that cannot be saved is said in red: "Your spreadsheet wasn't updated", what happened, what to do and **Copy details**; the values stay shown and the button reads **Try again**.
   - **Open folder** opens the folder the spreadsheet is in, with the file selected where the system allows it.
   - Without a spreadsheet, the card offers **Choose spreadsheet…** and **Create a new one…**. An .xlsx dropped on Home becomes the spreadsheet.

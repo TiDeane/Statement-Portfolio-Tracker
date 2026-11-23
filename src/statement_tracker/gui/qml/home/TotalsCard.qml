@@ -111,6 +111,7 @@ Card {
         }
         ProgressLine {
             fraction: card.home.progressFraction
+            indeterminate: card.home.progressFraction === 0  // reading the statement, before the steps are known
             Layout.fillWidth: true
         }
     }

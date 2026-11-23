@@ -26,7 +26,14 @@ from statement_tracker.kept_statement import KeptStatement, find_kept_statement
 from statement_tracker.settings import Settings
 from statement_tracker.gui.undo import ChangeHistory
 from statement_tracker.gui.workers import QuestionBridge, Task
-from statement_tracker.workflow import Report, build_report, read_statement, values_typed_in, with_entered_prices
+from statement_tracker.workflow import (
+    Report,
+    StatementSummary,
+    build_report,
+    read_statement,
+    values_typed_in,
+    with_entered_prices,
+)
 
 PAGES = ("welcome", "home", "settings")
 UNEXPECTED = UserFacingError(
@@ -106,6 +113,8 @@ class Session(QObject):
     """Another spreadsheet (or none) is to be updated from now on."""
     """Something shown changed in the settings: the spreadsheet chosen, the backups, a name."""
     progressed = Signal(int, int, str)
+    statementRead = Signal(object, object)
+    """A fetch has read its statement: (its task, the statement's summary). Sent from the fetch's thread."""
     """A run's progress: steps done, steps in all (0 while unknown), what is being done."""
 
     def __init__(
@@ -140,6 +149,8 @@ class Session(QObject):
         self._alive: set[Task] = set()
         """Runs the thread pool has not finished yet, stopped ones included: kept alive until then."""
         self._bridge = QuestionBridge(self._ask_during_run, self)
+        self._running_statement: Path | None = None
+        self.statementRead.connect(self._statement_read)
         self.updated_this_session: Path | None = None
         """The spreadsheet updated while the app is open: changes made since are written to it at once."""
 
@@ -224,27 +235,16 @@ class Session(QObject):
         if self.statement is not None:
             self.start_run(self.statement)
 
-    def use_statement(self, statement: Path) -> bool:
-        """A newer statement, chosen or dropped on Home: fetch its prices; it becomes the one kept.
-        One that does not read is explained, and the statement shown stays (False)."""
+    def use_statement(self, statement: Path) -> None:
+        """A newer statement, chosen or dropped on Home: fetch its prices; it becomes the one shown and
+        kept once it has been read. One that does not read is explained, and the statement shown stays."""
         self.remember_folder(statement.parent)
-        if not self.start_run(statement):
-            return False
-        self.statement = statement
-        return True
+        self.start_run(statement)
 
-    def start_run(self, statement: Path) -> bool:
-        """Read ``statement``, fetch prices and work out the report, without freezing the window.
-        A run going on is stopped first: nothing of it is saved or shown. False if the statement
-        does not read (the user is told why, and nothing changes)."""
-        try:
-            summary = read_statement(statement)
-        except UserFacingError as error:
-            self.show_error(error)
-            return False
+    def start_run(self, statement: Path) -> None:
+        """Read ``statement``, fetch prices and work out the report, all off the window's thread. A run
+        going on is stopped first: nothing of it is saved or shown."""
         self.stop_run()
-        self.loading_positions, self.loading_currency = summary.positions, summary.currency
-        self.statement_latest = summary.latest
         stop = threading.Event()
         spreadsheet = self.settings.spreadsheet_path
 
@@ -254,9 +254,11 @@ class Session(QObject):
                 raise RunStopped
             self.progressed.emit(done, total, text)
 
-        def work() -> Report:
+        def work() -> tuple[Report, KeptStatement | None]:
+            progress(0, 0, "Reading your statement...")
+            self.statementRead.emit(task, read_statement(statement))
             typed, typed_at = values_typed_in(self.settings, spreadsheet)
-            return build_report(
+            report = build_report(
                 statement,
                 self.provider_factory(),
                 self.settings,
@@ -265,15 +267,25 @@ class Session(QObject):
                 typed_values=typed,
                 typed_at=typed_at,
             )
+            return report, find_kept_statement(self.settings.path)  # the run kept its statement
 
         task = Task(work)
-        task.signals.finished.connect(lambda report: self._finished(task, report))
+        task.signals.finished.connect(lambda result: self._finished(task, *result))
         task.signals.failed.connect(lambda error: self._failed(task, error))
         self._running = (task, stop)
+        self._running_statement = statement
         self._alive.add(task)
         self.busyChanged.emit()
         QThreadPool.globalInstance().start(task)
-        return True
+
+    def _statement_read(self, task: Task, summary: StatementSummary) -> None:
+        """The fetch's statement reads: it is the one shown, its investments listed while prices come in."""
+        if not self._is_current(task):
+            return
+        self.statement = self._running_statement
+        self.loading_positions, self.loading_currency = summary.positions, summary.currency
+        self.statement_latest = summary.latest
+        self.busyChanged.emit()
 
     @Slot()
     def stopRun(self) -> None:
@@ -290,14 +302,14 @@ class Session(QObject):
     def _is_current(self, task: Task) -> bool:
         return self._running is not None and self._running[0] is task
 
-    def _finished(self, task: Task, report: Report) -> None:
+    def _finished(self, task: Task, report: Report, kept: KeptStatement | None) -> None:
         self._alive.discard(task)
         if not self._is_current(task):
             return  # stopped: not this window's to show any more
         self._running = None
         self.report = report
         self.fetched_at = self.now()
-        self.kept = find_kept_statement(self.settings.path)  # the run kept its statement
+        self.kept = kept
         self.history.run_finished()
         self.reportChanged.emit()
         self.busyChanged.emit()
@@ -309,10 +321,15 @@ class Session(QObject):
         self._running = None
         self.history.run_finished()  # it may have saved listings before failing
         self.busyChanged.emit()
-        if not isinstance(error, UserFacingError):
-            details = "".join(traceback.format_exception(error)) if isinstance(error, BaseException) else repr(error)
-            error = UserFacingError(UNEXPECTED.what_happened, UNEXPECTED.what_to_do, details=details)
-        self.show_error(error)
+        if isinstance(error, UserFacingError):
+            self.show_error(error)
+        else:
+            self.unexpected(error)
+
+    def unexpected(self, error: object) -> None:
+        """Something unexpected went wrong off the window's thread: say so, with details to copy."""
+        details = "".join(traceback.format_exception(error)) if isinstance(error, BaseException) else repr(error)
+        self.show_error(UserFacingError(UNEXPECTED.what_happened, UNEXPECTED.what_to_do, details=details))
 
     @Slot()
     def undo(self) -> None:

@@ -18,7 +18,7 @@ from statement_tracker.gui.holdings_model import HoldingsModel, holding_rows, lo
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.exporters.base import ExportResult
 from statement_tracker.gui.welcome import NEW_SPREADSHEET_NAME, SPREADSHEET_FILES, STATEMENT_FILES
-from statement_tracker.ui.undo import ENTERED, NAME
+from statement_tracker.gui.undo import ENTERED, NAME
 from statement_tracker.workflow import Report, needs_price, update_spreadsheet, with_entered_prices
 
 if TYPE_CHECKING:
@@ -351,7 +351,7 @@ class Home(QObject):
         self.rewrite_spreadsheet()
 
     def rewrite_spreadsheet(self) -> None:
-        """Write a change to the spreadsheet at once, if it was updated while the app is open (K10)."""
+        """Write a change to the spreadsheet at once, if it was updated while the app is open (Spec F10)."""
         if self._session.updated_this_session is not None and self._session.updated_this_session == self._sheet():
             self.updateSpreadsheet()
 

@@ -38,7 +38,7 @@ def update(shell) -> None:
 
 
 def test_update_writes_the_values_shown_and_says_what_it_did(app, tmp_path: Path) -> None:
-    # Spec K7.
+    # Spec F7.
     Workbook().save(tmp_path / "mine.xlsx")
     shell = home_with_spreadsheet(app, tmp_path)
     assert shows(shell.window, "mine.xlsx", "Last changed", "Open folder")
@@ -52,7 +52,7 @@ def test_update_writes_the_values_shown_and_says_what_it_did(app, tmp_path: Path
 
 
 def test_a_spreadsheet_that_cannot_be_saved_offers_try_again(app, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Spec K7, K12.
+    # Spec F7, F11.
     shell = home_with_spreadsheet(app, tmp_path)
 
     def locked(source, target) -> None:
@@ -73,7 +73,7 @@ def test_a_spreadsheet_that_cannot_be_saved_offers_try_again(app, tmp_path: Path
 
 
 def test_a_spreadsheet_moved_away_is_created_again(app, tmp_path: Path) -> None:
-    # Spec K7 (Review Focus 3).
+    # Spec F7 (Review Focus 3).
     shell = home_with_spreadsheet(app, tmp_path)
     assert shows(shell.window, "It doesn't exist yet: updating creates it.")
 
@@ -83,7 +83,7 @@ def test_a_spreadsheet_moved_away_is_created_again(app, tmp_path: Path) -> None:
 
 
 def test_update_waits_for_the_prices(app, tmp_path: Path) -> None:
-    # Spec K7.
+    # Spec F7.
     shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE, spreadsheet=tmp_path / "mine.xlsx")
     if shell.session.home.property("busy"):
         assert not find(shell.window, "Update my spreadsheet").isEnabled()
@@ -93,7 +93,7 @@ def test_update_waits_for_the_prices(app, tmp_path: Path) -> None:
 
 
 def test_open_folder_shows_the_spreadsheet(app, tmp_path: Path) -> None:
-    # Spec K7.
+    # Spec F7.
     shell = home_with_spreadsheet(app, tmp_path)
     opened = []
     shell.session.show_in_folder = opened.append
@@ -104,7 +104,7 @@ def test_open_folder_shows_the_spreadsheet(app, tmp_path: Path) -> None:
 
 
 def test_backups_turned_off_are_said_in_red(app, tmp_path: Path) -> None:
-    # Spec K7.
+    # Spec F7.
     shell = home_with_spreadsheet(app, tmp_path, backups=0)
     shell.theme.set_dark(False)
 
@@ -114,7 +114,7 @@ def test_backups_turned_off_are_said_in_red(app, tmp_path: Path) -> None:
 
 
 def test_without_a_spreadsheet_the_card_offers_one(app, tmp_path: Path) -> None:
-    # Spec K7.
+    # Spec F7.
     shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
     wait_until(app, lambda: not shell.session.home.property("busy"))
     assert shows(shell.window, "Keep a spreadsheet up to date?", "Choose spreadsheet…")
@@ -127,7 +127,7 @@ def test_without_a_spreadsheet_the_card_offers_one(app, tmp_path: Path) -> None:
 
 
 def test_a_spreadsheet_dropped_on_home_is_the_one_updated(app, tmp_path: Path) -> None:
-    # Spec K7.
+    # Spec F7.
     shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
     wait_until(app, lambda: not shell.session.home.property("busy"))
 

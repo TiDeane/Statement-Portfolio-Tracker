@@ -13,7 +13,7 @@ def continue_enabled(shell) -> bool:
 
 
 def test_step_1_waits_for_a_statement_that_reads(app, tmp_path: Path) -> None:
-    # Spec K2.
+    # Spec F2.
     shell = open_app(tmp_path, FakeProvider())
     assert shows(shell.window, "Drop your Revolut statement here", "Choose statement file…", "Where do I get it?")
     assert shows(shell.window, "Always pick All time")
@@ -27,7 +27,7 @@ def test_step_1_waits_for_a_statement_that_reads(app, tmp_path: Path) -> None:
 
 
 def test_a_file_that_does_not_read_is_explained_and_the_step_stays(app, tmp_path: Path) -> None:
-    # Spec K2, K12.
+    # Spec F2, F11.
     shell = open_app(tmp_path, FakeProvider())
 
     drop(shell.window, SAMPLES / "unknown_type.csv")
@@ -38,7 +38,7 @@ def test_a_file_that_does_not_read_is_explained_and_the_step_stays(app, tmp_path
 
 
 def test_a_bad_file_after_a_good_one_keeps_the_good_one(app, tmp_path: Path) -> None:
-    # Spec K2: the step stays as it was.
+    # Spec F2: the step stays as it was.
     shell = open_app(tmp_path, FakeProvider())
     drop(shell.window, SAMPLE)
 
@@ -48,7 +48,7 @@ def test_a_bad_file_after_a_good_one_keeps_the_good_one(app, tmp_path: Path) -> 
 
 
 def test_choose_statement_opens_in_the_folder_used_last_time(app, tmp_path: Path) -> None:
-    # Spec K2 (F2's rule).
+    # Spec F2.
     starts = []
     shell = open_app(tmp_path, FakeProvider())
     shell.session.ask_open_file = lambda title, kinds, start: starts.append(start) or SAMPLE
@@ -64,7 +64,7 @@ def test_choose_statement_opens_in_the_folder_used_last_time(app, tmp_path: Path
 
 
 def test_first_launch_says_what_leaves_the_computer(app, tmp_path: Path) -> None:
-    # Spec K2.
+    # Spec F2.
     shell = open_app(tmp_path, FakeProvider())
 
     assert shows(shell.window, "Everything stays on this computer. Only fund codes and dates go to Yahoo Finance.")
@@ -77,7 +77,7 @@ def to_step_2(shell) -> None:
 
 
 def test_step_2_remembers_a_spreadsheet_i_have(app, tmp_path: Path) -> None:
-    # Spec K3.
+    # Spec F3.
     shell = open_app(tmp_path, FakeProvider())
     to_step_2(shell)
     assert shows(shell.window, "Keep a spreadsheet up to date?", "Step 2 of 2", "backup copy")
@@ -93,7 +93,7 @@ def test_step_2_remembers_a_spreadsheet_i_have(app, tmp_path: Path) -> None:
 
 
 def test_create_a_new_one_adds_the_xlsx_ending(app, tmp_path: Path) -> None:
-    # Spec K3.
+    # Spec F3.
     shell = open_app(tmp_path, FakeProvider())
     to_step_2(shell)
     shell.session.ask_save_file = lambda title, start: tmp_path / "Investments"
@@ -105,7 +105,7 @@ def test_create_a_new_one_adds_the_xlsx_ending(app, tmp_path: Path) -> None:
 
 
 def test_cancelling_the_file_chooser_keeps_the_choice_before(app, tmp_path: Path) -> None:
-    # Spec K3.
+    # Spec F3.
     shell = open_app(tmp_path, FakeProvider())
     to_step_2(shell)
     click(find(shell.window, "Not now"))
@@ -118,7 +118,7 @@ def test_cancelling_the_file_chooser_keeps_the_choice_before(app, tmp_path: Path
 
 
 def test_not_now_leaves_no_spreadsheet_and_back_keeps_the_statement(app, tmp_path: Path) -> None:
-    # Spec K3.
+    # Spec F3.
     shell = open_app(tmp_path, FakeProvider())
     to_step_2(shell)
 
@@ -133,7 +133,7 @@ def test_not_now_leaves_no_spreadsheet_and_back_keeps_the_statement(app, tmp_pat
 
 
 def test_a_spreadsheet_dropped_on_step_2_is_one_i_have(app, tmp_path: Path) -> None:
-    # Spec K3.
+    # Spec F3.
     shell = open_app(tmp_path, FakeProvider())
     to_step_2(shell)
 
@@ -144,7 +144,7 @@ def test_a_spreadsheet_dropped_on_step_2_is_one_i_have(app, tmp_path: Path) -> N
 
 
 def test_someone_with_a_remembered_spreadsheet_skips_step_2(app, tmp_path: Path) -> None:
-    # Spec K3.
+    # Spec F3.
     shell = open_app(tmp_path, FakeProvider(), spreadsheet=tmp_path / "mine.xlsx")
 
     to_step_2(shell)

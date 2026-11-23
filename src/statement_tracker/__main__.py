@@ -8,7 +8,6 @@ _STARTED = time.perf_counter()  # before the heavy imports, to measure startup
 
 import argparse  # noqa: E402
 import json  # noqa: E402
-import os  # noqa: E402
 import platform  # noqa: E402
 import sys  # noqa: E402
 import tempfile  # noqa: E402
@@ -32,54 +31,25 @@ def mark_running() -> int | None:
     return ctypes.windll.kernel32.CreateMutexW(None, False, RUNNING_MUTEX) or None
 
 
-NEW_WINDOW_SWITCH = "STATEMENT_TRACKER_NEW_WINDOW"
-"""Set to 1 to open the Qt Quick window instead of the Widgets one, while both exist."""
+def _run_gui() -> int:
+    from PySide6.QtCore import QTimer
 
-
-def _new_window() -> bool:
-    return os.environ.get(NEW_WINDOW_SWITCH) == "1"
-
-
-def _run_new_gui() -> int:
     from statement_tracker.core.errors import UserFacingError
     from statement_tracker.gui.app import AppWindow, make_application
     from statement_tracker.settings import Settings, default_settings_path
 
     mark_running()
     app = make_application(sys.argv[:1])
-    try:
-        settings = Settings.load()
-    except UserFacingError:
-        # The new window explains this once it has its message dialog (Spec J3); until then, start fresh.
-        settings = Settings(default_settings_path())
-    window = AppWindow(settings)
-    window.show()
-    return app.exec()
-
-
-def _run_gui() -> int:
-    if _new_window():
-        return _run_new_gui()
-    from PySide6.QtWidgets import QApplication
-
-    from statement_tracker.core.errors import UserFacingError
-    from statement_tracker.settings import Settings, default_settings_path
-    from statement_tracker.ui import dialogs, theme
-    from statement_tracker.ui.main_window import MainWindow
-
-    mark_running()
-    app = QApplication(sys.argv[:1])
-    app.setApplicationName(APP_NAME)
-    app.setApplicationVersion(__version__)
-    theme.follow_system(app)
+    damaged: UserFacingError | None = None
     try:
         settings = Settings.load()
     except UserFacingError as error:
-        # Damaged settings must not keep the app from starting: explain, then start fresh.
-        dialogs.show_error(None, error)
-        settings = Settings(default_settings_path())
-    window = MainWindow(settings)
+        # Damaged settings must not keep the app from starting: start fresh, and explain once it shows.
+        damaged, settings = error, Settings(default_settings_path())
+    window = AppWindow(settings)
     window.show()
+    if damaged is not None:
+        QTimer.singleShot(0, lambda: window.session.show_error(damaged))
     return app.exec()
 
 
@@ -105,30 +75,18 @@ def _run_smoke_test(sample: Path, out: Path | None, quote_symbol: str | None) ->
         from statement_tracker.core.parser import load_statement
         from statement_tracker.settings import Settings
 
+        from statement_tracker.gui.app import AppWindow, make_application
+
         # A throwaway folder: the smoke test must never touch the user's own settings or files.
         scratch = Path(tempfile.mkdtemp())
-        if _new_window():
-            from statement_tracker.gui.app import AppWindow, make_application
-
-            app = make_application(sys.argv[:1])
-            window = AppWindow(Settings(scratch / "settings.json"))
-            report["window"] = "qt-quick"
-        else:
-            from PySide6.QtWidgets import QApplication
-
-            from statement_tracker.ui.main_window import MainWindow
-
-            app = QApplication.instance() or QApplication(sys.argv[:1])
-            window = MainWindow(Settings(scratch / "settings.json"))
-            report["window"] = "widgets"
+        app = make_application(sys.argv[:1])
+        window = AppWindow(Settings(scratch / "settings.json"))
+        report["window"] = "qt-quick"
         window.show()
         app.processEvents()
         report["window_shown_s"] = round(time.perf_counter() - _STARTED, 3)
         report["qt_platform"] = app.platformName()
-        if _new_window():
-            report["qml_warnings"] = window.qml_warnings
-        else:
-            window.set_statement(sample)
+        report["qml_warnings"] = window.qml_warnings
 
         started = time.perf_counter()
         import openpyxl

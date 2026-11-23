@@ -918,7 +918,7 @@ def statement_in(folder: Path, *lines: str) -> Path:
 
 
 def test_cli_without_a_statement_uses_the_one_read_last_time(tmp_path: Path) -> None:
-    # Spec I3, F14.
+    # Spec I3, F1.
     settings = tmp_path / "app" / "settings.json"
     statement = statement_in(tmp_path / "downloads", *TWO_HOLDINGS)
     symbols = ("--symbol", "ABCD=ABCD.DE", "--symbol", "WXYZ=WXYZ.DE")
@@ -943,7 +943,7 @@ def test_cli_without_a_statement_or_one_kept_asks_for_one(tmp_path: Path) -> Non
 
 
 def test_a_new_statement_replaces_the_one_kept(tmp_path: Path) -> None:
-    # Spec F14.
+    # Spec F1.
     settings = tmp_path / "app" / "settings.json"
     symbols = ("--symbol", "ABCD=ABCD.DE", "--symbol", "WXYZ=WXYZ.DE")
     run_cli(str(statement_in(tmp_path / "a", *TWO_HOLDINGS)), *symbols, provider=two_holdings_provider(), settings=settings)
@@ -957,7 +957,7 @@ def test_a_new_statement_replaces_the_one_kept(tmp_path: Path) -> None:
 
 
 def test_a_statement_that_cannot_be_read_keeps_the_one_from_before(tmp_path: Path) -> None:
-    # Spec F14.
+    # Spec F1.
     settings = tmp_path / "app" / "settings.json"
     symbols = ("--symbol", "ABCD=ABCD.DE", "--symbol", "WXYZ=WXYZ.DE")
     _, first, _ = run_cli(
@@ -975,7 +975,7 @@ def test_a_statement_that_cannot_be_read_keeps_the_one_from_before(tmp_path: Pat
 
 
 def test_a_report_from_the_kept_statement_says_so_after_a_value_is_entered(tmp_path: Path) -> None:
-    # Spec F14: a value entered afterwards does not lose where the holdings came from.
+    # Spec F1: a value entered afterwards does not lose where the holdings came from.
     settings = Settings.load(tmp_path / "settings.json")
     provider = FakeProvider()
     provider.add("ABCD.DE", "EUR", price="120")
@@ -991,7 +991,7 @@ def test_a_report_from_the_kept_statement_says_so_after_a_value_is_entered(tmp_p
 
 
 def test_read_statement_summarises_a_statement_without_fetching_anything(tmp_path: Path) -> None:
-    # Spec K2: what first launch says about the statement chosen.
+    # Spec F2: what first launch says about the statement chosen.
     from statement_tracker.workflow import read_statement
 
     summary = read_statement(SAMPLE)

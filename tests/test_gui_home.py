@@ -53,7 +53,7 @@ def with_listings(tmp_path: Path, **listings: tuple[str, str]) -> None:
 
 
 def test_home_opens_on_todays_values(app, tmp_path: Path) -> None:
-    # Spec K1, K4, K5.
+    # Spec F1, F4, F5.
     shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
     settled(app, shell)
 
@@ -69,7 +69,7 @@ def test_home_opens_on_todays_values(app, tmp_path: Path) -> None:
 
 
 def test_while_prices_come_in_the_amounts_wait_and_a_progress_bar_moves(app, tmp_path: Path) -> None:
-    # Spec K4.
+    # Spec F4.
     let_go = threading.Event()
 
     class Slow(FakeProvider):
@@ -95,7 +95,7 @@ def test_while_prices_come_in_the_amounts_wait_and_a_progress_bar_moves(app, tmp
 
 
 def test_refresh_prices_fetches_again(app, tmp_path: Path) -> None:
-    # Spec K4.
+    # Spec F4.
     provider = provider_with("EQQB.DE")
     shell = open_app(tmp_path, provider, kept=SAMPLE)
     settled(app, shell)
@@ -108,7 +108,7 @@ def test_refresh_prices_fetches_again(app, tmp_path: Path) -> None:
 
 
 def test_totals_leave_out_what_has_no_price_and_say_so(app, tmp_path: Path, english_computer) -> None:
-    # Spec K4, B8.
+    # Spec F4, B8.
     with_listings(tmp_path, ABCD=("ABCD.DE", "World fund"), WXYZ=("WXYZ.DE", "Bond fund"))
     provider = FakeProvider()
     provider.add("ABCD.DE", "EUR", price="120")  # none for WXYZ.DE
@@ -120,7 +120,7 @@ def test_totals_leave_out_what_has_no_price_and_say_so(app, tmp_path: Path, engl
 
 
 def test_many_investments_scroll_and_long_names_are_cut_short(app, tmp_path: Path) -> None:
-    # Spec K5 (Review Focus 4).
+    # Spec F5 (Review Focus 4).
     tickers = [f"T{number:02d}" for number in range(20)]
     with_listings(tmp_path, **{ticker: (f"{ticker}.DE", f"Fund {ticker}") for ticker in tickers})
     settings = Settings.load(tmp_path / "settings.json")
@@ -174,7 +174,7 @@ def slow_eqqb() -> Slow:
 
 
 def test_home_says_which_statement_the_values_come_from(app, tmp_path: Path) -> None:
-    # Spec K6.
+    # Spec F6.
     shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
     settled(app, shell)
 
@@ -184,7 +184,7 @@ def test_home_says_which_statement_the_values_come_from(app, tmp_path: Path) -> 
 
 
 def test_a_newer_statement_replaces_the_kept_one(app, tmp_path: Path) -> None:
-    # Spec K6, F14.
+    # Spec F6, F1.
     shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
     settled(app, shell)
 
@@ -196,7 +196,7 @@ def test_a_newer_statement_replaces_the_kept_one(app, tmp_path: Path) -> None:
 
 
 def test_use_a_newer_statement_asks_for_the_file(app, tmp_path: Path) -> None:
-    # Spec K6.
+    # Spec F6.
     shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
     settled(app, shell)
     newer = newer_statement(tmp_path)
@@ -209,7 +209,7 @@ def test_use_a_newer_statement_asks_for_the_file(app, tmp_path: Path) -> None:
 
 
 def test_a_statement_that_does_not_read_keeps_the_one_shown(app, tmp_path: Path) -> None:
-    # Spec K6, K12.
+    # Spec F6, F11.
     shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
     settled(app, shell)
 
@@ -222,7 +222,7 @@ def test_a_statement_that_does_not_read_keeps_the_one_shown(app, tmp_path: Path)
 
 
 def test_a_new_statement_during_a_fetch_stops_that_fetch(app, tmp_path: Path) -> None:
-    # Spec K6 (Review Focus 1).
+    # Spec F6 (Review Focus 1).
     provider = slow_eqqb()
     shell = open_app(tmp_path, provider, kept=SAMPLE)
     wait_until(app, lambda: shows(shell.window, "current prices"))
@@ -236,7 +236,7 @@ def test_a_new_statement_during_a_fetch_stops_that_fetch(app, tmp_path: Path) ->
 
 
 def test_closing_the_window_during_a_fetch_saves_nothing(app, tmp_path: Path) -> None:
-    # Spec K6 (Review Focus 1).
+    # Spec F6 (Review Focus 1).
     provider = slow_eqqb()
     shell = open_app(tmp_path, provider, kept=SAMPLE)
     wait_until(app, lambda: shows(shell.window, "current prices"))

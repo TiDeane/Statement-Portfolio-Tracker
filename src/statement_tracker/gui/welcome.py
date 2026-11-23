@@ -119,7 +119,7 @@ class Welcome(QObject):
         if self._step == "spreadsheet":
             self._finish()
         elif self._session.settings.spreadsheet_path is not None:
-            self._finish()  # upgrading from the Widgets window: the spreadsheet is known
+            self._finish()  # upgrading from version 1.3 or earlier: the spreadsheet is known
         else:
             self._step = "spreadsheet"
             self.changed.emit()

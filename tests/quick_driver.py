@@ -2,8 +2,7 @@
 
 The tests click, double-click, type, press keys and drop files, and read only what the window
 shows: the ``text`` of visible items. Nothing here reaches into the window's Python objects
-except to stand in for the user's own answers (file dialogs and the like), as ``test_ui.py``
-does for the Widgets window. Prices come from ``fakes.FakeProvider``; no network.
+except to stand in for the user's own answers (file dialogs and the like). Prices come from ``fakes.FakeProvider``; no network.
 
 Drops are real drag-and-drop events sent to the window, delivered by Qt Quick to the
 window's ``DropArea`` as a file dragged from the file manager would be.
@@ -23,7 +22,7 @@ from pathlib import Path
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-QtWidgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
+pytest.importorskip("PySide6.QtGui", exc_type=ImportError)
 QtQuick = pytest.importorskip("PySide6.QtQuick", exc_type=ImportError)
 
 from fakes import SAMPLE, FakeProvider, ranges_around  # noqa: E402
@@ -43,9 +42,9 @@ EQQB_BUYS = buys_by_ticker(load_statement(SAMPLE))["EQQB"]
 
 @pytest.fixture(scope="module")
 def app():
-    # A QApplication, not only a QGuiApplication, while the Widgets window and its tests still exist:
-    # one process has one application object, and the Widgets tests need this kind.
-    return QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    from statement_tracker.gui.app import make_application
+
+    return make_application([])
 
 
 @pytest.fixture(autouse=True)

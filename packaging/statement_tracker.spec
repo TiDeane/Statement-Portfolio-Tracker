@@ -16,7 +16,7 @@ from statement_tracker import APP_NAME, __version__  # noqa: E402
 EXE_NAME = "StatementPortfolioTracker"
 BUNDLE_ID = "io.github.tideane.statementportfoliotracker"
 ICONS = ROOT / "packaging" / "icon"  # drawn by packaging/make_icon.py
-WINDOW_ICON = ROOT / "src" / "statement_tracker" / "ui" / "icon.png"
+WINDOW_ICON = ROOT / "src" / "statement_tracker" / "gui" / "icon.png"
 QML_FILES = ROOT / "src" / "statement_tracker" / "gui" / "qml"
 
 # Qt pieces the app never loads. Dropping them trims the download.
@@ -45,6 +45,10 @@ UNUSED_QT_FRAGMENTS = (
     "Qt6QuickEffects",
     "Qt6QuickTest",
     "Qt6QuickWidgets",
+    # The window is Qt Quick: Qt Widgets (and the GTK theme plugin built on it) is never loaded.
+    "Qt6Widgets",
+    "QtWidgets",
+    "platformthemes/libqgtk3",
     "Qt6QuickShapesDesignHelpers",
     "Qt6WaylandCompositor",
     "Qt6Labs",
@@ -113,13 +117,13 @@ def _wanted(entry) -> bool:
 a = Analysis(
     [str(ROOT / "packaging" / "entry.py")],
     pathex=[str(ROOT / "src")],
-    # The window's icon, next to the code that loads it (statement_tracker/ui/main_window.py), and the
-    # Qt Quick window's QML files (statement_tracker/gui/qml).
-    datas=[(str(WINDOW_ICON), "statement_tracker/ui"), (str(QML_FILES), "statement_tracker/gui/qml")],
+    # The window's icon and QML files, next to the code that loads them (statement_tracker/gui/app.py).
+    datas=[(str(WINDOW_ICON), "statement_tracker/gui"), (str(QML_FILES), "statement_tracker/gui/qml")],
     # Heavy libraries the app does not use. Listed so that an installed copy (from another
     # package in the build environment) can never end up in the download.
     excludes=[
         "tkinter", "matplotlib", "IPython", "pytest", "pandas", "numpy", "yfinance", "curl_cffi", "lxml",
+        "PySide6.QtWidgets",
     ],
     noarchive=False,
 )

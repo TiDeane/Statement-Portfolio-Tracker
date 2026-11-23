@@ -94,80 +94,68 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
 
 ## F. The window
 
-- **F1.** The three steps:
-  - step 3 is disabled until a statement is chosen;
-  - step 2 is optional: no spreadsheet, an existing one, or a new one;
-  - each step says whether it is done, optional, or remembered from last time; a step still to do says only what to do.
-- **F2.** Files are chosen with a dialog or dropped on the window. A CSV goes to step 1 and an .xlsx to step 2. The last folder used is remembered. Step 1 is a drop area (a dashed outline saying "Drag your statement file here", with the button to choose one inside it), and it turns green while a statement is dragged over the window.
-- **F3.** Step 3 turns to the result page in the same window.
-  - Its progress bar only moves forward, and counts each listing to find, each price and the spreadsheet.
-  - While the app waits for the user's answer, the status says so.
-- **F4.** The table:
-  - one row per held investment, and a Total;
-  - investments the user named show their own name;
-  - columns: Investment, Invested, % of invested, Worth now, % of worth now, Gain or loss;
-  - a gain shows a sign and an arrow as well as a colour;
-  - numbers follow the computer's locale, and the currency is the statement's, never assumed;
-  - dates, here and in every window, are written in figures in the computer's order and with a four-digit year (14/11/2026 in Portugal, 11/14/2026 in the United States). They never use month or day names, which would be in the computer's language among English words.
-- **F5.** Values that are not today's from Yahoo:
-  - an unavailable value is grey, marked "not in total", and its Worth now cell is red;
-  - a last known value is marked `*`, with a dated tooltip;
-  - an entered value is marked "(your value)";
-  - in all three cases, a line under the table names them, with **Try again** and **Enter its value...**.
-- **F6.** Double-clicking a name, or pressing F2 (Return on a Mac, as in Finder), renames the investment.
-  - Enter saves the name, Esc cancels, and an empty name goes back to Yahoo's.
-  - The new name is saved and written to the spreadsheet at once.
-  - Double-clicking elsewhere in a row without a price enters a value.
-- **F7.** Ctrl+Z / Ctrl+Y undo and redo changes to investments:
-  - the history is shared by the result table and Settings;
-  - each step puts back only what it changed;
-  - names and values stay undoable across runs;
-  - Forget and "Choose the listing next time" stop being undoable once a run finishes;
-  - the tick box, forgetting the statement (G7) and backups are not part of it;
-  - it works only on the result page, never during a run.
-- **F8.** "Back to the steps" during a run stops it, and nothing of it is saved or shown.
-- **F9.** Errors are in plain words: what happened, and what to do.
-  - Unexpected failures can be reported with **Copy details**, and no stack trace is shown.
-  - If the spreadsheet cannot be saved, the investments are still shown.
-  - Try again saves the spreadsheet without looking up prices again.
-- **F10.** Layout:
-  - many investments scroll inside the table;
-  - a small window shrinks the table instead of covering it, and scrolls when the system ignores the minimum size;
-  - there are light and dark themes;
-  - buttons are only highlighted when reached with the keyboard.
-- **F11.** "Where do I get this file?" gives the Revolut steps and asks for All time. "About and privacy" shows the version and the releases link.
-- **F12.** The window and its dialogs show the app's icon, and the Windows program, its installer and the macOS app show the same one.
-- **F13.** When a spreadsheet is used, the result page says on its own, apart from the table, what became of it.
-  - Updated or created: in green, with the time, the file and its folder, what was written to Current Holdings, whether today's history row was added or updated (or why not, and what it leaves out), and the backup copy's name.
-  - Not updated: in red, with what happened and what to do.
-  - It says so again after each later change that rewrites the spreadsheet (a rename, a value entered).
-  - Either way, "Open its folder" opens the folder the spreadsheet is in, with the file selected where the system allows it.
-- **F14.** The statement is kept for next time, so that today's values need no new statement.
-  - Once a run has read a statement, a copy of it is kept in the app's own folder, replacing the one kept before. A statement that cannot be read, or a run stopped with "Back to the steps", keeps the one from before.
-  - When the app opens with a statement kept, step 1 is a choice, like step 2: "Use my statement from last time" or "Use a new statement".
-    - The first is chosen and remembered from last time. Under it are the date of its latest transaction and a note that anything bought, sold or added since then is not included. Step 3 can be pressed at once.
-    - The drop area shows only while "Use a new statement" is chosen, and step 3 then waits for a statement.
-    - A statement chosen or dropped chooses "Use a new statement". Going back and forth keeps it.
-  - When the app opens with no statement kept, step 1 is only the drop area. It stays that way until the app is opened again.
-  - The result of a run on the statement from last time says so, with the date of its latest transaction.
+- **F1.** Opening: with a statement kept from last time, the app opens on Home and fetches today's prices. With none, or one that can no longer be read, it opens on first launch, without an error message.
+  - Once a fetch has read a statement to the end, a copy of it is kept in the app's own folder, replacing the one kept before. One that cannot be read, or a fetch that is stopped, keeps the one from before.
+- **F2.** First launch, step 1: the statement.
+  - A drop area ("Drop your Revolut statement here", with **Choose statement file…**) beside "Where do I get it?": the Revolut steps and "Always pick All time".
+  - Dropping a statement anywhere on the window or choosing one reads it at once. One that reads shows its file name, "<n> transactions, the latest on <date>" and "<n> investments you still hold", with **Choose another file…**. One that does not read is explained (F11) and the step stays as it was.
+  - **Continue** stays disabled until a statement has been read.
+  - The file chooser opens in the folder used last time.
+  - A line says that everything stays on this computer and only fund codes and dates go to Yahoo Finance, with **About and privacy**.
+- **F3.** First launch, step 2: keep a spreadsheet up to date?
+  - Three options, one chosen at a time: **Use a spreadsheet I have** (opens the file chooser), **Create a new one** (asks where to save it; ".xlsx" is added when missing) and **Not now**. A file chosen shows in its option with **Choose another…**; cancelling the chooser keeps the choice before. An .xlsx dropped on the window is a spreadsheet I have.
+  - A line says a backup copy is saved beside the file before each day's first change, and names the app's two sheets.
+  - **Back** returns to step 1 with the statement still chosen. **Show my investments**, enabled once an option is chosen, remembers the choice and opens Home.
+  - When a spreadsheet is already remembered (someone upgrading from version 1.3 or earlier), step 2 is skipped.
+- **F4.** Home, the totals: "Your portfolio", then **Worth now** in large type with the statement's currency, the gain or loss since buying (sign, arrow and colour, amount and %), **Invested** and the number of investments.
+  - While prices are fetched, the amounts show placeholders, a progress bar moves forward and a line says what is being done.
+  - Then "Today's prices from Yahoo Finance, <time>" and **Refresh prices**, which fetches again.
+  - Totals cover only what has a value (B8). When something is left out, a line says "<names> has (have) no price today, so these totals leave it (them) out."
+- **F5.** Home, the investments list: one row per investment held, then a bold **Total**.
+  - Columns: Investment, Invested, Worth now, Share of total, Gain or loss. The investment's name comes first (the user's own, else Yahoo's, else its ticker), with "TICKER · exchange" under it.
+  - Many investments scroll with the page; the window keeps its size and long names are cut short.
+- **F6.** Home, the statement: a card "Your statement" with "Latest transaction <date>. Anything after it isn't included." and **Use a newer statement…**, "or drop it on this window".
+  - A statement chosen or dropped anywhere on Home is read, prices are fetched for it, and it becomes the one kept (F1). One that does not read is explained and the one shown stays.
+  - A new statement, **Refresh prices** or closing the window while prices are being fetched stops that fetch: nothing of it is saved or shown.
+- **F7.** Home, the spreadsheet: a card with the file's name and one of "Last changed <date>", "Updated today at <time>", "Not updated today", "Ready once today's prices are in" or "It doesn't exist yet: updating creates it.", with **Open folder** and **Update my spreadsheet**.
+  - **Update my spreadsheet** writes the values shown, without fetching again; it waits for the prices. The card then says "Your spreadsheet is up to date" (or "Your spreadsheet was created") in green, with what was written to Current Holdings, whether today's history row was added or updated (or why not, and what it leaves out) and the backup copy's name.
+  - A spreadsheet that cannot be saved is said in red: "Your spreadsheet wasn't updated", what happened, what to do and **Copy details**; the values stay shown and the button reads **Try again**.
+  - **Open folder** opens the folder the spreadsheet is in, with the file selected where the system allows it.
+  - Without a spreadsheet, the card offers **Choose spreadsheet…** and **Create a new one…**. An .xlsx dropped on Home becomes the spreadsheet.
+  - When backup copies are turned off, the card says so in red.
+- **F8.** Values that are not today's from Yahoo:
+  - An investment without a value is greyed: its Worth now reads "No price today", its share "Not in the total", and its gain is a button **Enter its value…**. Double-clicking the row does the same.
+  - Entering asks "What is <name> worth now?" for the whole investment, in the statement's currency, says how many shares that is and the last price found, and that the value is marked "your value" and kept until Yahoo Finance has a price again. Both 2,040.00 and 2.040,00 read as 2040; anything that is not an amount above zero is explained and asked again.
+  - A value entered shows "your value" under it; a last known price shows "price from <date>". Either can be replaced by double-clicking its row.
+  - When Yahoo Finance cannot be reached, the totals say so in amber: "Yahoo Finance can't be reached right now, so these values use the last prices found, from <date>.", with **Try again**. The spreadsheet card says updating then writes no history row.
+- **F9.** Which listing is it? When the app cannot tell, a dialog "Which one is <ticker>?" says why and lists the listings found: name, exchange, currency and symbol, with "Matches your purchases" on those that fit; the first is chosen. A Yahoo Finance symbol can be typed instead. "From now on, take the first listing without asking" is offered whenever there is a listing. **Use this listing** uses the one chosen (or typed) and remembers it; **Skip this investment** leaves it without a value. While the dialog is open, Home says it is waiting for the user.
+- **F10.** Renaming and undoing:
+  - Double-clicking an investment's name, or pressing F2 (Return on a Mac) on it, opens it for typing. Enter saves the name, Esc cancels, and an empty name goes back to Yahoo's. The name is saved at once. Double-clicking elsewhere in a row without a price enters a value (F8).
+  - Once the spreadsheet has been updated while the app is open, a new name or a value entered is written to it at once, and the card says so again. Before that, nothing is written: the change goes in with the next update.
+  - Ctrl+Z and Ctrl+Y undo and redo changes to investments:
+    - the history is shared by Home and Settings;
+    - each step puts back only what it changed;
+    - names and values stay undoable while the app is open;
+    - Forget and "Choose the listing next time" stop being undoable once a fetch finishes;
+    - the switch, forgetting the statement and backups are not part of it;
+    - never during a fetch.
+- **F11.** Errors are in plain words: what happened, and what to do.
+  - Details can be copied with **Copy details**; no stack trace is shown.
+  - **Help** on Home (and **About and privacy** on first launch) shows where the statement comes from (the Revolut steps and All time), the privacy text and the version.
+  - Tab reaches every button, field and investment name, with a visible outline; Esc closes dialogs and Enter confirms them.
+  - Light and dark follow the system and switch while the app is open; the green buttons are #107C41 in light and #33C481 in dark.
+  - The window shows the app's icon.
+  - Numbers follow the computer's locale, and the currency is the statement's, never assumed. Dates are written in figures in the computer's order with a four-digit year (14/11/2026 in Portugal, 11/14/2026 in the United States), never with month or day names, which would be in the computer's language among English words.
+  - The Windows program, its installer and the macOS app show the same icon as the window.
 
 ## G. Settings
 
-- **G1.** Settings lists every investment the app keeps something about, including one with only an entered value, with its name, listing and status. Yahoo's name is shown in grey.
-- **G2.** For the selected investment:
-  - Rename follows the same rules as F6;
-  - "Choose the listing next time" applies on the next run;
-  - Forget asks first, then removes the listing, the name and the entered value.
-- **G3.** Forget all asks first, and keeps the spreadsheet choice, the statement from last time and the last prices from Yahoo.
-- **G4.** The other settings:
-  - the "always the first listing" switch;
-  - "Backup copies to keep", from 0 to 99, saved and kept within that range.
-- **G5.** Changes are saved at once, and the result page shows them at once.
-- **G6.** With nothing remembered, the empty table still shows, with the reason inside it.
-- **G7.** The statement from last time (F14):
-  - Settings says whether one is kept, with the date of its latest transaction;
-  - "Forget the statement..." asks first, then deletes the copy, and step 1 goes back to asking for a statement;
-  - it is only enabled while a statement is kept, it leaves the investments alone, and Ctrl+Z does not bring the statement back.
+- **G1.** Settings is a page, reached from Home's **Settings** and left with **← Your portfolio** (first launch when no statement is kept). A side menu goes to its sections.
+  - **Your investments:** every investment the app keeps something about, with its name, "TICKER · symbol, exchange, currency" and a status (Chosen by you, Matched automatically, Asks you next time, Not matched yet, and "value entered by you"). Its **⋯** menu offers **Rename**, **Choose the listing next time** and **Forget…** (asks first; removes the listing, the name and the value entered). **Forget all investments…** asks first and keeps the spreadsheet, the statement and the last prices. The switch **Take the first listing without asking**. With nothing kept, the list says why. Ctrl+Z takes back the last change (F10).
+  - **Your statement:** its latest transaction, **Use a newer one…** and **Forget it…** (asks first; then first launch asks for a statement again). With none kept, it says so.
+  - **Your spreadsheet:** its name and folder, **Open folder**, **Choose another…** and **Stop using it**; without one, **Choose spreadsheet…** and **Create a new one…**. **Backup copies to keep**, from 0 to 99, with **−** and **+**.
+  - **About and privacy:** the version, where new versions are, the privacy text and the disclaimer.
+  - Changes are saved at once and show on Home at once.
 
 ## H. The spreadsheet
 
@@ -193,13 +181,13 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - today's row follows a value typed into Current Holdings, and keeps it on later days;
   - a row that leaves an investment out is light orange with a "Leaves out ..." comment until the value is in, and stays marked if it never comes;
   - rows from versions before 1.0 switch ROI % to the new meaning, and nothing else in them changes;
-  - a row worked out from the statement kept from last time (F14) has a comment on its date saying so, with the date of the statement's latest transaction. It keeps it on later days. A later run that day with a new statement takes it away.
+  - a row worked out from the statement kept from last time (F1) has a comment on its date saying so, with the date of the statement's latest transaction. It keeps it on later days. A later run that day with a new statement takes it away.
 - **H5.** Backups:
   - before the first change each day to an existing file, a dated copy is saved beside it; later changes that day keep it;
   - the newest N are kept (default 3); other workbooks' copies and the old one-time copy are never deleted;
   - 0 makes no copy and deletes none;
   - a failed save leaves no new copy and deletes no old one;
-  - step 2 says whether a copy will be made, in grey, or in red when none will.
+  - when none will be made, the spreadsheet card says so in red (F7).
 - **H6.** Presentation:
   - percentages are real Excel percentages;
   - the header has its own colour;
@@ -224,69 +212,14 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - without a spreadsheet, the output says how to choose one;
   - `--no-prompt` never asks;
   - `--ignore-unknown-types` behaves as in A7;
-  - every statement read is kept as in F14, and without a statement the one kept from last time is used: stderr says so, with the date of its latest transaction. With none kept, it exits with code 2 and says to give one.
+  - every statement read is kept as in F1, and without a statement the one kept from last time is used: stderr says so, with the date of its latest transaction. With none kept, it exits with code 2 and says to give one.
 - **I4.** The terminal prompt accepts a number, a symbol, or nothing.
 
 ## J. Privacy, safety, packaging
 
 - **J1.** Only ticker symbols and dates are sent to Yahoo. Amounts, quantities and the statement are never sent.
-- **J2.** Only listings, names, prices per share, settings and a copy of the last statement read (F14) are kept, all in the app's own folder. No amount from the statement is kept anywhere else.
+- **J2.** Only listings, names, prices per share, settings and a copy of the last statement read (F1) are kept, all in the app's own folder. No amount from the statement is kept anywhere else.
 - **J3.** A damaged settings file is explained, not silently reset. Tests never touch the real settings or the network.
 - **J4.** The packaged app's smoke test reads the sample offline and writes a spreadsheet.
 - **J5.** On Windows, the installer can tell that the app is open.
 - **J6.** Installing a newer version over an older one keeps everything: the settings, listings, names, entered values and last prices saved by any earlier version are read and used.
-
-## K. The new window (Qt Quick)
-
-The window being built to replace F and G (design: `docs/superpowers/specs/2026-11-23-qt-quick-redesign-design.md`). While both exist, F and G describe the Widgets window and K the new one; K then becomes the new F and G.
-
-- **K1.** Opening: with a statement kept from last time, the app opens on Home and fetches today's prices. With none, or one that can no longer be read, it opens on first launch, without an error message.
-- **K2.** First launch, step 1: the statement.
-  - A drop area ("Drop your Revolut statement here", with **Choose statement file…**) beside "Where do I get it?": the Revolut steps and "Always pick All time".
-  - Dropping a statement anywhere on the window or choosing one reads it at once. One that reads shows its file name, "<n> transactions, the latest on <date>" and "<n> investments you still hold", with **Choose another file…**. One that does not read is explained (K12) and the step stays as it was.
-  - **Continue** stays disabled until a statement has been read.
-  - The file chooser opens in the folder used last time (F2's rule).
-  - A line says that everything stays on this computer and only fund codes and dates go to Yahoo Finance, with **About and privacy**.
-- **K3.** First launch, step 2: keep a spreadsheet up to date?
-  - Three options, one chosen at a time: **Use a spreadsheet I have** (opens the file chooser), **Create a new one** (asks where to save it; ".xlsx" is added when missing) and **Not now**. A file chosen shows in its option with **Choose another…**; cancelling the chooser keeps the choice before. An .xlsx dropped on the window is a spreadsheet I have.
-  - A line says a backup copy is saved beside the file before each day's first change, and names the app's two sheets.
-  - **Back** returns to step 1 with the statement still chosen. **Show my investments**, enabled once an option is chosen, remembers the choice and opens Home.
-  - When a spreadsheet is already remembered (someone upgrading from the Widgets window), step 2 is skipped.
-- **K4.** Home, the totals: "Your portfolio", then **Worth now** in large type with the statement's currency, the gain or loss since buying (sign, arrow and colour, amount and %), **Invested** and the number of investments.
-  - While prices are fetched, the amounts show placeholders, a progress bar moves forward and a line says what is being done.
-  - Then "Today's prices from Yahoo Finance, <time>" and **Refresh prices**, which fetches again.
-  - Totals cover only what has a value (B8). When something is left out, a line says "<names> has (have) no price today, so these totals leave it (them) out."
-- **K5.** Home, the investments list: one row per investment held, then a bold **Total**.
-  - Columns: Investment, Invested, Worth now, Share of total, Gain or loss. The investment's name comes first (the user's own, else Yahoo's, else its ticker), with "TICKER · exchange" under it.
-  - Many investments scroll with the page; the window keeps its size and long names are cut short.
-- **K6.** Home, the statement: a card "Your statement" with "Latest transaction <date>. Anything after it isn't included." and **Use a newer statement…**, "or drop it on this window".
-  - A statement chosen or dropped anywhere on Home is read, prices are fetched for it, and it becomes the one kept (F14). One that does not read is explained and the one shown stays.
-  - A new statement, **Refresh prices** or closing the window while prices are being fetched stops that fetch: nothing of it is saved or shown (replaces F8).
-- **K7.** Home, the spreadsheet (replaces F13 and H5's line in step 2): a card with the file's name and one of "Last changed <date>", "Updated today at <time>", "Not updated today", "Ready once today's prices are in" or "It doesn't exist yet: updating creates it.", with **Open folder** and **Update my spreadsheet**.
-  - **Update my spreadsheet** writes the values shown, without fetching again; it waits for the prices. The card then says "Your spreadsheet is up to date" (or "Your spreadsheet was created") in green, with what was written to Current Holdings, whether today's history row was added or updated (or why not, and what it leaves out) and the backup copy's name.
-  - A spreadsheet that cannot be saved is said in red: "Your spreadsheet wasn't updated", what happened, what to do and **Copy details**; the values stay shown and the button reads **Try again**.
-  - **Open folder** opens the folder the spreadsheet is in, with the file selected where the system allows it.
-  - Without a spreadsheet, the card offers **Choose spreadsheet…** and **Create a new one…**. An .xlsx dropped on Home becomes the spreadsheet.
-  - When backup copies are turned off, the card says so in red.
-- **K8.** Values that are not today's from Yahoo (replaces F5):
-  - An investment without a value is greyed: its Worth now reads "No price today", its share "Not in the total", and its gain is a button **Enter its value…**. Double-clicking the row does the same.
-  - Entering asks "What is <name> worth now?" for the whole investment, in the statement's currency, says how many shares that is and the last price found, and that the value is marked "your value" and kept until Yahoo Finance has a price again. Both 2,040.00 and 2.040,00 read as 2040; anything that is not an amount above zero is explained and asked again.
-  - A value entered shows "your value" under it; a last known price shows "price from <date>". Either can be replaced by double-clicking its row.
-  - When Yahoo Finance cannot be reached, the totals say so in amber: "Yahoo Finance can't be reached right now, so these values use the last prices found, from <date>.", with **Try again**. The spreadsheet card says updating then writes no history row.
-- **K9.** Which listing is it? When the app cannot tell, a dialog "Which one is <ticker>?" says why and lists the listings found: name, exchange, currency and symbol, with "Matches your purchases" on those that fit; the first is chosen. A Yahoo Finance symbol can be typed instead. "From now on, take the first listing without asking" is offered whenever there is a listing. **Use this listing** uses the one chosen (or typed) and remembers it; **Skip this investment** leaves it without a value. While the dialog is open, Home says it is waiting for the user (F3).
-- **K10.** Renaming and undoing (replaces F6 and F7):
-  - Double-clicking an investment's name, or pressing F2 (Return on a Mac) on it, opens it for typing. Enter saves the name, Esc cancels, and an empty name goes back to Yahoo's. The name is saved at once. Double-clicking elsewhere in a row without a price enters a value (K8).
-  - Once the spreadsheet has been updated while the app is open, a new name or a value entered is written to it at once, and the card says so again. Before that, nothing is written: the change goes in with the next update.
-  - Ctrl+Z and Ctrl+Y undo and redo changes to investments, in one history shared by Home and Settings, as F7 says; never during a fetch.
-- **K11.** Settings is a page (replaces G), reached from Home's **Settings** and left with **← Your portfolio** (first launch when no statement is kept). A side menu goes to its sections.
-  - **Your investments:** every investment the app keeps something about, with its name, "TICKER · symbol, exchange, currency" and a status (Chosen by you, Matched automatically, Asks you next time, Not matched yet, and "value entered by you"). Its **⋯** menu offers **Rename**, **Choose the listing next time** and **Forget…** (asks first; removes the listing, the name and the value entered). **Forget all investments…** asks first and keeps the spreadsheet, the statement and the last prices. The switch **Take the first listing without asking**. With nothing kept, the list says why. Ctrl+Z takes back the last change (K10).
-  - **Your statement:** its latest transaction, **Use a newer one…** and **Forget it…** (asks first; then first launch asks for a statement again). With none kept, it says so.
-  - **Your spreadsheet:** its name and folder, **Open folder**, **Choose another…** and **Stop using it**; without one, **Choose spreadsheet…** and **Create a new one…**. **Backup copies to keep**, from 0 to 99, with **−** and **+**.
-  - **About and privacy:** the version, where new versions are, the privacy text and the disclaimer.
-  - Changes are saved at once and show on Home at once (G5).
-- **K12.** Errors are in plain words: what happened, and what to do.
-  - Details can be copied with **Copy details**; no stack trace is shown.
-  - **Help** on Home (and **About and privacy** on first launch) shows where the statement comes from (the Revolut steps and All time), the privacy text and the version.
-  - Tab reaches every button, field and investment name, with a visible outline; Esc closes dialogs and Enter confirms them.
-  - Light and dark follow the system and switch while the app is open; the green buttons are #107C41 in light and #33C481 in dark.
-  - The window shows the app's icon.

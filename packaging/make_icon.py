@@ -11,7 +11,7 @@ Writes, next to this script, in ``icon/``:
 - ``app.icns``: macOS, for the app bundle (16 to 1024 pixels);
 - ``app.png``: 512 pixels, for anything else that takes a picture;
 
-and the same 512-pixel picture as ``src/statement_tracker/ui/icon.png``, which the running app shows as
+and the same 512-pixel picture as ``src/statement_tracker/gui/icon.png``, which the running app shows as
 its window's icon (in the title bar, the taskbar on Linux, the Dock when run from source on a Mac).
 
 The drawing: a rounded square in the app's green (the green of Excel, ``ui/theme.py``) with a white line
@@ -30,7 +30,7 @@ from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QGuiApplication, QImage, QLinearGradient, QPainter, QPainterPath, QPen
 
 OUT = Path(__file__).resolve().parent / "icon"
-WINDOW_ICON = Path(__file__).resolve().parents[1] / "src" / "statement_tracker" / "ui" / "icon.png"
+WINDOW_ICON = Path(__file__).resolve().parents[1] / "src" / "statement_tracker" / "gui" / "icon.png"
 GREEN_LIGHT = QColor("#21A366")
 GREEN_DARK = QColor("#0B5E31")
 """The theme's accent (#107C41) lies between these: lighter at the top left, darker at the bottom right."""

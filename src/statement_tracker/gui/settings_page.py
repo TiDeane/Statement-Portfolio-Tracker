@@ -16,7 +16,7 @@ from statement_tracker.gui.welcome import NEW_SPREADSHEET_NAME, SPREADSHEET_FILE
 from statement_tracker.kept_statement import forget_kept_statement
 from statement_tracker.price_cache import PriceCache
 from statement_tracker.settings import Settings
-from statement_tracker.ui.undo import ASK_AGAIN, EVERYTHING, NAME
+from statement_tracker.gui.undo import ASK_AGAIN, EVERYTHING, NAME
 from statement_tracker.workflow import with_entered_prices
 
 if TYPE_CHECKING:

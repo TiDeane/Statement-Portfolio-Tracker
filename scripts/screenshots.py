@@ -2,15 +2,15 @@
 
 Nothing is fetched: prices come from the tests' FakeProvider, the statement is written here, and
 settings and the spreadsheet live in a temporary folder. Run it from the repo root with the
-Windows environment, so the pictures show the real Windows 11 look:
+Windows environment, so the pictures show Windows' own fonts:
 
     .venv-win\\Scripts\\python scripts\\screenshots.py OUT_FOLDER
 
 It saves, for the dark and the light theme (`-dark.png`, `-light.png`):
-  steps     the three steps, with a statement and a spreadsheet chosen
-  confirm   the "which listing is yours?" dialog
-  result    the result page after a run, with the spreadsheet updated
-  entered-value  the table's first columns, with one investment's value typed in by hand
+  steps     first launch, with the statement chosen
+  confirm   the "Which one is it?" dialog
+  result    Home after prices came in, with the spreadsheet updated
+  entered-value  the investments list's first columns, with one investment's value typed in by hand
 and the spreadsheet the run wrote, `spreadsheet.xlsx`, for pictures of its sheets.
 """
 
@@ -30,17 +30,17 @@ os.environ.setdefault("QT_SCALE_FACTOR", "2")  # sharp on high-density screens
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from PySide6.QtCore import QRect, QTimer  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtCore import QPointF, QRect, QTimer  # noqa: E402
+from PySide6.QtGui import QGuiApplication  # noqa: E402
+from PySide6.QtQuick import QQuickItem  # noqa: E402  (loaded so the window's items can be measured)
 
 from statement_tracker.settings import Settings  # noqa: E402
-from statement_tracker.ui import dialogs, theme  # noqa: E402
-from statement_tracker.ui.main_window import MainWindow  # noqa: E402
+from statement_tracker.gui.app import AppWindow, make_application  # noqa: E402
 from tests.fakes import HEADER, FakeProvider  # noqa: E402
 
 TODAY = date.today()
-STEPS_SIZE = (1120, 700)
-RESULT_SIZE = (1120, 560)
+STEPS_SIZE = (1120, 800)
+RESULT_SIZE = (1120, 1320)
 # Shown in the pictures ("in C:\\Users\\Public\\Documents\\Investments"), so it names nobody.
 WORK = Path(os.environ.get("PUBLIC", tempfile.gettempdir())) / "Documents" / "Investments"
 
@@ -117,7 +117,7 @@ def earlier_weeks(folder: Path, spreadsheet: Path) -> None:
     shutil.rmtree(own)
 
 
-def wait(app: QApplication, condition, seconds: float = 30) -> None:
+def wait(app: QGuiApplication, condition, seconds: float = 30) -> None:
     import time
 
     deadline = time.monotonic() + seconds
@@ -128,13 +128,23 @@ def wait(app: QApplication, condition, seconds: float = 30) -> None:
         app.processEvents()
 
 
-def save(widget, path: Path) -> None:
-    widget.grab().save(str(path))
+def save(window, path: Path) -> None:
+    window.grabWindow().save(str(path))
     print("saved", path.name)
 
 
-def take(app: QApplication, out: Path, scheme: str, work: Path) -> None:
-    theme.apply(app, dark=scheme == "dark")
+def find(window, wanted) -> QQuickItem:
+    """The first item of ``window`` for which ``wanted(item)`` is true."""
+    pending = [window.contentItem()]
+    while pending:
+        item = pending.pop(0)
+        if wanted(item):
+            return item
+        pending.extend(item.childItems())
+    raise LookupError("not in the window")
+
+
+def take(app: QGuiApplication, out: Path, scheme: str, work: Path) -> None:
     folder = work
     shutil.rmtree(folder, ignore_errors=True)
     folder.mkdir(parents=True)
@@ -144,29 +154,35 @@ def take(app: QApplication, out: Path, scheme: str, work: Path) -> None:
     earlier_weeks(folder, spreadsheet)
     fake = provider()
 
-    window = MainWindow(Settings.load(folder / "settings.json"), lambda: fake, lambda: TODAY)
+    shell = AppWindow(Settings.load(folder / "settings.json"), lambda: fake, lambda: TODAY)
+    shell.theme.set_dark(scheme == "dark")
+    session, window = shell.session, shell.window
     window.resize(*STEPS_SIZE)
-    window.show()
+    shell.show()
     wait(app, lambda: False, 0.5)
 
-    window.set_statement(statement)
-    window.set_spreadsheet(spreadsheet)
+    welcome = session.welcome
+    welcome.use_statement(statement)
     wait(app, lambda: False, 0.3)
     save(window, out / f"steps-{scheme}.png")
 
     def ask_listing(resolution):
-        dialog = dialogs.ChooseListingDialog(resolution, window)
-        dialog.show()
-        wait(app, lambda: False, 0.5)
-        save(dialog, out / f"confirm-{scheme}.png")
-        symbol = dialog.chosen_symbol()
-        dialog.reject()
-        return symbol
+        """The real dialog, pictured, then answered with the first listing."""
 
-    window.ask_listing = ask_listing
+        def picture_and_answer() -> None:
+            save(window, out / f"confirm-{scheme}.png")
+            session.dialogs.answer({"symbol": resolution.candidates[0].info.symbol, "always": False})
+
+        QTimer.singleShot(600, picture_and_answer)
+        return session._ask_listing(resolution)
+
+    session.ask_listing = ask_listing
+    welcome.next()  # on to the spreadsheet
+    welcome.use_spreadsheet(spreadsheet)
     window.resize(*RESULT_SIZE)
-    window.start()
-    wait(app, lambda: not window._busy())
+    welcome.next()  # "Show my investments": Home, fetching today's prices
+    wait(app, lambda: not session.busy)
+    session.home.updateSpreadsheet()
     wait(app, lambda: False, 0.3)
     save(window, out / f"result-{scheme}.png")
     if scheme == "dark":
@@ -176,20 +192,25 @@ def take(app: QApplication, out: Path, scheme: str, work: Path) -> None:
     fake.listings["EDIV.DE"] = fake.listings["EDIV.DE"].__class__(
         fake.listings["EDIV.DE"].info, None, fake.listings["EDIV.DE"].ranges, None
     )
-    window.start()
-    wait(app, lambda: not window._busy())
-    window.ask_value = lambda choices, selected, currency: (selected, Decimal("627.50"))
-    window.enter_value()
+    session.refresh()
+    wait(app, lambda: not session.busy)
+    session.ask_value = lambda choices, selected, currency: (selected, Decimal("627.50"))
+    tickers = [holding.position.ticker for holding in session.report.valuation.holdings]
+    session.home.enterValue(tickers.index("EDIV"))
     wait(app, lambda: False, 0.3)
-    # Only the table's first columns, up to "Worth now", so the marked value can be read when small.
-    table = window.table
-    right = table.columnViewportPosition(4) + table.viewport().x() + 1
-    bottom = table.viewport().y() + sum(table.rowHeight(row) for row in range(table.rowCount())) + 2
-    table.grab(QRect(0, 0, right, bottom)).save(str(out / f"entered-value-{scheme}.png"))
+    # Only the list's first columns, up to "Worth now", so the marked value can be read when small.
+    card = find(window, lambda item: item.objectName() == "investmentsCard")
+    share = find(window, lambda item: item.property("text") == "Share of total")
+    top_left = card.mapToScene(QPointF(0, 0))
+    right = share.mapToScene(QPointF(0, 0)).x() - 8
+    scale = window.devicePixelRatio()  # the picture is drawn at QT_SCALE_FACTOR, the items measured without it
+    crop = QRect(int(top_left.x() * scale), int(top_left.y() * scale),
+                 int((right - top_left.x()) * scale), int(card.height() * scale))
+    window.grabWindow().copy(crop).save(str(out / f"entered-value-{scheme}.png"))
     print("saved", f"entered-value-{scheme}.png")
 
-    window.close()
-    window.deleteLater()
+    shell.close()
+    shell.deleteLater()
     wait(app, lambda: False, 0.2)
 
 
@@ -198,7 +219,7 @@ def main() -> int:
     parser.add_argument("out", type=Path, help="folder to save the pictures in")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
-    app = QApplication(sys.argv[:1])
+    app = make_application(sys.argv[:1])
     try:
         for scheme in ("dark", "light"):
             take(app, args.out, scheme, WORK)

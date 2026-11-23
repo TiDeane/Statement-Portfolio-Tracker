@@ -1,7 +1,7 @@
 """What one open window works with: the settings, the statement, the page shown, and the user's answers.
 
 The answers (which file, an error acknowledged, a yes or no) go through replaceable callables, so
-that tests can stand in for the user's own answers, as they do for the Widgets window.
+that tests can stand in for the user's own answers.
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ from statement_tracker.core.ticker_resolver import Confidence, Resolution
 from statement_tracker.gui.dialog_host import DialogHost
 from statement_tracker.kept_statement import KeptStatement, find_kept_statement
 from statement_tracker.settings import Settings
-from statement_tracker.ui.undo import ChangeHistory
-from statement_tracker.ui.workers import QuestionBridge, Task
+from statement_tracker.gui.undo import ChangeHistory
+from statement_tracker.gui.workers import QuestionBridge, Task
 from statement_tracker.workflow import Report, build_report, read_statement, values_typed_in, with_entered_prices
 
 PAGES = ("welcome", "home", "settings")

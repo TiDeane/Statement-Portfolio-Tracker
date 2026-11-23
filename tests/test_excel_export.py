@@ -740,7 +740,7 @@ def test_cli_without_a_chosen_spreadsheet_only_prints_and_says_how_to_choose_one
 
 
 def test_a_history_row_from_the_statement_kept_from_last_time_says_so(tmp_path: Path) -> None:
-    # Spec H4, F14.
+    # Spec H4, F1.
     provider = FakeProvider()
     provider.add("ABCD.DE", "EUR", price="120")
     provider.add("WXYZ.DE", "EUR", price="100")

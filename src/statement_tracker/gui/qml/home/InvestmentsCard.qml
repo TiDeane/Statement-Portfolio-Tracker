@@ -7,6 +7,8 @@ Rectangle {
     id: card
     readonly property var home: session.home
 
+    objectName: "investmentsCard"
+
     radius: 12
     color: Theme.surface
     border.color: Theme.border

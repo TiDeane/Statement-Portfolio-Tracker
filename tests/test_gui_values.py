@@ -47,7 +47,7 @@ def bond_without_a_price(app, tmp_path: Path):
 
 
 def test_an_investment_without_a_price_is_left_out_and_its_value_can_be_entered(app, tmp_path: Path, english_computer) -> None:
-    # Spec K8.
+    # Spec F8.
     shell = bond_without_a_price(app, tmp_path)
     assert rows(shell.window)[1] == ["Bond fund", "WXYZ · XETRA", "201.00", "No price today", "Not in the total", "Enter its value…"]
     asked = []
@@ -66,7 +66,7 @@ def test_an_investment_without_a_price_is_left_out_and_its_value_can_be_entered(
 
 
 def test_double_clicking_a_row_without_a_price_enters_its_value(app, tmp_path: Path) -> None:
-    # Spec K8.
+    # Spec F8.
     shell = bond_without_a_price(app, tmp_path)
     asked = []
     shell.session.ask_value = lambda choices, selected, currency: asked.append(selected)
@@ -77,7 +77,7 @@ def test_double_clicking_a_row_without_a_price_enters_its_value(app, tmp_path: P
 
 
 def test_the_value_dialog_reads_either_decimal_separator_and_explains_the_rest(app, tmp_path: Path) -> None:
-    # Spec K8 (Review Focus 5).
+    # Spec F8 (Review Focus 5).
     shell = bond_without_a_price(app, tmp_path)
     shell.session.show_error = shell.errors.append
     choices = [ValueChoice("WXYZ", "Bond fund", Decimal("4"), None)]
@@ -105,7 +105,7 @@ def test_the_value_dialog_reads_either_decimal_separator_and_explains_the_rest(a
 
 
 def test_when_yahoo_cannot_be_reached_the_last_prices_are_used_and_dated(app, tmp_path: Path) -> None:
-    # Spec K8.
+    # Spec F8.
     first = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)  # finds a price, and keeps it
     wait_until(app, lambda: not first.session.home.property("busy"))
     first.close()
@@ -121,7 +121,7 @@ def test_when_yahoo_cannot_be_reached_the_last_prices_are_used_and_dated(app, tm
 
 
 def test_a_last_known_price_can_be_replaced_by_a_value(app, tmp_path: Path) -> None:
-    # Spec K8.
+    # Spec F8.
     first = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
     wait_until(app, lambda: not first.session.home.property("busy"))
     first.close()

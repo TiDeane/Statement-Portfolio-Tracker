@@ -54,7 +54,7 @@ def names(tmp_path: Path) -> dict[str, str]:
 
 
 def test_an_investment_is_renamed_by_typing_on_its_name(app, tmp_path: Path) -> None:
-    # Spec K10.
+    # Spec F10.
     shell = home(app, tmp_path)
     asked = []
     shell.session.ask_value = lambda *question: asked.append(question)
@@ -76,7 +76,7 @@ def test_an_investment_is_renamed_by_typing_on_its_name(app, tmp_path: Path) -> 
 
 
 def test_the_systems_rename_key_opens_the_name_reached_with_the_keyboard(app, tmp_path: Path) -> None:
-    # Spec K10: F2 (Return on a Mac).
+    # Spec F10: F2 (Return on a Mac).
     shell = home(app, tmp_path)
 
     def by_key() -> None:
@@ -89,7 +89,7 @@ def test_the_systems_rename_key_opens_the_name_reached_with_the_keyboard(app, tm
 
 
 def test_a_rename_before_any_update_leaves_the_spreadsheet_alone(app, tmp_path: Path) -> None:
-    # Spec K10.
+    # Spec F10.
     sheet = tmp_path / "mine.xlsx"
     shell = home(app, tmp_path, spreadsheet=sheet)
 
@@ -99,7 +99,7 @@ def test_a_rename_before_any_update_leaves_the_spreadsheet_alone(app, tmp_path: 
 
 
 def test_a_rename_after_an_update_is_written_at_once(app, tmp_path: Path) -> None:
-    # Spec K10.
+    # Spec F10.
     sheet = tmp_path / "mine.xlsx"
     shell = home(app, tmp_path, spreadsheet=sheet)
     click(find(shell.window, "Update my spreadsheet"))
@@ -111,7 +111,7 @@ def test_a_rename_after_an_update_is_written_at_once(app, tmp_path: Path) -> Non
 
 
 def test_a_value_entered_after_an_update_is_written_at_once(app, tmp_path: Path) -> None:
-    # Spec K10, K8.
+    # Spec F10, F8.
     settings = Settings.load(tmp_path / "settings.json")
     settings.spreadsheet_path = tmp_path / "mine.xlsx"
     settings.save()
@@ -126,7 +126,7 @@ def test_a_value_entered_after_an_update_is_written_at_once(app, tmp_path: Path)
 
 
 def test_ctrl_z_and_ctrl_y_undo_and_redo_names_and_values(app, tmp_path: Path) -> None:
-    # Spec K10 (F7).
+    # Spec F10.
     shell = bond_without_a_price(app, tmp_path)
     shell.session.ask_value = lambda choices, selected, currency: ("WXYZ", Decimal("204"))
     click(find(shell.window, "Enter its value…"))

@@ -52,7 +52,7 @@ def from_menu(shell, investment: str, item: str) -> None:
 
 
 def test_settings_lists_each_investment_with_its_listing_and_status(app, tmp_path: Path) -> None:
-    # Spec K11.
+    # Spec G1.
     shell = home(app, tmp_path)
     to_settings(shell)
 
@@ -62,7 +62,7 @@ def test_settings_lists_each_investment_with_its_listing_and_status(app, tmp_pat
 
 
 def test_with_nothing_kept_the_list_says_why(app, tmp_path: Path) -> None:
-    # Spec K11 (G6).
+    # Spec G1.
     shell = open_app(tmp_path, provider_with())
     shell.session.goTo("settings")
     settle(app)
@@ -72,7 +72,7 @@ def test_with_nothing_kept_the_list_says_why(app, tmp_path: Path) -> None:
 
 
 def test_rename_choose_again_and_forget_from_the_menu(app, tmp_path: Path) -> None:
-    # Spec K11.
+    # Spec G1.
     shell = home(app, tmp_path)
     to_settings(shell)
 
@@ -96,7 +96,7 @@ def test_rename_choose_again_and_forget_from_the_menu(app, tmp_path: Path) -> No
 
 
 def test_forget_all_keeps_the_spreadsheet_the_statement_and_the_prices(app, tmp_path: Path) -> None:
-    # Spec K11 (G3).
+    # Spec G1.
     shell = home(app, tmp_path, spreadsheet=tmp_path / "mine.xlsx")
     to_settings(shell)
     shell.session.confirm = lambda question, label: question.startswith("Forget your one investment?")
@@ -110,7 +110,7 @@ def test_forget_all_keeps_the_spreadsheet_the_statement_and_the_prices(app, tmp_
 
 
 def test_values_entered_are_listed_and_forgotten_too(app, tmp_path: Path) -> None:
-    # Spec K11 (G1, G2).
+    # Spec G1.
     shell = bond_without_a_price(app, tmp_path)
     shell.session.ask_value = lambda choices, selected, currency: ("WXYZ", Decimal("204"))
     click(find(shell.window, "Enter its value…"))
@@ -124,7 +124,7 @@ def test_values_entered_are_listed_and_forgotten_too(app, tmp_path: Path) -> Non
 
 
 def test_the_switch_and_the_backup_copies_are_saved_at_once(app, tmp_path: Path) -> None:
-    # Spec K11 (G4).
+    # Spec G1.
     shell = home(app, tmp_path, spreadsheet=tmp_path / "mine.xlsx")
     to_settings(shell)
 
@@ -139,7 +139,7 @@ def test_the_switch_and_the_backup_copies_are_saved_at_once(app, tmp_path: Path)
 
 
 def test_the_spreadsheet_can_be_changed_or_given_up(app, tmp_path: Path) -> None:
-    # Spec K11.
+    # Spec G1.
     shell = home(app, tmp_path, spreadsheet=tmp_path / "mine.xlsx")
     to_settings(shell)
     assert shows(shell.window, "mine.xlsx")
@@ -158,7 +158,7 @@ def test_the_spreadsheet_can_be_changed_or_given_up(app, tmp_path: Path) -> None
 
 
 def test_forgetting_the_statement_goes_back_to_first_launch(app, tmp_path: Path) -> None:
-    # Spec K11 (G7).
+    # Spec G1.
     shell = home(app, tmp_path)
     to_settings(shell)
     assert shows(shell.window, "Latest transaction")
@@ -173,7 +173,7 @@ def test_forgetting_the_statement_goes_back_to_first_launch(app, tmp_path: Path)
 
 
 def test_changes_in_settings_show_on_home_at_once_and_can_be_undone(app, tmp_path: Path) -> None:
-    # Spec K11 (G5), K10.
+    # Spec G1, F10.
     shell = home(app, tmp_path)
     to_settings(shell)
     from_menu(shell, "Nasdaq fund", "Rename")
@@ -188,7 +188,7 @@ def test_changes_in_settings_show_on_home_at_once_and_can_be_undone(app, tmp_pat
 
 
 def test_help_gives_the_revolut_steps_the_privacy_and_the_version(app, tmp_path: Path) -> None:
-    # Spec K12 (F11).
+    # Spec F11.
     shell = home(app, tmp_path, real_dialogs=True)
     seen = []
 
@@ -203,7 +203,7 @@ def test_help_gives_the_revolut_steps_the_privacy_and_the_version(app, tmp_path:
 
 
 def test_tab_reaches_every_button(app, tmp_path: Path) -> None:
-    # Spec K12: keyboard navigable.
+    # Spec F11: keyboard navigable.
     shell = home(app, tmp_path, spreadsheet=tmp_path / "mine.xlsx")
     for page in ("home", "settings"):
         shell.session.goTo(page)
@@ -224,7 +224,7 @@ def buttons_shown(window):
 
 
 def test_the_theme_follows_the_system_while_the_app_is_open(app, tmp_path: Path) -> None:
-    # Spec K12 (F10).
+    # Spec F11.
     shell = home(app, tmp_path, spreadsheet=tmp_path / "mine.xlsx")
     update = find(shell.window, "Update my spreadsheet")
 
@@ -237,8 +237,27 @@ def test_the_theme_follows_the_system_while_the_app_is_open(app, tmp_path: Path)
 
 
 def test_the_window_shows_the_apps_icon(app, tmp_path: Path) -> None:
-    # Spec K12 (F12).
+    # Spec F11.
     shell = open_app(tmp_path, provider_with())
 
     assert not shell.window.icon().isNull()
     assert not QGuiApplication.windowIcon().isNull() or not shell.window.icon().isNull()
+
+
+def test_the_program_the_installer_and_the_mac_app_use_the_same_icon_as_the_window() -> None:
+    # Spec F11: made together by packaging/make_icon.py, and named where the app is built.
+    from PySide6.QtGui import QImageReader
+
+    root = Path(__file__).resolve().parents[1]
+    icons = root / "packaging" / "icon"
+    assert (icons / "app.png").read_bytes() == (root / "src" / "statement_tracker" / "gui" / "icon.png").read_bytes()
+    reader = QImageReader(str(icons / "app.ico"))
+    sizes = set()
+    for number in range(reader.imageCount()):
+        reader.jumpToImage(number)
+        sizes.add(reader.read().width())
+    assert {16, 32, 48, 256} <= sizes  # small enough for a title bar, big enough for Explorer
+    assert (icons / "app.icns").read_bytes()[:4] == b"icns"
+    spec = (root / "packaging" / "statement_tracker.spec").read_text(encoding="utf-8")
+    assert '"app.icns"' in spec and '"app.ico"' in spec and "WINDOW_ICON" in spec
+    assert "SetupIconFile=icon\\app.ico" in (root / "packaging" / "windows_installer.iss").read_text(encoding="utf-8")

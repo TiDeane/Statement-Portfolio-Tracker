@@ -12,7 +12,7 @@ FIRST_LAUNCH = "Let's see how your investments are doing"
 
 
 def test_without_a_kept_statement_the_app_opens_on_first_launch(app, tmp_path: Path) -> None:
-    # Spec K1.
+    # Spec F1.
     shell = open_app(tmp_path, FakeProvider())
 
     assert shows(shell.window, FIRST_LAUNCH)
@@ -20,7 +20,7 @@ def test_without_a_kept_statement_the_app_opens_on_first_launch(app, tmp_path: P
 
 
 def test_with_a_kept_statement_the_app_opens_on_home(app, tmp_path: Path) -> None:
-    # Spec K1.
+    # Spec F1.
     shell = open_app(tmp_path, FakeProvider(), kept=SAMPLE)
 
     assert shows(shell.window, "Your portfolio")
@@ -28,7 +28,7 @@ def test_with_a_kept_statement_the_app_opens_on_home(app, tmp_path: Path) -> Non
 
 
 def test_a_kept_statement_that_cannot_be_read_opens_first_launch_quietly(app, tmp_path: Path) -> None:
-    # Spec K1: deleted or damaged since the last run.
+    # Spec F1: deleted or damaged since the last run.
     (tmp_path / "last_statement.csv").write_text("not a statement", encoding="utf-8")
 
     shell = open_app(tmp_path, FakeProvider())
@@ -38,7 +38,7 @@ def test_a_kept_statement_that_cannot_be_read_opens_first_launch_quietly(app, tm
 
 
 def test_errors_say_what_happened_and_what_to_do_and_copy_their_details(app, tmp_path: Path) -> None:
-    # Spec K12.
+    # Spec F11.
     shell = open_app(tmp_path, FakeProvider(), real_dialogs=True)
     seen = []
 

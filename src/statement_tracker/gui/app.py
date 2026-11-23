@@ -18,7 +18,7 @@ from statement_tracker.gui.theme import Theme
 from statement_tracker.settings import Settings
 
 QML_DIR = Path(__file__).with_name("qml")
-APP_ICON = Path(__file__).parent.parent / "ui" / "icon.png"
+APP_ICON = Path(__file__).with_name("icon.png")
 """The app's icon, drawn by packaging/make_icon.py."""
 CONTROLS_STYLE = "Basic"
 """Qt Quick Controls' plainest style: small, and the same on every system, so the app's own look is drawn on it.

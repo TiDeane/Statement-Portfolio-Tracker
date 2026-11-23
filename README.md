@@ -342,7 +342,7 @@ The investments the app remembers, including any you entered a value for, each w
 - **Choose the listing next time:** nothing changes right away. The next time the app looks up prices, it shows you the listings for it again to pick from. Until then, the current one is kept.
 - **Forget...:** the next time the app looks up prices, it looks for its listing again, as on the first day. The name you gave it and any value you entered for it are removed too.
 
-**Forget all investments...** does the same for every investment at once. Your spreadsheet, your statement from last time and the last prices found on Yahoo Finance are kept.
+**Forget all investments...** does the same for every investment at once. Your spreadsheet, your statement from last time, the last prices found on Yahoo Finance and the switch below are kept.
 
 The switch **Take the first listing without asking** is explained in [If the app asks which listing an investment is](#if-the-app-asks-which-listing-an-investment-is).
 

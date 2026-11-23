@@ -241,7 +241,7 @@ def test_closing_the_window_during_a_fetch_saves_nothing(app, tmp_path: Path) ->
     shell = open_app(tmp_path, provider, kept=SAMPLE)
     wait_until(app, lambda: shows(shell.window, "current prices"))
 
-    shell.close()
+    shell.window.close()  # as the user closes it: the window's own close button
     provider.let_go.set()
     deadline = time.monotonic() + 1
     while time.monotonic() < deadline:  # time for the stopped run to end, and for anything it might do

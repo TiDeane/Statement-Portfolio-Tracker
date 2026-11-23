@@ -272,6 +272,11 @@ class Session(QObject):
         QThreadPool.globalInstance().start(task)
         return True
 
+    @Slot()
+    def stopRun(self) -> None:
+        """The window is closing."""
+        self.stop_run()
+
     def stop_run(self) -> None:
         """Stop the run going on, if any, at its next step. Nothing of it is saved or shown."""
         if self._running is not None:

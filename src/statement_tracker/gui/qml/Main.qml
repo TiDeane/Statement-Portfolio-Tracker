@@ -12,7 +12,10 @@ ApplicationWindow {
     minimumHeight: 560
     title: "Statement Portfolio Tracker"
     color: Theme.bg
-    onClosing: dialogs.cancel()
+    onClosing: {
+        session.stopRun()  // closing stops a fetch: nothing of it is saved
+        dialogs.cancel()
+    }
 
     readonly property var pages: ({ "welcome": "WelcomePage", "home": "HomePage", "settings": "SettingsPage" })
     readonly property bool dragging: dropArea.containsDrag

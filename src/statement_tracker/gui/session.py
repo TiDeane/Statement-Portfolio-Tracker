@@ -20,7 +20,7 @@ from PySide6.QtGui import QDesktopServices, QGuiApplication
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.market_data.provider import PriceProvider
 from statement_tracker.core.models import Position
-from statement_tracker.core.ticker_resolver import Resolution
+from statement_tracker.core.ticker_resolver import Confidence, Resolution
 from statement_tracker.gui.dialog_host import DialogHost
 from statement_tracker.kept_statement import KeptStatement, find_kept_statement
 from statement_tracker.settings import Settings
@@ -33,6 +33,37 @@ UNEXPECTED = UserFacingError(
     "Something unexpected went wrong.",
     'Please report this problem. "Copy details" copies the information needed to fix it.',
 )
+
+
+def listing_question(resolution: Resolution, currency: str) -> dict:
+    """The texts and options of the dialog asking which listing ``resolution.ticker`` is."""
+    ticker = resolution.ticker
+    if resolution.confidence is Confidence.AMBIGUOUS:
+        intro = (f"{ticker} is traded on more than one stock exchange. They're usually the same fund at almost the "
+                 "same price. Pick the one whose name and currency match your Revolut app. You're only asked once.")
+    elif resolution.confidence is Confidence.CONFIDENT:
+        intro = (f"Choose which fund {ticker} is. The one that fits your purchases is chosen; you can also type a "
+                 "Yahoo Finance symbol.")
+    elif resolution.candidates:
+        intro = f"The app could not tell for sure which fund {ticker} is. Pick the one that matches yours, if it is in the list."
+    else:
+        intro = (f"The app could not find {ticker} on Yahoo Finance, so it cannot look up its price. If you know its "
+                 "Yahoo Finance symbol (for example ABCD.DE), type it below. Otherwise skip it: it is then shown without "
+                 "a price, and you can enter its value yourself.")
+    options = []
+    for candidate in resolution.candidates:
+        info = candidate.info
+        quoted = info.currency or ""
+        converted = f"in {quoted}, converted to {currency}" if quoted and currency and quoted != currency else quoted
+        detail = " \u00b7 ".join(part for part in (info.exchange, converted, info.symbol) if part)
+        options.append({"name": info.name or info.symbol, "detail": detail, "symbol": info.symbol, "match": candidate.is_match})
+    return {
+        "title": f"Which one is {ticker}?",
+        "intro": intro,
+        "options": options,
+        "fieldLabel": "Not in the list? Type its Yahoo Finance symbol" if options else "Its Yahoo Finance symbol",
+        "useLabel": "Use this listing" if options else "Use this symbol",
+    }
 
 
 class RunStopped(Exception):
@@ -114,7 +145,7 @@ class Session(QObject):
         self.show_error: Callable[[UserFacingError], object] = self._show_error
         self.confirm: Callable[[str, str], bool] = self._confirm
         self.show_in_folder: Callable[[Path], object] = show_in_folder
-        self.ask_listing: Callable[[Resolution], tuple[str | None, bool]] = lambda resolution: (None, False)
+        self.ask_listing: Callable[[Resolution], tuple[str | None, bool]] = self._ask_listing
         self.ask_value: Callable[[list, str, str], tuple[str, Decimal] | None] = self._ask_value
         """What an investment is worth now: (ticker, value of the whole holding), or None."""
         """Which listing an investment is: (symbol or None to skip, "always take the first")."""
@@ -255,8 +286,9 @@ class Session(QObject):
         self.reportChanged.emit()
 
     def _ask_during_run(self, resolution: Resolution) -> str | None:
-        """Which listing an investment is, asked while a run waits. "Always take the first" is saved at once:
-        the rest of this run already follows it."""
+        """Which listing an investment is, asked while a run waits (Home says it waits for the user).
+        "Always take the first" is saved at once: the rest of this run already follows it."""
+        self.progressed.emit(0, 0, f"Waiting for you: which listing {resolution.ticker} is.")
         symbol, always_first = self.ask_listing(resolution)
         if always_first and not self.settings.always_use_first_listing:
             self.settings.always_use_first_listing = True
@@ -342,6 +374,13 @@ class Session(QObject):
             if value is not None:
                 return choice.ticker, value
             question = {**question, "error": "Type an amount above zero, like 2,040.00."}
+
+    def _ask_listing(self, resolution: Resolution) -> tuple[str | None, bool]:
+        """Ask which listing an investment is, in the window's dialog."""
+        answer = self.dialogs.ask("listing", listing_question(resolution, self.loading_currency))
+        if answer is None:
+            return None, False
+        return (str(answer.get("symbol") or "").strip() or None), bool(answer.get("always"))
 
     def _ask_open_file(self, title: str, kinds: str, start: Path) -> Path | None:
         answer = self.dialogs.ask(

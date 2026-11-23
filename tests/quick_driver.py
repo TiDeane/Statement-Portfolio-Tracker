@@ -70,7 +70,10 @@ def close_windows_afterwards(app):
         gc.collect()
     finally:
         qInstallMessageHandler(previous)
+    stuck = list(_STUCK)
+    _STUCK.clear()
     assert qml_warnings == [], "the QML engine warned:\n" + "\n".join(qml_warnings)
+    assert stuck == [], "\n".join(stuck)
 
 
 _OPENED: list[list[AppWindow]] = []
@@ -107,11 +110,14 @@ def open_app(
     kept: Path | None = None,
     spreadsheet: Path | None = None,
     real_dialogs: bool = False,
+    ask_listing: Callable | None = None,
 ) -> AppWindow:
     """The app as it opens, on its own settings in ``tmp_path``, shown.
 
     ``kept`` is the statement kept from last time; ``spreadsheet`` the one remembered. Unless
-    ``real_dialogs``, error messages are collected in ``shell.errors`` instead of shown.
+    ``real_dialogs``, error messages are collected in ``shell.errors`` instead of shown, and a question
+    about a listing is answered by ``ask_listing`` (set before the app starts fetching), else skipped
+    and noted in ``shell.questions``.
     """
     settings_path = tmp_path / "settings.json"
     if kept is not None:
@@ -123,13 +129,20 @@ def open_app(
     extra = {"now": lambda: now} if now else {}
     shell = AppWindow(Settings.load(settings_path), lambda: provider, lambda: today, **extra)
     shell.errors = []
-    session = getattr(shell, "session", None)
-    if session is not None and not real_dialogs:
+    shell.questions = []
+    session = shell.session
+    if not real_dialogs:
         session.show_error = shell.errors.append
+        session.ask_listing = ask_listing or (lambda resolution: (shell.questions.append(resolution.ticker), (None, False))[1])
     (_OPENED[-1] if _OPENED else _UNMANAGED).append(shell)
     shell.show()
     settle(QGuiApplication.instance())
     return shell
+
+
+def opening_app() -> AppWindow:
+    """The app ``open_app`` opened last: for answers given while it is still opening."""
+    return (_OPENED[-1] if _OPENED else _UNMANAGED)[-1]
 
 
 def settle(app) -> None:
@@ -337,10 +350,42 @@ def drop(window: QQuickWindow, *paths: Path) -> None:
 
 def when_a_dialog_opens(shell: AppWindow, act: Callable[[], object]) -> None:
     """Run ``act`` (the user's clicks) once the next dialog shows. The call that opens a dialog waits for
-    its answer, so the test sets this up first, then makes that call."""
+    its answer, so the test sets this up first, then makes that call.
+
+    A dialog still open after ``act`` (a click that missed, say) is closed, and the test fails when it
+    ends, instead of waiting for an answer forever."""
+    dialogs = shell.session.dialogs
+
+    shown_before: list[list[str]] = []
 
     def opened(*_args: object) -> None:
-        shell.session.dialogs.opened.disconnect(opened)
-        QTimer.singleShot(0, lambda: (settle(QGuiApplication.instance()), act()))
+        dialogs.opened.disconnect(opened)
+        shown_before.append(texts(shell.window))
+        QTimer.singleShot(0, run)
 
-    shell.session.dialogs.opened.connect(opened)
+    def run() -> None:
+        # Shown once its texts are: Qt Quick draws a new popup on one of its next frames.
+        deadline = time.monotonic() + 2
+        while texts(shell.window) == shown_before[0] and time.monotonic() < deadline:
+            settle(QGuiApplication.instance())
+        settle(QGuiApplication.instance())
+        before = _ASKED[0]
+        try:
+            act()
+        finally:
+            settle(QGuiApplication.instance())
+            if dialogs.property("isOpen") and _ASKED[0] == before:
+                _STUCK.append(f"a dialog was left open: {texts(shell.window)}")
+                dialogs.cancel()
+
+    dialogs.opened.connect(opened)
+    dialogs.opened.connect(_count_asked)
+
+
+_ASKED = [0]
+"""How many dialogs have opened: a dialog that opens another (asking again) is not stuck."""
+_STUCK: list[str] = []
+
+
+def _count_asked(*_args: object) -> None:
+    _ASKED[0] += 1

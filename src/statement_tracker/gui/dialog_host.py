@@ -22,9 +22,11 @@ class DialogHost(QObject):
         super().__init__(parent)
         self._loop: QEventLoop | None = None
         self._result: dict[str, Any] | None = None
+        self._waiting = False
+        """A dialog is shown and not answered yet."""
 
     def _is_open(self) -> bool:
-        return self._loop is not None
+        return self._waiting
 
     isOpen = Property(bool, _is_open, notify=openChanged)
 
@@ -34,11 +36,11 @@ class DialogHost(QObject):
             raise RuntimeError("A dialog is already open.")
         self._result = None
         self._loop = QEventLoop()
+        self._waiting = True
         self.openChanged.emit()
         self.opened.emit(kind, data)
         self._loop.exec()
         self._loop = None
-        self.openChanged.emit()
         return self._result
 
     @Slot("QVariantMap")
@@ -54,5 +56,8 @@ class DialogHost(QObject):
         self._finish()
 
     def _finish(self) -> None:
+        if self._waiting:
+            self._waiting = False
+            self.openChanged.emit()
         if self._loop is not None:
             self._loop.quit()

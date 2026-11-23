@@ -143,6 +143,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - Details can be copied with **Copy details**; no stack trace is shown.
   - **Help** on Home (and **About and privacy** on first launch) shows where the statement comes from (the Revolut steps and All time), the privacy text and the version.
   - Tab reaches every button, field and investment name, with a visible outline; Esc closes dialogs and Enter confirms them.
+  - One dialog at a time: a question or a message wanted while another dialog is open waits for it to close, and is never lost.
   - Light and dark follow the system and switch while the app is open; the green buttons are #107C41 in light and #33C481 in dark.
   - The window shows the app's icon.
   - Numbers follow the computer's locale, and the currency is the statement's, never assumed. Dates are written in figures in the computer's order with a four-digit year (14/11/2026 in Portugal, 11/14/2026 in the United States), never with month or day names, which would be in the computer's language among English words.

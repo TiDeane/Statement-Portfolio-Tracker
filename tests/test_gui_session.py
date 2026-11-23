@@ -71,3 +71,21 @@ def test_a_dialog_answered_or_cancelled_by_the_app_closes_and_keeps_its_answer(a
 
     settle(app)
     assert not shows(shell.window, "Which one is ABCD?")
+
+
+def test_a_dialog_wanted_while_another_is_open_waits_its_turn(app) -> None:
+    # Spec F11: one dialog at a time, nothing lost.
+    from PySide6.QtCore import QTimer
+
+    from statement_tracker.gui.dialog_host import DialogHost
+
+    host = DialogHost()
+    second = []
+    QTimer.singleShot(0, lambda: second.append(host.ask("second", {})))  # wanted while the first is open
+    QTimer.singleShot(50, lambda: host.answer({"n": 1}))
+    QTimer.singleShot(100, lambda: host.answer({"n": 2}))
+
+    first = host.ask("first", {})
+
+    assert first == {"n": 1}
+    assert second == [{"n": 2}]

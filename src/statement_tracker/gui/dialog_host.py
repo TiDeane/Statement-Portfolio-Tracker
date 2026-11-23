@@ -20,47 +20,48 @@ class DialogHost(QObject):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
-        self._loop: QEventLoop | None = None
-        self._result: dict[str, Any] | None = None
-        self._waiting = False
-        """A dialog is shown and not answered yet."""
+        self._open: dict[str, Any] | None = None
+        """The dialog shown and not answered yet: its own wait loop and, once answered, its answer."""
 
     def _is_open(self) -> bool:
-        return self._waiting
+        return self._open is not None
 
     isOpen = Property(bool, _is_open, notify=openChanged)
 
     def ask(self, kind: str, data: dict[str, Any]) -> dict[str, Any] | None:
-        """Show the dialog ``kind`` and return its answer, or None if it was cancelled or the window closed."""
-        if self._loop is not None:
-            raise RuntimeError("A dialog is already open.")
-        self._result = None
-        self._loop = QEventLoop()
-        self._waiting = True
+        """Show the dialog ``kind`` and return its answer, or None if it was cancelled or the window closed.
+
+        One dialog at a time: asked while another is open (a fetch's question while Help is shown, say),
+        it waits for that one to close first, so nothing is lost."""
+        while self._open is not None:
+            waiting = QEventLoop()
+            self.openChanged.connect(waiting.quit)
+            waiting.exec()
+            self.openChanged.disconnect(waiting.quit)
+        shown: dict[str, Any] = {"loop": QEventLoop(), "answer": None}
+        self._open = shown
         self.openChanged.emit()
         self.opened.emit(kind, data)
-        self._loop.exec()
-        self._loop = None
-        return self._result
+        if self._open is shown:  # not answered at once
+            shown["loop"].exec()
+        return shown["answer"]
 
     @Slot("QVariantMap")
     def answer(self, result: dict[str, Any]) -> None:
         """The dialog was answered. Once a question is settled, a later answer or cancel changes nothing
         (a dialog closing after being answered cancels, too late)."""
-        if self._waiting:
-            self._result = dict(result)
-            self._finish()
+        self._finish(dict(result))
 
     @Slot()
     def cancel(self) -> None:
         """The dialog was cancelled or closed, or the window is closing."""
-        if self._waiting:
-            self._result = None
-            self._finish()
+        self._finish(None)
 
-    def _finish(self) -> None:
-        if self._waiting:
-            self._waiting = False
-            self.openChanged.emit()
-        if self._loop is not None:
-            self._loop.quit()
+    def _finish(self, answer: dict[str, Any] | None) -> None:
+        shown = self._open
+        if shown is None:
+            return
+        shown["answer"] = answer
+        self._open = None
+        shown["loop"].quit()
+        self.openChanged.emit()

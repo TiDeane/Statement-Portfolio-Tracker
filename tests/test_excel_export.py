@@ -737,3 +737,38 @@ def test_cli_without_a_chosen_spreadsheet_only_prints_and_says_how_to_choose_one
     assert "no spreadsheet was updated" in errors
     assert "--spreadsheet FILE.xlsx" in errors
     assert [item.name for item in tmp_path.glob("*.xlsx")] == []
+
+
+def test_a_history_row_from_the_statement_kept_from_last_time_says_so(tmp_path: Path) -> None:
+    # Spec H4, F14.
+    provider = FakeProvider()
+    provider.add("ABCD.DE", "EUR", price="120")
+    provider.add("WXYZ.DE", "EUR", price="100")
+    settings, workbook = tmp_path / "app" / "settings.json", tmp_path / "mine.xlsx"
+    statement = tmp_path / "downloads" / "statement.csv"
+    statement.parent.mkdir()
+    write_statement(statement.parent, *LINES)
+
+    def update(day: date, *statement_given: str) -> None:
+        arguments = [*statement_given, "--symbol", "ABCD=ABCD.DE", "--symbol", "WXYZ=WXYZ.DE"]
+        arguments += ["--spreadsheet", str(workbook), "--settings", str(settings), "--no-prompt"]
+        assert cli.main(arguments, provider, io.StringIO(), io.StringIO(), today=day) == 0
+
+    def comment(row: int) -> str:
+        cell = load_workbook(workbook)["Portfolio History"][f"A{row}"]
+        return cell.comment.text if cell.comment else ""
+
+    update(DAY_ONE, str(statement))
+    update(DAY_TWO)  # no statement: the one from day one
+
+    assert comment(2) == ""
+    assert "statement kept from last time" in comment(3) and "2025-01-20" in comment(3)
+    assert "not included" in comment(3)
+
+    update(date(2026, 10, 14), str(statement))  # the next day, with a statement: day two keeps its comment
+    assert "statement kept from last time" in comment(3)
+    assert comment(4) == ""
+
+    update(date(2026, 10, 15))
+    update(date(2026, 10, 15), str(statement))  # the same day again, with a statement: the comment goes
+    assert comment(5) == ""

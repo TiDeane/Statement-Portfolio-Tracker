@@ -23,6 +23,7 @@ QtWidgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
 QtGui = pytest.importorskip("PySide6.QtGui", exc_type=ImportError)
 
 from fakes import SAMPLE, FakeProvider, ranges_around, write_statement  # noqa: E402
+from PySide6 import QtCore  # noqa: E402
 from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, Qt, QTimer, QUrl  # noqa: E402
 from PySide6.QtGui import QDragEnterEvent, QDropEvent  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
@@ -1126,6 +1127,8 @@ def test_back_to_the_steps_stops_a_run_without_saving_anything(app, tmp_path: Pa
     assert not spreadsheet.exists()  # nor written
     assert Settings.load(tmp_path / "settings.json").ticker_choices == {}  # nor saved
     assert not (tmp_path / "last_prices.json").exists()
+    opened_again, _ = make_window(tmp_path, provider)
+    assert opened_again.statement_label.text() == "No file chosen yet."  # nor its statement kept (Spec F14)
 
     run(app, window)  # step 3 again, to the end this time
     assert window.result_page.isVisible() and spreadsheet.exists()
@@ -1603,6 +1606,8 @@ def test_settings_forget_all_keeps_the_rest(app, tmp_path: Path) -> None:
     in_settings(app, window, act)
     assert Settings.load(saved).spreadsheet_path == tmp_path / "mine.xlsx"
     assert PriceCache.beside(saved).last_known("EQQB.DE", "EUR") is not None  # Yahoo's prices stay
+    reopened, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    assert reopened.kept_option.isChecked()  # so does the statement from last time
 
 
 def test_settings_forget_the_values_entered_too_but_not_the_prices_found(app, tmp_path: Path) -> None:
@@ -2121,3 +2126,121 @@ def test_packaging_smoke_test_reads_the_sample_and_writes_a_spreadsheet(app, tmp
     assert report["ok"] and report["spreadsheet_written"]
     assert report["sample_rows"] == 18
     assert report["imports"]["openpyxl"]["version"]
+
+
+# -- the statement kept from last time (Spec F14) ---------------------------------------------------------
+
+
+def long_date(day: date) -> str:
+    """A date as the computer's settings write it out in full."""
+    return QtCore.QLocale().toString(QtCore.QDate(day.year, day.month, day.day), QtCore.QLocale.FormatType.LongFormat)
+
+
+SAMPLE_LATEST = max(transaction.timestamp for transaction in load_statement(SAMPLE).transactions).astimezone().date()
+
+
+def test_next_time_step_1_offers_the_statement_from_last_time_or_a_new_one(app, tmp_path: Path) -> None:
+    # Spec F14, F1.
+    statement = tmp_path / "downloads" / "statement.csv"
+    statement.parent.mkdir()
+    statement.write_bytes(SAMPLE.read_bytes())
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    window.show()
+    assert not window.kept_option.isVisibleTo(window) and not window.new_option.isVisibleTo(window)
+    drop(window, statement)
+    run(app, window)
+    window.back_button.click()
+    assert not window.kept_option.isVisibleTo(window)  # not until the app is opened again
+    statement.unlink()  # cleared out of the downloads folder: the app keeps its own copy
+
+    reopened, errors = make_window(tmp_path, provider_with("EQQB.DE"))
+    reopened.show()
+
+    assert reopened.kept_option.text() == "Use my statement from &last time"
+    assert reopened.new_option.text() == "Use a new state&ment"
+    assert reopened.kept_option.isChecked() and not reopened.new_option.isChecked()
+    assert reopened.statement_badge.text() == "✓ Already done: remembered from last time."
+    assert reopened.kept_label.isVisible()
+    assert long_date(SAMPLE_LATEST) in reopened.kept_label.text()
+    assert "since then" in reopened.kept_label.text() and "not included" in reopened.kept_label.text()
+    assert not reopened.drop_area.isVisible()  # it belongs to "Use a new statement"
+    check_keyboard(app, reopened, "the steps, with a statement from last time")
+
+    run(app, reopened)  # straight away: nothing to choose
+
+    assert errors == []
+    assert [row[0] for row in cells(reopened.table)] == ["(EQQB) Nasdaq fund", "Total"]
+    status = reopened.status_label.text()
+    assert "statement from last time" in status and long_date(SAMPLE_LATEST) in status
+
+
+def test_a_new_statement_is_chosen_instead_of_the_one_from_last_time(app, tmp_path: Path) -> None:
+    # Spec F14.
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    drop(window, SAMPLE)
+    run(app, window)
+    reopened, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    reopened.show()
+
+    reopened.new_option.click()
+
+    assert reopened.drop_area.isVisible()
+    assert reopened.drop_hint.text() == "Drag your statement file here"
+    assert not reopened.go_button.isEnabled()  # it waits for the new statement
+    assert not reopened.statement_badge.isVisible()  # still to do: the drop area says what to do
+
+    reopened.kept_option.click()
+    assert reopened.go_button.isEnabled() and not reopened.drop_area.isVisible()
+
+    drop(reopened, SAMPLE)  # dropped on the window: it chooses "Use a new statement"
+
+    assert reopened.new_option.isChecked()
+    assert reopened.statement_badge.text() == "✓ Done"
+    assert shows(reopened.statement_label, SAMPLE)
+    reopened.kept_option.click()
+    reopened.new_option.click()
+    assert shows(reopened.statement_label, SAMPLE)  # kept in mind meanwhile
+    run(app, reopened)
+    assert reopened.status_label.text() == "Done. Your investments are shown below."
+
+
+def test_settings_forget_the_statement_from_last_time(app, tmp_path: Path) -> None:
+    # Spec G7, F14, F7.
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    drop(window, SAMPLE)
+    run(app, window)
+    reopened, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    reopened.show()
+    assert reopened.kept_option.isVisible()
+
+    def act(dialog: SettingsDialog) -> None:
+        assert long_date(SAMPLE_LATEST) in dialog.statement_label.text()
+        question = forget(app, dialog, "Forget the statement...", answer="Cancel")
+        assert question.startswith("Forget your statement from last time?")
+        assert long_date(SAMPLE_LATEST) in dialog.statement_label.text()  # Cancel changes nothing
+
+        forget(app, dialog, "Forget the statement...")
+        assert dialog.statement_label.text().startswith("No statement is kept.")
+        assert not button(dialog, "Forget the statement...").isEnabled()
+        undo(app, dialog)
+        assert dialog.statement_label.text().startswith("No statement is kept.")  # not part of undo
+
+    in_settings(app, reopened, act)
+
+    # Step 1 asks for a statement again, at once and the next time the app opens.
+    assert not reopened.kept_option.isVisible() and reopened.drop_area.isVisible()
+    assert reopened.statement_label.text() == "No file chosen yet." and not reopened.go_button.isEnabled()
+    next_time, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+    assert not next_time.kept_option.isVisibleTo(next_time) and not next_time.go_button.isEnabled()
+    assert Settings.load(tmp_path / "settings.json").known_tickers() == ["EQQB"]  # the investments stay
+
+
+def test_settings_says_when_no_statement_is_kept(app, tmp_path: Path) -> None:
+    # Spec G7.
+    window, _ = make_window(tmp_path, provider_with("EQQB.DE"))
+
+    def act(dialog: SettingsDialog) -> None:
+        assert dialog.statement_label.text().startswith("No statement is kept.")
+        assert not button(dialog, "Forget the statement...").isEnabled()
+
+    in_settings(app, window, act)

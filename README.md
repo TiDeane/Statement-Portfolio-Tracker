@@ -35,6 +35,7 @@ The app reads the account statement CSV file you export from the Revolut app. It
 - [Get your statement from Revolut](#get-your-statement-from-revolut)
 - [Use the app](#use-the-app)
   - [If the app asks you to confirm an investment](#if-the-app-asks-you-to-confirm-an-investment)
+  - [Today's values without a new statement](#todays-values-without-a-new-statement)
 - [Read the result](#read-the-result)
   - [The columns](#the-columns)
   - [Renaming an investment](#renaming-an-investment)
@@ -51,6 +52,7 @@ The app reads the account statement CSV file you export from the Revolut app. It
   - [Using Google Sheets](#using-google-sheets)
 - [Settings](#settings)
   - [Your investments](#your-investments)
+  - [Your statement from last time](#your-statement-from-last-time)
   - [Spreadsheet backups](#spreadsheet-backups)
 - [Privacy](#privacy)
 - [Known limitations](#known-limitations)
@@ -155,6 +157,17 @@ Many funds are traded on several stock exchanges under the same code. When the a
 - **Skip this investment**: It is left without a current value.
 
 The app remembers your answer and does not ask again. If you picked the wrong one, you can change your choice in **Settings**, or turn "always choose the first option" off there.
+
+### Today's values without a new statement
+
+The app keeps a copy of the last statement you used. The next time you open it, step 1 offers a choice:
+
+- **Use my statement from last time** is already chosen, with the date of that statement's latest transaction. Click the green button and the app looks up today's prices for what that statement says you hold, and updates your spreadsheet as usual. You don't need to download a new statement from Revolut.
+- **Use a new statement** shows the place to drop or choose a statement file. Dropping a statement anywhere on the window chooses this too.
+
+> **Bought, sold or added money since then?** The statement from last time doesn't know about it, so the amounts invested, the cash and the money put in would be out of date. Get a new statement from Revolut and use it instead; the app keeps that one from then on.
+
+The result page says when it was worked out from the statement from last time. In the spreadsheet, that day's row in Portfolio History has a comment on its date saying so.
 
 ## Read the result
 
@@ -270,6 +283,8 @@ Each row stands for one day, so the app adds today's row only when all its value
 - a value you entered was entered on an earlier day (one you entered today counts as today's);
 - no investment has a price at all.
 
+A row worked out from the [statement from last time](#todays-values-without-a-new-statement) has a comment on its date saying so, with the date of that statement's latest transaction.
+
 When only some investments have no price, the app still adds the day's row, and like the Total row in Current Holdings, all of it covers only the investments that have a value: the others count for nothing in Net Worth, Gain vs Deposits and ROI %, though the money you paid for them is still in Net Deposits. The history therefore dips on a day an investment is left out. Such a row is coloured light orange, and a comment on its date (a small red corner in Excel) says which investments it leaves out. Entering their value yourself, in the app, or by typing it into Current Holdings before you next use the app on another day, brings them in, and the colour goes.
 
 ### Backup copies
@@ -302,9 +317,13 @@ The file stays an Excel file. **File > Save as Google Sheets** makes a separate 
 - **Choose the listing next time**: nothing changes right away. The next time you run the app, it shows you the list of listings for it again to pick from. Until then, the current one is kept.
 - **Forget** it: the next time you run the app, it looks for its listing again, as on the first day. The name you gave it and any value you entered for it are removed too.
 
-**Forget all...** does the same for every investment at once. Your spreadsheet choice and the last prices found on Yahoo Finance are kept.
+**Forget all...** does the same for every investment at once. Your spreadsheet choice, your statement from last time and the last prices found on Yahoo Finance are kept.
 
 The switch **When the app cannot tell which listing an investment is, use the first one without asking** is explained in [If the app asks you to confirm an investment](#if-the-app-asks-you-to-confirm-an-investment).
+
+### Your statement from last time
+
+This shows whether the app keeps a copy of your last statement, which lets it [look up today's values without a new statement](#todays-values-without-a-new-statement), and the date of that statement's latest transaction. **Forget the statement...** deletes the copy, after asking. Step 1 then asks for a statement again, and the next statement you use is kept in its place. Your investments, your spreadsheet and the file you downloaded from Revolut are not changed. Ctrl+Z does not bring the copy back.
 
 ### Spreadsheet backups
 
@@ -316,7 +335,7 @@ Everything happens on your computer. There are no accounts, and the app does not
 
 The only information that leaves your computer are the codes of your investments and dates, sent to Yahoo Finance to look up prices. Your amounts and your statement file are never sent anywhere.
 
-The app keeps its settings (your confirmed investments and where your spreadsheet is), the last price it found for each fund, and any values you entered, in your user folder: `%LOCALAPPDATA%\StatementPortfolioTracker` on Windows, `~/Library/Application Support/StatementPortfolioTracker` on macOS and `~/.config/StatementPortfolioTracker` on Linux. Those are kept as prices per share; none of the amounts in your statement are kept. Together they take a few kilobytes. Uninstalling the app on Windows deletes that folder; otherwise (macOS, or running from the source), delete it yourself.
+The app keeps its settings (your confirmed investments and where your spreadsheet is), the last price it found for each fund, any values you entered, and a copy of the last statement you used (`last_statement.csv`, so that [today's values need no new statement](#todays-values-without-a-new-statement)), in your user folder: `%LOCALAPPDATA%\StatementPortfolioTracker` on Windows, `~/Library/Application Support/StatementPortfolioTracker` on macOS and `~/.config/StatementPortfolioTracker` on Linux. Prices and values are kept as prices per share. The copy of your statement holds your whole trading history, like the file you downloaded from Revolut, so anyone who can open your user folder can read it; **Settings** can [forget it](#your-statement-from-last-time). Together they take a few kilobytes. Uninstalling the app on Windows deletes that folder; otherwise (macOS, or running from the source), delete it yourself.
 
 ## Known limitations
 

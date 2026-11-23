@@ -27,6 +27,9 @@ class ExportResult:
 class Exporter(Protocol):
     """Writes a valued portfolio to a destination. Raises UserFacingError when it cannot."""
 
-    def export(self, valuation: PortfolioValuation, today: date) -> ExportResult:
-        """Write the open holdings and the portfolio totals for ``today``."""
+    def export(
+        self, valuation: PortfolioValuation, today: date, kept_statement_day: date | None = None
+    ) -> ExportResult:
+        """Write the open holdings and the portfolio totals for ``today``. ``kept_statement_day``, when
+        given, is the latest transaction of the statement kept from last time that they come from."""
         ...

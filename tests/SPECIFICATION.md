@@ -122,7 +122,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - each step puts back only what it changed;
   - names and values stay undoable across runs;
   - Forget and "Choose the listing next time" stop being undoable once a run finishes;
-  - the tick box and backups are not part of it;
+  - the tick box, forgetting the statement (G7) and backups are not part of it;
   - it works only on the result page, never during a run.
 - **F8.** "Back to the steps" during a run stops it, and nothing of it is saved or shown.
 - **F9.** Errors are in plain words: what happened, and what to do.
@@ -141,6 +141,14 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - Not updated: in red, with what happened and what to do.
   - It says so again after each later change that rewrites the spreadsheet (a rename, a value entered).
   - Either way, "Open its folder" opens the folder the spreadsheet is in, with the file selected where the system allows it.
+- **F14.** The statement is kept for next time, so that today's values need no new statement.
+  - Once a run has read a statement, a copy of it is kept in the app's own folder, replacing the one kept before. A statement that cannot be read, or a run stopped with "Back to the steps", keeps the one from before.
+  - When the app opens with a statement kept, step 1 is a choice, like step 2: "Use my statement from last time" or "Use a new statement".
+    - The first is chosen and remembered from last time. Under it are the date of its latest transaction and a note that anything bought, sold or added since then is not included. Step 3 can be pressed at once.
+    - The drop area shows only while "Use a new statement" is chosen, and step 3 then waits for a statement.
+    - A statement chosen or dropped chooses "Use a new statement". Going back and forth keeps it.
+  - When the app opens with no statement kept, step 1 is only the drop area. It stays that way until the app is opened again.
+  - The result of a run on the statement from last time says so, with the date of its latest transaction.
 
 ## G. Settings
 
@@ -149,12 +157,16 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - Rename follows the same rules as F6;
   - "Choose the listing next time" applies on the next run;
   - Forget asks first, then removes the listing, the name and the entered value.
-- **G3.** Forget all asks first, and keeps the spreadsheet choice and the last prices from Yahoo.
+- **G3.** Forget all asks first, and keeps the spreadsheet choice, the statement from last time and the last prices from Yahoo.
 - **G4.** The other settings:
   - the "always the first listing" switch;
   - "Backup copies to keep", from 0 to 99, saved and kept within that range.
 - **G5.** Changes are saved at once, and the result page shows them at once.
 - **G6.** With nothing remembered, the empty table still shows, with the reason inside it.
+- **G7.** The statement from last time (F14):
+  - Settings says whether one is kept, with the date of its latest transaction;
+  - "Forget the statement..." asks first, then deletes the copy, and step 1 goes back to asking for a statement;
+  - it is only enabled while a statement is kept, it leaves the investments alone, and Ctrl+Z does not bring the statement back.
 
 ## H. The spreadsheet
 
@@ -179,7 +191,8 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - Unrealized PnL, ROI %, Net Worth and Gain vs Deposits follow when a figure is changed;
   - today's row follows a value typed into Current Holdings, and keeps it on later days;
   - a row that leaves an investment out is light orange with a "Leaves out ..." comment until the value is in, and stays marked if it never comes;
-  - rows from versions before 1.0 switch ROI % to the new meaning, and nothing else in them changes.
+  - rows from versions before 1.0 switch ROI % to the new meaning, and nothing else in them changes;
+  - a row worked out from the statement kept from last time (F14) has a comment on its date saying so, with the date of the statement's latest transaction. It keeps it on later days. A later run that day with a new statement takes it away.
 - **H5.** Backups:
   - before the first change each day to an existing file, a dated copy is saved beside it; later changes that day keep it;
   - the newest N are kept (default 3); other workbooks' copies and the old one-time copy are never deleted;
@@ -209,13 +222,14 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - `--no-spreadsheet` skips it for one run;
   - without a spreadsheet, the output says how to choose one;
   - `--no-prompt` never asks;
-  - `--ignore-unknown-types` behaves as in A7.
+  - `--ignore-unknown-types` behaves as in A7;
+  - every statement read is kept as in F14, and without a statement the one kept from last time is used: stderr says so, with the date of its latest transaction. With none kept, it exits with code 2 and says to give one.
 - **I4.** The terminal prompt accepts a number, a symbol, or nothing.
 
 ## J. Privacy, safety, packaging
 
 - **J1.** Only ticker symbols and dates are sent to Yahoo. Amounts, quantities and the statement are never sent.
-- **J2.** Only listings, names, prices per share and settings are kept. None of the statement's amounts are kept.
+- **J2.** Only listings, names, prices per share, settings and a copy of the last statement read (F14) are kept, all in the app's own folder. No amount from the statement is kept anywhere else.
 - **J3.** A damaged settings file is explained, not silently reset. Tests never touch the real settings or the network.
 - **J4.** The packaged app's smoke test reads the sample offline and writes a spreadsheet.
 - **J5.** On Windows, the installer can tell that the app is open.

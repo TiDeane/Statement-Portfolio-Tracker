@@ -895,3 +895,96 @@ def test_the_days_of_backups_kept_are_saved_and_kept_in_range(tmp_path: Path) ->
         settings.backups_kept = saved
         settings.save()
         assert Settings.load(path).backups_kept == loaded
+
+
+# -- the statement kept from last time ------------------------------------------------------------------
+
+OTHER_HOLDING = (
+    "2025-01-06T09:00:00.000Z,,CASH TOP-UP,,,EUR 2000,EUR,1",
+    "2025-02-03T10:00:00.000Z,ABCD,BUY - MARKET,5,EUR 100.00,EUR 501,EUR,1",
+)
+
+
+def two_holdings_provider() -> FakeProvider:
+    provider = FakeProvider()
+    provider.add("ABCD.DE", "EUR", price="120")
+    provider.add("WXYZ.DE", "EUR", price="100")
+    return provider
+
+
+def statement_in(folder: Path, *lines: str) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    return write_statement(folder, *lines)
+
+
+def test_cli_without_a_statement_uses_the_one_read_last_time(tmp_path: Path) -> None:
+    # Spec I3, F14.
+    settings = tmp_path / "app" / "settings.json"
+    statement = statement_in(tmp_path / "downloads", *TWO_HOLDINGS)
+    symbols = ("--symbol", "ABCD=ABCD.DE", "--symbol", "WXYZ=WXYZ.DE")
+    _, first, _ = run_cli(str(statement), *symbols, provider=two_holdings_provider(), settings=settings)
+    statement.unlink()  # the download is cleared away; the app has its own copy
+
+    code, output, errors = run_cli(provider=two_holdings_provider(), settings=settings)
+
+    assert code == 0
+    assert output == first
+    assert "last time" in errors and "2025-01-20" in errors  # the latest transaction
+    assert "not included" in errors
+
+
+def test_cli_without_a_statement_or_one_kept_asks_for_one(tmp_path: Path) -> None:
+    # Spec I3.
+    code, output, errors = run_cli(provider=two_holdings_provider(), settings=tmp_path / "settings.json")
+
+    assert code == 2
+    assert output == ""
+    assert "No statement" in errors and "Traceback" not in errors
+
+
+def test_a_new_statement_replaces_the_one_kept(tmp_path: Path) -> None:
+    # Spec F14.
+    settings = tmp_path / "app" / "settings.json"
+    symbols = ("--symbol", "ABCD=ABCD.DE", "--symbol", "WXYZ=WXYZ.DE")
+    run_cli(str(statement_in(tmp_path / "a", *TWO_HOLDINGS)), *symbols, provider=two_holdings_provider(), settings=settings)
+    run_cli(str(statement_in(tmp_path / "b", *OTHER_HOLDING)), provider=two_holdings_provider(), settings=settings)
+
+    code, output, errors = run_cli(provider=two_holdings_provider(), settings=settings)
+
+    assert code == 0
+    assert [line.split(",")[0] for line in output.splitlines()[1:]] == ["ABCD", "Total"]
+    assert "2025-02-03" in errors
+
+
+def test_a_statement_that_cannot_be_read_keeps_the_one_from_before(tmp_path: Path) -> None:
+    # Spec F14.
+    settings = tmp_path / "app" / "settings.json"
+    symbols = ("--symbol", "ABCD=ABCD.DE", "--symbol", "WXYZ=WXYZ.DE")
+    _, first, _ = run_cli(
+        str(statement_in(tmp_path / "a", *TWO_HOLDINGS)), *symbols, provider=two_holdings_provider(), settings=settings
+    )
+    broken = tmp_path / "b" / "broken.csv"
+    broken.parent.mkdir()
+    broken.write_text("Date,Something else\n2025-01-06,x\n", encoding="utf-8")
+    assert run_cli(str(broken), provider=two_holdings_provider(), settings=settings)[0] == 2
+
+    code, output, _ = run_cli(provider=two_holdings_provider(), settings=settings)
+
+    assert code == 0
+    assert output == first
+
+
+def test_a_report_from_the_kept_statement_says_so_after_a_value_is_entered(tmp_path: Path) -> None:
+    # Spec F14: a value entered afterwards does not lose where the holdings came from.
+    settings = Settings.load(tmp_path / "settings.json")
+    provider = FakeProvider()
+    provider.add("ABCD.DE", "EUR", price="120")
+    statement = write_statement(tmp_path, *OTHER_HOLDING)
+    fresh = build_report(statement, provider, settings, symbol_overrides={"ABCD": "ABCD.DE"})
+    kept = tmp_path / "last_statement.csv"
+
+    again = build_report(kept, provider, settings)
+
+    assert not fresh.from_kept_statement
+    assert again.from_kept_statement
+    assert with_entered_prices(again, {}, settings).from_kept_statement

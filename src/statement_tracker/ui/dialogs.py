@@ -30,11 +30,14 @@ from statement_tracker.core.ticker_resolver import Confidence, Resolution
 
 RELEASES_URL = "https://github.com/TiDeane/Statement-Portfolio-Tracker/releases"
 
+
 PRIVACY_TEXT = (
     "Everything happens on this computer. There are no accounts and nothing is recorded about how you "
     "use the app.\n\n"
     "The only information sent anywhere is the ticker symbols of your investments and dates, which go to "
     "Yahoo Finance to look up prices. Your amounts and your statement never leave this computer.\n\n"
+    "The app keeps a copy of the last statement you used in its own folder, so that next time it can "
+    "look up today's values without a new statement. It stays on this computer.\n\n"
     "This app is unofficial and is not affiliated with Revolut. It is not financial advice. Prices are "
     "read from Yahoo Finance's public web pages, which is unofficial; they may be delayed or wrong, and "
     "are subject to Yahoo's terms."

@@ -40,6 +40,8 @@ TYPE_A_VALUE = (
 LAST_KNOWN_COMMENT = "Last known price"
 PARTIAL_COMMENT = "Leaves out"
 """How the comment on a history row that leaves out investments without a value begins."""
+KEPT_STATEMENT_COMMENT = "Worked out from the statement kept from last time"
+"""How the part of a history row's comment begins that says its holdings come from an older statement."""
 _PARTIAL_FILL_COLOUR = "FCE4D6"
 _PARTIAL_TEXT_COLOUR = "833C0B"
 """Light and dark orange from Excel's own theme colours, for history rows that leave something out."""
@@ -205,6 +207,29 @@ def _partial_comment(tickers: list[str], holdings_sheet: str, live: bool) -> str
     return text
 
 
+def _kept_statement_comment(day: date) -> str:
+    """The part of a history row's comment that says it was worked out from the statement kept from last time."""
+    return (
+        f"{KEPT_STATEMENT_COMMENT}, whose latest transaction is on {day.isoformat()}. Anything bought, sold "
+        "or paid in after that is not included."
+    )
+
+
+def _kept_statement_part(comment: Any) -> str | None:
+    """The kept-statement part of an existing comment, if it has one."""
+    text = (comment.text or "") if comment is not None else ""
+    start = text.find(KEPT_STATEMENT_COMMENT)  # Excel may put the author's name before the text
+    return text[start:] if start >= 0 else None
+
+
+def _history_comment(partial: str | None, kept: str | None, height: int) -> Any:
+    """The comment on a history row's date: what it leaves out, then where its holdings come from."""
+    parts = [part for part in (partial, kept) if part]
+    if not parts:
+        return None
+    return _comment("\n\n".join(parts), height=height + (60 if partial and kept else 0))
+
+
 def _percent(value: Decimal | None) -> Decimal | str:
     """A percentage as Excel stores it (21.08% is 0.2108), shown with a % sign by the cell format."""
     return UNAVAILABLE if value is None else value / _HUNDRED
@@ -358,8 +383,14 @@ class ExcelExporter:
         self.holdings_sheet = holdings_sheet
         self.history_sheet = history_sheet
 
-    def export(self, valuation: PortfolioValuation, today: date) -> ExportResult:
-        """Update the workbook, creating it (or our sheets) if missing."""
+    def export(
+        self, valuation: PortfolioValuation, today: date, kept_statement_day: date | None = None
+    ) -> ExportResult:
+        """Update the workbook, creating it (or our sheets) if missing.
+
+        ``kept_statement_day``, when given, is the latest transaction of the statement kept from
+        last time that ``valuation`` comes from: today's history row says so in its comment.
+        """
         if self.path.suffix.lower() != ".xlsx":
             raise UserFacingError(
                 f'"{self.path.name}" is not an .xlsx spreadsheet.',
@@ -379,7 +410,9 @@ class ExcelExporter:
         # typed in today counts, a last known one or one typed in on an earlier day does not.
         current = valuation.prices_are_from(today)
         history_action, history_shown = (
-            self._write_history(history, valuation, today, written) if current else ("skipped", {})
+            self._write_history(history, valuation, today, written, kept_statement_day)
+            if current
+            else ("skipped", {})
         )
         _style(holdings, _HOLDINGS_FORMATS, bold_last_row=written > 0, shown=shown)
         _mark_missing_values(holdings, written + 1)
@@ -636,7 +669,12 @@ class ExcelExporter:
     # Worth is the market value plus the cash the statement leaves, e.g. "C5+504.76".
 
     def _write_history(
-        self, sheet: Any, valuation: PortfolioValuation, today: date, holdings_rows: int
+        self,
+        sheet: Any,
+        valuation: PortfolioValuation,
+        today: date,
+        holdings_rows: int,
+        kept_statement_day: date | None = None,
     ) -> tuple[str, dict[tuple[int, int], Any]]:
         """Add today's row, or update it if today already has one. Other rows keep their figures.
 
@@ -671,10 +709,10 @@ class ExcelExporter:
             if value is not None:
                 sheet.cell(row=row, column=column, value=value)
         left_out = [holding.position.ticker for holding in valuation.left_out]
-        sheet.cell(row=row, column=1).comment = (
-            _comment(_partial_comment(left_out, self.holdings_sheet, live=bool(holdings_rows)), height=130)
-            if left_out
-            else None
+        sheet.cell(row=row, column=1).comment = _history_comment(
+            _partial_comment(left_out, self.holdings_sheet, live=bool(holdings_rows)) if left_out else None,
+            _kept_statement_comment(kept_statement_day) if kept_statement_day else None,
+            height=130 if left_out else 70,
         )
         return action, {
             (row, 2): valuation.invested_in_totals,
@@ -692,8 +730,11 @@ class ExcelExporter:
         for row in linked:
             history.cell(row=row, column=2).value = cost_basis
             history.cell(row=row, column=3).value = _cell(market_value)
-            history.cell(row=row, column=1).comment = (
-                _comment(_partial_comment(missing, self.holdings_sheet, live=False), height=110) if missing else None
+            date_cell = history.cell(row=row, column=1)
+            date_cell.comment = _history_comment(
+                _partial_comment(missing, self.holdings_sheet, live=False) if missing else None,
+                _kept_statement_part(date_cell.comment),
+                height=110 if missing else 70,
             )
 
     def _mark_partial_history(self, sheet: Any, holdings_rows: int) -> None:

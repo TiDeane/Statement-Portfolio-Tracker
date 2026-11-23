@@ -20,6 +20,7 @@ from statement_tracker.core.market_data.provider import PriceProvider, PriceUnav
 from statement_tracker.core.models import HoldingValuation, MarketPrice, Portfolio, PortfolioValuation, Statement
 from statement_tracker.core.parser import load_statement
 from statement_tracker.core.ticker_resolver import Confidence, Resolution, resolve_ticker
+from statement_tracker.kept_statement import is_kept_statement, keep_statement, latest_transaction_day
 from statement_tracker.price_cache import PriceCache
 from statement_tracker.settings import Settings, TickerChoice
 
@@ -45,6 +46,8 @@ class Report:
     notes: tuple[str, ...]
     lookups: Lookups | None = field(default=None, repr=False, compare=False)
     """What was fetched, so that ``with_entered_prices`` can work the report out again."""
+    from_kept_statement: bool = False
+    """Worked out from the statement kept from last time: what happened after its latest transaction is missing."""
 
 
 def progress_steps(to_match: int, holdings: int) -> int:
@@ -92,7 +95,8 @@ def update_spreadsheet(report: Report, settings: Settings, path: Path, today: da
         if name:
             names[holding.position.ticker] = name
     exporter = ExcelExporter(path, settings.holdings_sheet, settings.history_sheet, names, settings.backups_kept)
-    result = exporter.export(report.valuation, today)
+    kept_day = latest_transaction_day(report.statement) if report.from_kept_statement else None
+    result = exporter.export(report.valuation, today, kept_statement_day=kept_day)
     # What was written, to tell values typed there later from the app's own (see values_typed_in).
     cache = PriceCache.beside(settings.path)
     cache.wrote(path, {holding.position.ticker: holding.market_value for holding in report.valuation.holdings})
@@ -152,6 +156,9 @@ def build_report(
 
     ``progress`` is called as work advances with (steps done, steps in total,
     what is happening now). The total is 0 until the statement has been read.
+
+    Once the run is over, a copy of the statement is kept next to the settings file (see
+    ``kept_statement``), for runs that give that copy instead of a new statement.
     """
     report_progress = progress or (lambda done, total, text: None)
     report_progress(0, 0, "Reading your statement...")
@@ -297,7 +304,10 @@ def build_report(
     if settings_changed or remembered:
         settings.save()
     cache.save()
-    return report
+    from_kept = is_kept_statement(statement_path, settings.path)
+    if not from_kept:
+        keep_statement(statement_path, settings.path)
+    return replace(report, from_kept_statement=from_kept)
 
 
 def needs_price(holding: HoldingValuation) -> bool:
@@ -333,7 +343,7 @@ def with_entered_prices(
     if remembered:
         settings.save()
     cache.save()
-    return new_report
+    return replace(new_report, from_kept_statement=report.from_kept_statement)
 
 
 @dataclass(frozen=True)

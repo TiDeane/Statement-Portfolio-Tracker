@@ -23,6 +23,7 @@ from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.market_data.provider import PriceProvider
 from statement_tracker.core.models import MarketPrice
 from statement_tracker.core.ticker_resolver import Confidence, Resolution
+from statement_tracker.kept_statement import find_kept_statement
 from statement_tracker.settings import Settings
 from statement_tracker.workflow import Chooser, Report, build_report, update_spreadsheet, values_typed_in
 
@@ -213,7 +214,12 @@ def main(
         "approximate current value, the share of the total of each, and the gain or loss. "
         "Percentages are printed without a % sign.",
     )
-    parser.add_argument("statement", type=Path, help="the statement CSV file exported from Revolut")
+    parser.add_argument(
+        "statement",
+        type=Path,
+        nargs="?",
+        help="the statement CSV file exported from Revolut; without it, the one read last time is used again",
+    )
     parser.add_argument("--table", action="store_true", help="print an aligned table instead of comma-separated rows")
     parser.add_argument(
         "--details",
@@ -280,10 +286,11 @@ def main(
             provider = YahooProvider()
         interactive = not args.no_prompt and sys.stdin is not None and sys.stdin.isatty()
         # Current values typed into the workbook this run updates, where it had no price.
+        statement = args.statement or _kept_statement(settings, errors)
         workbook = None if args.no_spreadsheet else (args.spreadsheet or settings.spreadsheet_path)
         typed, typed_at = values_typed_in(settings, workbook.expanduser().resolve() if workbook else None)
         report = build_report(
-            args.statement,
+            statement,
             provider,
             settings,
             chooser=_prompting_chooser(errors) if interactive else None,
@@ -318,6 +325,23 @@ def main(
         print(f"{error.what_happened}\n{error.what_to_do}", file=errors)
         return 2
     return 0
+
+
+def _kept_statement(settings: Settings, errors: TextIO) -> Path:
+    """The statement kept from last time, used when none is given; says so, and from when it is."""
+    kept = find_kept_statement(settings.path)
+    if kept is None:
+        raise UserFacingError(
+            "No statement was given, and none is kept from an earlier run.",
+            "Give the statement CSV file exported from Revolut.",
+        )
+    print(
+        f"Note: no statement was given, so the one read last time was used again. Its latest transaction is "
+        f"on {kept.latest.isoformat()}: anything bought, sold or paid in since then is not included. Give a "
+        "new statement to bring it in.",
+        file=errors,
+    )
+    return kept.path
 
 
 def _update_spreadsheet(

@@ -1,9 +1,10 @@
-"""The settings window: the investments the app remembers, how it matches them, and spreadsheet backups.
+"""The settings window: the investments the app remembers, how it matches them, the statement kept from
+last time, and spreadsheet backups.
 
 Every change is saved at once. Changes to the investments in the table can be
 undone with Ctrl+Z (Cmd+Z on a Mac) and redone with Ctrl+Y, in one history with
 the result table's (``ui/undo.py``); forgetting and choosing a listing again
-only until the next run. The tick box and the backups are not part of it.
+only until the next run. The tick box, the statement and the backups are not part of it.
 The only thing changed inside the table is the name, typed into its
 cell; everything else is read-only and changed with buttons.
 Nothing here contacts Yahoo: choosing a listing again happens on the next run,
@@ -14,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEvent, QModelIndex, QPersistentModelIndex, Qt, QTimer
+from PySide6.QtCore import QDate, QEvent, QLocale, QModelIndex, QPersistentModelIndex, Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -39,6 +40,7 @@ from PySide6.QtWidgets import (
 
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.exporters.excel import MAX_BACKUPS_KEPT
+from statement_tracker.kept_statement import find_kept_statement, forget_kept_statement
 from statement_tracker.price_cache import PriceCache
 from statement_tracker.settings import Settings
 from statement_tracker.ui import dialogs, theme
@@ -52,6 +54,14 @@ ASK_AGAIN_STATUS = "Asks you next time"
 ENTERED_PRICE_STATUS = "value entered by you"
 ALWAYS_FIRST_SETTING = "When the app cannot tell which listing an investment is, use the first one without asking"
 NOTHING_REMEMBERED = "No investments are remembered yet. They appear here after your first run."
+STATEMENT_KEPT = (
+    "The app keeps a copy of the last statement you used, so that it can look up today's values without a "
+    "new one. Its latest transaction is on {}."
+)
+NO_STATEMENT_KEPT = (
+    "No statement is kept. After each run, the app keeps a copy of the statement used, so that next time it "
+    "can look up today's values without a new one."
+)
 BACKUPS_HELP = (
     "The first time each day that the app changes your spreadsheet, it first saves a copy of it as it was, "
     'in the same folder, named with the date (for example "My investments_backup_2026-10-15.xlsx"). '
@@ -205,6 +215,19 @@ class SettingsDialog(QDialog):
         backups_row.addStretch(1)
         backups_help = QLabel(BACKUPS_HELP)
         backups_help.setWordWrap(True)
+        self.statement_label = QLabel()
+        self.statement_label.setWordWrap(True)
+        self.forget_statement_button = QPushButton("Forget the &statement...")
+        self.forget_statement_button.setToolTip(
+            "Delete the app's copy of your last statement. Step 1 then asks for a statement again."
+        )
+        self.forget_statement_button.clicked.connect(self.forget_statement)
+        statement_row = QHBoxLayout()
+        statement_row.addWidget(self.statement_label, stretch=1)
+        statement_row.addWidget(self.forget_statement_button, alignment=Qt.AlignmentFlag.AlignTop)
+        statement_box = QGroupBox("Your statement from last time")
+        statement_box.setLayout(statement_row)
+
         backups_box = QGroupBox("Spreadsheet backups")
         backups_layout = QVBoxLayout(backups_box)
         backups_layout.addLayout(backups_row)
@@ -215,6 +238,7 @@ class SettingsDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addWidget(investments_box, stretch=1)
+        layout.addWidget(statement_box)
         layout.addWidget(backups_box)
         layout.addWidget(close)
         # While a name is being typed, its editor takes these keys first, for the text typed so far.
@@ -272,6 +296,14 @@ class SettingsDialog(QDialog):
         if select in tickers:
             self.table.selectRow(tickers.index(select))
         self._update_buttons()
+
+        kept = find_kept_statement(self._settings.path)
+        if kept is None:
+            self.statement_label.setText(NO_STATEMENT_KEPT)
+        else:
+            day = QDate(kept.latest.year, kept.latest.month, kept.latest.day)
+            self.statement_label.setText(STATEMENT_KEPT.format(QLocale().toString(day, QLocale.FormatType.LongFormat)))
+        self.forget_statement_button.setEnabled(kept is not None)
 
         self.always_first.blockSignals(True)  # showing the setting is not changing it
         self.always_first.setChecked(self._settings.always_use_first_listing)
@@ -422,7 +454,8 @@ class SettingsDialog(QDialog):
             f"Forget {'your one investment' if count == 1 else f'all {count} investments'}?\n\n"
             "Their listings, the names you gave them and the values you entered are removed. The next time you "
             "run the app, it looks for their listings again, asking you when it cannot tell.\n\n"
-            "Your spreadsheet choice and the last prices found on Yahoo Finance are kept."
+            "Your spreadsheet choice, your statement from last time and the last prices found on Yahoo Finance "
+            "are kept."
         ):
             return
         self._history.record("forgetting all investments", self._tickers(), EVERYTHING, clears_on_run=True)
@@ -431,6 +464,30 @@ class SettingsDialog(QDialog):
         if self._save():
             self.message_label.setText("All investments were forgotten.")
         self._refresh()
+
+    def forget_statement(self) -> None:
+        """Delete the statement kept from last time, after asking. It cannot be undone: the copy is gone."""
+        if find_kept_statement(self._settings.path) is None or not self.confirm(
+            "Forget your statement from last time?\n\n"
+            "The app's copy of it is deleted, and step 1 asks for a statement again. The next statement you use "
+            "is kept in its place. Your investments, your spreadsheet and the statement file you downloaded are "
+            "not changed.\n\nThis cannot be undone."
+        ):
+            return
+        try:
+            forget_kept_statement(self._settings.path)
+        except OSError as exc:
+            dialogs.show_error(
+                self,
+                UserFacingError(
+                    "The statement from last time could not be forgotten.",
+                    "Close any program that may be using it, then try again.",
+                    details=repr(exc),
+                ),
+            )
+        else:
+            self.message_label.setText("Your statement from last time was forgotten.")
+        self._refresh(select=self.selected_ticker())
 
     # -- questions -----------------------------------------------------------------
 

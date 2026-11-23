@@ -74,6 +74,7 @@ from statement_tracker.core.exporters.base import ExportResult
 from statement_tracker.core.market_data.provider import PriceProvider
 from statement_tracker.core.models import MarketPrice
 from statement_tracker.core.ticker_resolver import Resolution
+from statement_tracker.kept_statement import find_kept_statement, latest_transaction_day
 from statement_tracker.settings import Settings
 from statement_tracker.ui import dialogs, theme
 from statement_tracker.ui.settings_dialog import SettingsDialog
@@ -94,6 +95,9 @@ NOT_IN_TOTAL = "not in total"
 NO_STATEMENT = "No file chosen yet."
 DROP_HINT = "Drag your statement file here"
 DROP_AGAIN_HINT = "Drag another statement here to use it instead"
+KEPT_OPTION = "Use my statement from &last time"
+NEW_OPTION = "Use a new state&ment"
+DONE = "Done. Your investments are shown below."
 
 TABLE_HEADERS = ["Investment", "Invested", "% of invested", "Worth now", "% of worth now", "Gain or loss"]
 NAME_COLUMN = 0
@@ -270,7 +274,12 @@ class MainWindow(QMainWindow):
         self._now = now
         self._report: Report | None = None
         """The result shown, kept so that a price typed in can be added to it without fetching again."""
-        self._statement: Path | None = None
+        self._kept = find_kept_statement(settings.path)
+        """The statement kept from the last run: step 1 offers it, so prices can be looked up again at once."""
+        self._use_kept = self._kept is not None
+        """Step 1's choice: the statement from last time (chosen when there is one), or a new one."""
+        self._new_statement: Path | None = None
+        """The statement the user chose or dropped, kept in mind while the one from last time is chosen."""
         self._spreadsheet: Path | None = settings.spreadsheet_path
         self._spreadsheet_from_last_time = settings.spreadsheet_path is not None
         self._wants_spreadsheet = False
@@ -311,6 +320,19 @@ class MainWindow(QMainWindow):
 
         # Step 1: a drop area, the file chooser's button inside it, and the file chosen. Files can be dropped
         # anywhere on the window; the area shows that, and turns green while a file is dragged over.
+        # With a statement kept from last time, step 1 is a choice like step 2's: that statement, or a
+        # new one, whose drop area is only shown while it is chosen.
+        self.kept_option = QRadioButton(KEPT_OPTION)
+        self.kept_option.clicked.connect(lambda: self._choose_kept(True))
+        self.kept_label = QLabel()
+        self.kept_label.setObjectName("notes")
+        self.kept_label.setWordWrap(True)
+        self.kept_label.setContentsMargins(26, 0, 0, 0)  # under its option, as step 2's file is
+        self.new_option = QRadioButton(NEW_OPTION)
+        self.new_option.clicked.connect(lambda: self._choose_kept(False))
+        statement_options = QButtonGroup(self)
+        statement_options.addButton(self.kept_option)
+        statement_options.addButton(self.new_option)
         self.drop_area = QFrame()
         self.drop_area.setObjectName("dropArea")
         self.drop_hint = QLabel(DROP_HINT)
@@ -345,9 +367,16 @@ class MainWindow(QMainWindow):
         statement_box = QGroupBox("Step 1: your Revolut statement")
         self.statement_badge = QLabel()
         self.statement_badge.setObjectName("badge")
+        self.new_statement_details = QWidget()
+        new_statement_details = QVBoxLayout(self.new_statement_details)
+        new_statement_details.setContentsMargins(0, 0, 0, 0)
+        new_statement_details.addWidget(self.drop_area)
         statement_layout = QVBoxLayout(statement_box)
         statement_layout.addWidget(self.statement_badge)
-        statement_layout.addWidget(self.drop_area)
+        statement_layout.addWidget(self.kept_option)
+        statement_layout.addWidget(self.kept_label)
+        statement_layout.addWidget(self.new_option)
+        statement_layout.addWidget(self.new_statement_details)
         statement_layout.addLayout(help_row)
 
         # Step 2
@@ -580,9 +609,22 @@ class MainWindow(QMainWindow):
 
     # -- choosing files ----------------------------------------------------------
 
+    @property
+    def _statement(self) -> Path | None:
+        """The statement step 3 reads: step 1's choice."""
+        if self._use_kept and self._kept is not None:
+            return self._kept.path
+        return self._new_statement
+
+    def _choose_kept(self, use_kept: bool) -> None:
+        """Step 1's choice: the statement from last time, or a new one (the one chosen before, if any)."""
+        self._use_kept = use_kept
+        self._refresh()
+
     def set_statement(self, path: Path) -> None:
         """Use ``path`` as the statement and remember its folder for next time."""
-        self._statement = path
+        self._new_statement = path
+        self._use_kept = False
         if self._settings.last_folder != path.parent:
             self._settings.last_folder = path.parent
             self._save_settings()
@@ -702,10 +744,26 @@ class MainWindow(QMainWindow):
             self._refresh()
 
     def _refresh(self) -> None:
-        self.statement_label.setText(_file_text(self._statement) if self._statement else NO_STATEMENT)
-        self.statement_label.setToolTip(str(self._statement) if self._statement else "")
-        self.drop_hint.setText(DROP_AGAIN_HINT if self._statement else DROP_HINT)
-        self._badge(self.statement_badge, *(STEP_DONE if self._statement else STEP_TO_DO))
+        kept, use_kept = self._kept, self._use_kept and self._kept is not None
+        for widget in (self.kept_option, self.kept_label, self.new_option):
+            widget.setVisible(kept is not None)
+        self.kept_option.setChecked(use_kept)
+        self.new_option.setChecked(not use_kept)
+        if kept is not None:
+            self.kept_label.setText(
+                f"Its latest transaction is on {self._long_date(kept.latest)}. Anything bought, sold or added "
+                "since then is not included."
+            )
+        # The drop area belongs to "Use a new statement": indented under it, and only shown while it is chosen.
+        self.new_statement_details.layout().setContentsMargins(26 if kept else 0, 0, 0, 0)
+        if self.new_statement_details.isHidden() != use_kept:
+            self.new_statement_details.setVisible(not use_kept)
+            self._fit_height_to_steps()
+        new = self._new_statement
+        self.statement_label.setText(_file_text(new) if new else NO_STATEMENT)
+        self.statement_label.setToolTip(str(new) if new else "")
+        self.drop_hint.setText(DROP_AGAIN_HINT if new else DROP_HINT)
+        self._badge(self.statement_badge, *(STEP_REMEMBERED if use_kept else STEP_DONE if new else STEP_TO_DO))
 
         using = self._spreadsheet is not None or self._wants_spreadsheet
         waiting_for_file = using and self._spreadsheet is None
@@ -764,7 +822,10 @@ class MainWindow(QMainWindow):
             changed = dialog.changed
         finally:
             dialog.deleteLater()  # a new one is made each time; this one must not linger as a child of the window
-        self._refresh()  # step 2 says whether backups are made
+        if self._kept is not None and find_kept_statement(self._settings.path) is None:
+            # The statement from last time was forgotten there: step 1 goes back to asking for one.
+            self._kept, self._use_kept = None, False
+        self._refresh()  # step 1 may have changed, and step 2 says whether backups are made
         if changed and self._report is not None and not self._busy():
             report = with_entered_prices(self._report, {}, self._settings, now=self._now(), remember_listings=False)
             self._show_changed(report)
@@ -871,6 +932,10 @@ class MainWindow(QMainWindow):
 
     def _finished(self, outcome: object) -> None:
         report, exported, export_error = outcome  # type: ignore[misc]
+        if self._kept is not None:
+            # The run kept its statement: "last time" is now that one. Without the choice shown, step 1 stays
+            # as it is until the app is opened again, rather than changing under the user.
+            self._kept = find_kept_statement(self._settings.path)
         self._done()
         self._history.run_finished()
         self._show_outcome(report, exported, export_error)
@@ -979,7 +1044,7 @@ class MainWindow(QMainWindow):
 
         # The window shows no notes: the marks in the table explain themselves in their tooltips.
         if exported is not None:
-            self._status("Done. Your investments are shown below.", "ok")
+            self._status(self._done_text(report), "ok")
             done = "created" if exported.created else "updated"
             at = self._locale.toString(self._now().astimezone().time(), QLocale.FormatType.ShortFormat)
             self._show_spreadsheet_banner(
@@ -997,7 +1062,7 @@ class MainWindow(QMainWindow):
                 spreadsheet,  # its folder helps here too: to find the file still open, for one
             )
         else:
-            self._status("Done. Your investments are shown below.", "ok")
+            self._status(self._done_text(report), "ok")
             self.spreadsheet_banner.setVisible(False)
         if not report.valuation.holdings:
             self._status("Done. The statement has no investments that you still hold.", "ok")
@@ -1040,6 +1105,13 @@ class MainWindow(QMainWindow):
         if percent is not None:
             text += f" ({sign}{self._percent(abs(percent))})"
         return text
+
+    def _done_text(self, report: Report) -> str:
+        """The status line once a result is shown; it says when the result comes from the statement from last time."""
+        if not report.from_kept_statement:
+            return DONE
+        latest = self._long_date(latest_transaction_day(report.statement))
+        return f"{DONE[:-1]}, from your statement from last time (latest transaction on {latest})."
 
     def _long_date(self, day: date) -> str:
         return self._locale.toString(QDate(day.year, day.month, day.day), QLocale.FormatType.LongFormat)

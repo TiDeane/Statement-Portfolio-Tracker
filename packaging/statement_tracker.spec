@@ -51,7 +51,15 @@ UNUSED_QT_FRAGMENTS = (
     "platformthemes/libqgtk3",
     "Qt6QuickShapesDesignHelpers",
     "Qt6WaylandCompositor",
-    "Qt6Labs",
+    # Qt Labs libraries, but for the folder list Qt's own file dialog shows (Linux, without a native one).
+    "Qt6LabsStyleKit",
+    "Qt6LabsPlatform",
+    "Qt6LabsQmlModels",
+    "Qt6LabsSynchronizer",
+    "Qt6LabsAnimation",
+    "Qt6LabsWavefrontMesh",
+    "Qt6LabsSharedImage",
+    "Qt6LabsSettings",
     "Qt6Test",
     "Qt6Sql",
     "Qt6QmlLocalStorage",
@@ -93,6 +101,7 @@ QML_MODULES = (
     "qml/QtQuick/Shapes/",
     "qml/QtQuick/Dialogs/",
     "qml/QtQuick/Window/",
+    "qml/Qt/labs/folderlistmodel/",  # Qt's own file dialog lists folders with it
 )
 QML_ROOT_FILES = ("qml/QtQml/", "qml/QtQuick/", "qml/QtQuick/Controls/")
 """Folders whose own files (plugin, qmldir, type info) are needed, but not all their subfolders."""

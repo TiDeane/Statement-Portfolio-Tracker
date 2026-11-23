@@ -27,7 +27,7 @@ QtWidgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
 QtQuick = pytest.importorskip("PySide6.QtQuick", exc_type=ImportError)
 
 from fakes import SAMPLE, FakeProvider, ranges_around  # noqa: E402
-from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, Qt, QUrl  # noqa: E402
+from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, Qt, QUrl, qInstallMessageHandler  # noqa: E402
 from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent, QGuiApplication, QKeyEvent  # noqa: E402
 from PySide6.QtQuick import QQuickItem, QQuickWindow  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
@@ -50,16 +50,27 @@ def app():
 
 @pytest.fixture(autouse=True)
 def close_windows_afterwards(app):
-    """Close and destroy each test's windows when it ends, so none is destroyed in the middle of a later test."""
+    """Close and destroy each test's windows when it ends, so none is destroyed in the middle of a later test.
+
+    Any warning from the QML engine meanwhile, up to and including the windows' destruction, fails the
+    test: QML reports its errors (a misspelt name, a binding reading something gone) only that way."""
     opened: list[AppWindow] = []
     _OPENED.append(opened)
-    yield
-    _OPENED.remove(opened)
-    for shell in opened:
-        shell.close()
-        shell.deleteLater()
-    QGuiApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
-    gc.collect()
+    qml_warnings: list[str] = []
+    previous = qInstallMessageHandler(
+        lambda kind, context, message: qml_warnings.append(message) if ".qml:" in message else None
+    )
+    try:
+        yield
+        _OPENED.remove(opened)
+        for shell in opened:
+            shell.close()
+            shell.deleteLater()
+        QGuiApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+        gc.collect()
+    finally:
+        qInstallMessageHandler(previous)
+    assert qml_warnings == [], "the QML engine warned:\n" + "\n".join(qml_warnings)
 
 
 _OPENED: list[list[AppWindow]] = []

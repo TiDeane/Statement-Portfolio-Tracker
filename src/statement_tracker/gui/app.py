@@ -66,9 +66,11 @@ class AppWindow(QObject):
         self._now = now
         self.qml_warnings: list[str] = []
         """What the QML engine reported, kept for tests and for the smoke test's report."""
-        self.theme = Theme(self)
-        self.theme.follow(app)
         self.engine = QQmlApplicationEngine()
+        # What QML reads belongs to the engine: the engine destroys the window first, then its children,
+        # so no binding is left reading an object already gone.
+        self.theme = Theme(self.engine)
+        self.theme.follow(app)
         self.engine.rootContext().setContextProperty("Theme", self.theme)
         self.engine.warnings.connect(lambda errors: self.qml_warnings.extend(error.toString() for error in errors))
         self.engine.load(QUrl.fromLocalFile(str(QML_DIR / "Main.qml")))

@@ -96,6 +96,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
 
 - **F1.** Opening: with a statement kept from last time, the app opens on Home and fetches today's prices. With none, or one that can no longer be read, it opens on first launch, without an error message.
   - Once a fetch has read a statement to the end, a copy of it is kept in the app's own folder, replacing the one kept before, with where the file was read from. One that cannot be read, or a fetch that is stopped, keeps the one from before.
+  - A file another program holds for a moment (an antivirus checking a file just written, on Windows) does not stop the app from saving its own files, the settings, the copy and its record, or the spreadsheet: it tries again for up to a second.
 - **F2.** First launch, step 1: the statement.
   - A drop area ("Drop your Revolut statement here", with **Choose statement file…**) beside "Where do I get it?": the Revolut steps and "Always pick All time".
   - Dropping a statement anywhere on the window or choosing one reads it at once, without freezing the window: the drop area says "Reading your statement…" with a moving bar meanwhile. One that reads shows its file name, "<n> transactions, the latest on <date>" and "<n> investments you still hold", with **Choose another file…**. One that does not read is explained (F11) and the step stays as it was.

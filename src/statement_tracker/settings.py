@@ -6,11 +6,11 @@ Users never edit this file by hand; the user interfaces read and write it.
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from statement_tracker.core.errors import UserFacingError
+from statement_tracker.core.files import replace as replace_file
 from statement_tracker.core.exporters.excel import (
     BACKUPS_KEPT,
     DEFAULT_HISTORY_SHEET,
@@ -154,7 +154,7 @@ class Settings:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(".tmp")
         temporary.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        os.replace(temporary, self.path)
+        replace_file(temporary, self.path)
 
     def index_name(self, ticker: str) -> str | None:
         """Return the name to show for a ticker: the user's own, else the fund name from the price provider."""

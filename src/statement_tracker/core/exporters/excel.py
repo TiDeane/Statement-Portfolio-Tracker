@@ -12,7 +12,6 @@ copy of an existing workbook is made next to it; the newest few are kept.
 
 from __future__ import annotations
 
-import os
 import re
 import shutil
 from collections.abc import Mapping
@@ -23,6 +22,7 @@ from typing import Any
 from zipfile import BadZipFile
 
 from statement_tracker import APP_NAME
+from statement_tracker.core.files import replace as replace_file
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.exporters.base import ExportResult
 from statement_tracker.core.models import PortfolioValuation
@@ -554,7 +554,7 @@ class ExcelExporter:
         temporary = self.path.with_name(f"~{self.path.stem}.saving{self.path.suffix}")
         try:
             workbook.save(temporary)
-            os.replace(temporary, self.path)
+            replace_file(temporary, self.path)
         except PermissionError as exc:
             raise self._locked(exc) from exc
         except OSError as exc:

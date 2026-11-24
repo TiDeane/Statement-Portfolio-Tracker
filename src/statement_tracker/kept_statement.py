@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import contextlib
 import json
-import os
 import shutil
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
 from statement_tracker.core.errors import UserFacingError
+from statement_tracker.core.files import replace as replace_file
 from statement_tracker.core.models import Statement
 from statement_tracker.core.parser import load_statement
 
@@ -73,7 +73,7 @@ def keep_statement(path: Path, settings_path: Path) -> None:
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(path, temporary)
-        os.replace(temporary, target)
+        replace_file(temporary, target)
     except OSError:
         with contextlib.suppress(OSError):
             temporary.unlink(missing_ok=True)
@@ -82,7 +82,7 @@ def keep_statement(path: Path, settings_path: Path) -> None:
     try:
         written = record.with_suffix(".tmp")
         written.write_text(json.dumps({"read_from": str(path.resolve())}), encoding="utf-8")
-        os.replace(written, record)
+        replace_file(written, record)
     except OSError:
         with contextlib.suppress(OSError):
             record.unlink(missing_ok=True)

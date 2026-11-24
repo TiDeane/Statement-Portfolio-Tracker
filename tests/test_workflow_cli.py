@@ -1063,6 +1063,34 @@ def test_read_statement_summarises_a_statement_without_fetching_anything(tmp_pat
         read_statement(write_statement(tmp_path, "2025-01-06T10:00:00.000Z,ABCD,SOMETHING ELSE,1,EUR 1,EUR 1,EUR,1"))
 
 
+def test_files_briefly_held_by_another_program_are_still_saved(tmp_path: Path, monkeypatch) -> None:
+    # Spec F1, J2: on Windows, an antivirus checking a file just written holds it for a moment, and
+    # putting a new file in its place is refused meanwhile. The statement, its record and the settings
+    # are saved all the same, once it lets go.
+    import os
+
+    from statement_tracker.kept_statement import find_kept_statement
+
+    real_replace = os.replace
+    refused = []
+
+    def held_for_a_moment(source, target):
+        if len([name for name in refused if name == str(target)]) < 2:  # each file: refused twice, then let go
+            refused.append(str(target))
+            raise PermissionError(13, "The process cannot access the file because it is being used")
+        real_replace(source, target)
+
+    monkeypatch.setattr(os, "replace", held_for_a_moment)
+    settings = tmp_path / "app" / "settings.json"
+    statement = statement_in(tmp_path / "downloads", *TWO_HOLDINGS)
+    run_cli(str(statement), "--symbol", "ABCD=ABCD.DE", "--symbol", "WXYZ=WXYZ.DE",
+            provider=two_holdings_provider(), settings=settings)
+
+    assert find_kept_statement(settings).source == statement.resolve()
+    assert Settings.load(settings).ticker_choices["ABCD"].symbol == "ABCD.DE"
+    assert refused  # it was refused, and saved anyway
+
+
 def test_the_kept_statement_remembers_where_it_was_read_from(tmp_path: Path) -> None:
     # Spec F1, J2.
     from statement_tracker.kept_statement import find_kept_statement, forget_kept_statement, kept_statement_path

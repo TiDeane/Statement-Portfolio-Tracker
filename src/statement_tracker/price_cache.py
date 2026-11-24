@@ -9,7 +9,6 @@ from the statement, no amounts. The file sits next to the settings file.
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -17,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from statement_tracker.core.models import MarketPrice
+from statement_tracker.core.files import replace as replace_file
 
 LAST_PRICES_FILE = "last_prices.json"
 
@@ -185,7 +185,7 @@ class PriceCache:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             temporary = self.path.with_suffix(".tmp")
             temporary.write_text(json.dumps(data, indent=2), encoding="utf-8")
-            os.replace(temporary, self.path)
+            replace_file(temporary, self.path)
         except OSError:
             return  # not being able to keep prices for next time must never stop the user
         self._changed = False

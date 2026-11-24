@@ -335,7 +335,7 @@ When only some investments have no price, the app still adds the day's row, and 
 
 ### Backup copies
 
-The first time each day that the app changes an existing spreadsheet, it first saves a copy of it as it was, in the same folder, named with the date, for example `My investments_backup_2026-10-15.xlsx`. Later changes that day (**Try again**, values you enter) keep that copy, so it is always the file as it was before you started that day.
+The first time each day that the app changes an existing spreadsheet, it first saves a copy of it as it was, in the same folder, named with the date, for example `My investments_backup_2026-10-15.xlsx`. Later changes that day (**Try again**, values you enter) keep that copy, so it is always the file as it was before you started that day. On the day the app creates a spreadsheet, no copy is made: there was nothing before it to keep.
 
 One copy is kept: each day's copy replaces the one before, so there is never more than one however long you use the app. To keep more, open **Settings** and set **Backup copies to keep** (0 to 99); with 3, for example, the oldest is deleted when a new day's copy makes four. When set to **0**, no copies are made, and Home says so in red; copies made earlier are left where they are.
 

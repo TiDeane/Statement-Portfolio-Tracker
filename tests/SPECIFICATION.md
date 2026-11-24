@@ -194,6 +194,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - a row worked out from the statement kept from last time (F1) has a comment on its date saying so, with the date of the statement's latest transaction. It keeps it on later days. A later run that day with a new statement takes it away.
 - **H5.** Backups:
   - before the first change each day to an existing file, a dated copy is saved beside it; later changes that day keep it;
+  - no copy is made on the day the app created the file: before that there was nothing to keep;
   - the newest N are kept (default 1: each day's copy replaces the one before); other workbooks' copies and the old one-time copy are never deleted;
   - 0 makes no copy and deletes none;
   - a failed save leaves no new copy and deletes no old one;

@@ -927,6 +927,27 @@ def test_a_saved_sort_on_a_column_not_shown_is_dropped(tmp_path: Path) -> None:
         assert Settings.load(path).table_sort == kept
 
 
+def test_a_spreadsheet_the_app_created_gets_no_backup_copy_that_day(tmp_path: Path) -> None:
+    # Spec H5: before the app created it there was nothing to keep; from the next day on, copies are made.
+    from datetime import timedelta
+
+    from statement_tracker.workflow import update_spreadsheet
+
+    settings = Settings(tmp_path / "settings.json")
+    settings.ticker_choices["EQQB"] = TickerChoice("EQQB.DE", "Nasdaq fund", "XETRA", "EUR", confirmed=True)
+    provider = FakeProvider()
+    provider.add("EQQB.DE", "EUR", price="400")
+    report = build_report(SAMPLE, provider, settings)
+    sheet, day = tmp_path / "new.xlsx", date(2026, 11, 24)
+
+    assert update_spreadsheet(report, settings, sheet, day).created
+    again = update_spreadsheet(report, settings, sheet, day)  # "Update" again, a rename, a value entered
+    assert again.backup is None and not list(tmp_path.glob("new_backup_*.xlsx"))
+
+    next_day = update_spreadsheet(report, settings, sheet, day + timedelta(days=1))
+    assert next_day.backup == "new_backup_2026-11-25.xlsx"
+
+
 def test_the_days_of_backups_kept_are_saved_and_kept_in_range(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
     assert Settings.load(path).backups_kept == 1

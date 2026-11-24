@@ -88,17 +88,23 @@ def values_typed_in(settings: Settings, path: Path | None) -> tuple[dict[str, De
 
 
 def update_spreadsheet(report: Report, settings: Settings, path: Path, today: date) -> ExportResult:
-    """Write the report to the Excel workbook at ``path`` and remember that workbook."""
+    """Write the report to the Excel workbook at ``path`` and remember that workbook.
+
+    No backup copy is made on the day the app created the workbook: there was nothing before it to keep.
+    """
     names = {}
     for holding in report.valuation.holdings:
         name = settings.index_name(holding.position.ticker)
         if name:
             names[holding.position.ticker] = name
-    exporter = ExcelExporter(path, settings.holdings_sheet, settings.history_sheet, names, settings.backups_kept)
+    cache = PriceCache.beside(settings.path)
+    backups = 0 if cache.created_on(path) == today else settings.backups_kept
+    exporter = ExcelExporter(path, settings.holdings_sheet, settings.history_sheet, names, backups)
     kept_day = latest_transaction_day(report.statement) if report.from_kept_statement else None
     result = exporter.export(report.valuation, today, kept_statement_day=kept_day)
+    if result.created:
+        cache.created(path, today)
     # What was written, to tell values typed there later from the app's own (see values_typed_in).
-    cache = PriceCache.beside(settings.path)
     cache.wrote(path, {holding.position.ticker: holding.market_value for holding in report.valuation.holdings})
     cache.save()
     if settings.spreadsheet_path != path:

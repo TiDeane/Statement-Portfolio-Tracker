@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -36,6 +36,8 @@ class PriceCache:
         self._entries: dict[str, dict[str, Any]] = {}
         self._entered: dict[str, dict[str, Any]] = {}
         self._written: dict[str, dict[str, Any]] = {}
+        self._created: dict[str, str] = {}
+        """The day the app created each spreadsheet (ISO date), by its path."""
         self._changed = False
 
     @classmethod
@@ -52,6 +54,8 @@ class PriceCache:
             cache._entries = _read(data.get("prices"))
             cache._entered = _read(data.get("entered"))
             cache._written = _read(data.get("written"))
+            created = data.get("created")
+            cache._created = {str(path): str(day) for path, day in created.items()} if isinstance(created, dict) else {}
         except (OSError, ValueError, AttributeError):
             pass
         return cache
@@ -131,6 +135,18 @@ class PriceCache:
         except (InvalidOperation, AttributeError):
             return None
 
+    def created(self, spreadsheet: Path, day: date) -> None:
+        """The app created ``spreadsheet`` on ``day``."""
+        self._created[str(spreadsheet)] = day.isoformat()
+        self._changed = True
+
+    def created_on(self, spreadsheet: Path) -> date | None:
+        """The day the app created ``spreadsheet``, if it did."""
+        try:
+            return date.fromisoformat(self._created[str(spreadsheet)])
+        except (KeyError, ValueError):
+            return None
+
     def entered_tickers(self) -> set[str]:
         """The tickers with a price typed in, in any currency."""
         return set(self._entered)
@@ -163,6 +179,8 @@ class PriceCache:
             data["entered"] = dict(sorted(self._entered.items()))
         if self._written:
             data["written"] = dict(sorted(self._written.items()))
+        if self._created:
+            data["created"] = dict(sorted(self._created.items()))
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             temporary = self.path.with_suffix(".tmp")

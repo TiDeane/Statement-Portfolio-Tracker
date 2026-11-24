@@ -18,14 +18,28 @@ Rectangle {
     clip: true
     implicitHeight: column.implicitHeight + 2
 
-    // Each column's least width: never narrower than its longest text in the table's font (bold, as
-    // the Total is), so that amounts fit whatever font the computer draws them in.
-    FontMetrics {
-        id: tableFont
+    // Each column's least width: never narrower than its longest text, laid out as the table draws it
+    // (bold, as the Total is, with figures of equal width), so that amounts fit whatever font the
+    // computer draws them in. Worked out when Home changes, not in a binding: measuring changes `measure`.
+    Text {
+        id: measure
+        visible: false
         font.pixelSize: 14
         font.weight: Font.Bold
+        font.features: { "tnum": 1 }
     }
-    readonly property var widths: Columns.minimums(card.home.columns, card.home.widest, tableFont)
+    property var widths: ({})
+    function measureColumns() {
+        widths = Columns.minimums(card.home.columns, card.home.widest, function (text) {
+            measure.text = text
+            return measure.implicitWidth
+        })
+    }
+    Component.onCompleted: measureColumns()
+    Connections {
+        target: card.home
+        function onChanged() { card.measureColumns() }
+    }
 
     // Open the Columns panel clear of its button: the page first scrolls the toolbar towards the top, then
     // the panel opens below the button, or above it when there is more room there.

@@ -32,13 +32,14 @@ function leftAligned(key) {
 }
 
 // Each column's least width (key -> pixels) given the columns shown and the longest text of each,
-// `widest` (key -> text), measured with `metrics` (a FontMetrics in the table's font): never narrower
-// than its text, so no amount spills into the next column, whatever the font. A share's bar adds 66.
-function minimums(columns, widest, metrics) {
+// `widest` (key -> text), measured by `measure` (text -> its width as the table draws it): never
+// narrower than its text, so no amount spills into the next column, whatever the font. A share's bar
+// adds 66.
+function minimums(columns, widest, measure) {
     var result = { name: minimum.name }
     for (var i = 0; i < columns.length; i++) {
         var key = columns[i]
-        var text = Math.ceil(metrics.advanceWidth(widest[key] || "")) + 6 + (key === "share" ? 66 : 0)
+        var text = Math.ceil(measure(widest[key] || "")) + 6 + (key === "share" ? 66 : 0)
         result[key] = Math.max(minimumFor(key, columns), text)
     }
     return result

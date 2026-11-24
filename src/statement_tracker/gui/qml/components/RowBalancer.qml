@@ -6,7 +6,8 @@ import QtQuick
 //
 // Each card's height at a given width is estimated from what it holds now: its fixed parts (titles,
 // buttons, spacing) plus its wrapping texts and button rows, each needing more lines as it gets
-// narrower. The width with the least empty space wins (the shorter card's space below its content),
+// narrower. A text is measured by laying out a hidden copy of it at that width, so its height is the
+// one Qt will draw, whatever the font and however it wraps. The width with the least empty space wins (the shorter card's space below its content),
 // with a little weight on the row's height too, so it does not grow much to save a few pixels.
 // Worked out again, a moment later, whenever the cards' contents or the row's width change.
 Item {
@@ -53,19 +54,22 @@ Item {
         return found
     }
 
-    TextMetrics { id: metrics }
+    Text { id: probe; visible: false }
 
-    // How many lines `text` takes at `width`: each of its paragraphs measured on its own.
-    function linesOfText(text, width) {
-        var room = Math.max(1, width - text.leftPadding - text.rightPadding)
-        var paragraphs = String(text.text).split("\n"), lines = 0
-        metrics.font = text.font
-        for (var i = 0; i < paragraphs.length; i++) {
-            metrics.text = paragraphs[i]
-            var natural = metrics.advanceWidth * 1.06  // a little more: lines break between words
-            lines += Math.max(1, Math.ceil(natural / room))
-        }
-        return lines
+    // The height `text` takes at `width`, laid out by a hidden copy of it.
+    function heightOfText(text, width) {
+        probe.font = text.font
+        probe.textFormat = text.textFormat
+        probe.wrapMode = text.wrapMode
+        probe.lineHeight = text.lineHeight
+        probe.lineHeightMode = text.lineHeightMode
+        probe.leftPadding = text.leftPadding
+        probe.rightPadding = text.rightPadding
+        probe.topPadding = text.topPadding
+        probe.bottomPadding = text.bottomPadding
+        probe.text = text.text
+        probe.width = Math.max(1, width)
+        return probe.implicitHeight
     }
 
     function heightOfFlow(flow, width) {
@@ -96,13 +100,7 @@ Item {
             for (var i = 0; i < parts.length; i++) {
                 var part = parts[i].item
                 var partWidth = part.width + (width - card.width)  // what is beside it keeps its width
-                if (parts[i].flow) {
-                    height += heightOfFlow(part, partWidth)
-                } else {
-                    var line = part.lineCount > 0 ? part.contentHeight / part.lineCount : part.font.pixelSize * 1.4
-                    var padding = part.height - part.lineCount * line
-                    height += padding + linesOfText(part, partWidth) * line
-                }
+                height += parts[i].flow ? heightOfFlow(part, partWidth) : heightOfText(part, partWidth)
             }
             return height
         }

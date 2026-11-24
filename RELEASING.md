@@ -26,7 +26,7 @@ In a scratch folder, not your real spreadsheet:
 
 On a **copy** of your real spreadsheet:
 
-- [ ] Run the app on it. Your own sheets, tables and charts look as before, and charts that read the app's sheets show today's figures.
+- [ ] On Home, choose it with **Use another spreadsheet...** > **Choose a spreadsheet I have...**, and press **Update my spreadsheet**. Your own sheets, tables and charts look as before, and charts that read the app's sheets show today's figures.
 
 ## How to release
 

@@ -81,6 +81,8 @@ class Settings:
         self.holdings_sheet: str = DEFAULT_HOLDINGS_SHEET
         self.history_sheet: str = DEFAULT_HISTORY_SHEET
         self.backups_kept: int = BACKUPS_KEPT
+        self.auto_update: bool = False
+        """Write the spreadsheet by itself each time today's values are worked out. Set by the user."""
         """Backup copies kept next to the spreadsheet, at most one a day; 0 turns backups off. Set by the user."""
         self.appearance: str = "system"
         """Light or dark: "system" (as the computer is set), "light" or "dark". Set by the user."""
@@ -113,6 +115,7 @@ class Settings:
             settings.holdings_sheet = str(raw.get("holdings_sheet", DEFAULT_HOLDINGS_SHEET))
             settings.history_sheet = str(raw.get("history_sheet", DEFAULT_HISTORY_SHEET))
             settings.backups_kept = min(max(int(raw.get("backups_kept", BACKUPS_KEPT)), 0), MAX_BACKUPS_KEPT)
+            settings.auto_update = raw.get("auto_update") is True  # anything else, or nothing: off
             appearance = raw.get("appearance", "system")
             settings.appearance = appearance if appearance in APPEARANCES else "system"
             table = raw.get("table")
@@ -144,6 +147,7 @@ class Settings:
             "holdings_sheet": self.holdings_sheet,
             "history_sheet": self.history_sheet,
             "backups_kept": self.backups_kept,
+            "auto_update": self.auto_update,
             "appearance": self.appearance,
             "table": {
                 "columns": list(self.table_columns),

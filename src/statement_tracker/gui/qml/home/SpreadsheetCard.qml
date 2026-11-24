@@ -11,12 +11,13 @@ Card {
     padding: 20
     spacing: 16
 
-    // With a spreadsheet: its name, when it last changed, and the update.
+    // With a spreadsheet: its name and folder, when it last changed, and the update (mockup: Cards-A-Menu).
     RowLayout {
         visible: card.home.hasSpreadsheet
         spacing: 16
         Layout.fillWidth: true
         Rectangle {
+            Layout.alignment: Qt.AlignTop
             implicitWidth: 44
             implicitHeight: 44
             radius: 10
@@ -32,19 +33,43 @@ Card {
             spacing: 2
             Layout.fillWidth: true
             Text {
-                text: card.home.sheetName
+                text: "Your spreadsheet"
                 color: Theme.text
                 font.pixelSize: 15
                 font.weight: Font.DemiBold
-                elide: Text.ElideMiddle
+            }
+            Text {
+                text: card.home.sheetName
+                color: Theme.text
+                font.pixelSize: 14
+                font.weight: Font.Medium
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere  // the whole name, however long
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+            }
+            Text {
+                text: card.home.sheetFolder
+                color: Theme.muted
+                font.pixelSize: 13
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere  // the whole path, however long
                 Layout.fillWidth: true
             }
             Text {
+                visible: text !== ""
+                text: card.home.sheetNote
+                color: Theme.warnInk
+                font.pixelSize: 13
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+            Text {
+                visible: text !== ""
                 text: card.home.sheetLine
                 color: Theme.muted
                 font.pixelSize: 13
                 wrapMode: Text.Wrap
                 Layout.fillWidth: true
+                Layout.topMargin: 4
             }
         }
     }
@@ -72,7 +97,6 @@ Card {
     Flow {
         visible: card.home.hasSpreadsheet
         spacing: 8
-        layoutDirection: Qt.RightToLeft
         Layout.fillWidth: true
         PrimaryButton {
             text: card.home.sheetButton
@@ -108,6 +132,54 @@ Card {
             text: "Copy details"
             iconName: "copy"
             onClicked: card.home.copyDetails()
+        }
+    }
+
+    // Another spreadsheet: one the user has, or a new one; or one dropped on the window (Spec F7).
+    Rectangle {
+        visible: card.home.hasSpreadsheet
+        color: Theme.border
+        implicitHeight: 1
+        Layout.fillWidth: true
+        Layout.topMargin: -4
+    }
+    Flow {
+        visible: card.home.hasSpreadsheet
+        spacing: 10
+        Layout.fillWidth: true
+        Layout.topMargin: -8
+        Layout.leftMargin: -10  // the button's text lines up with the card's other texts
+        TextButton {
+            id: another
+            text: "Use another spreadsheet…"
+            iconName: "swap"
+            opensMenu: true
+            implicitHeight: 32
+            enabled: !card.home.writing
+            onClicked: anotherMenu.popup(another, 0, another.height + 4)
+
+            // Each asks for a file once the menu has closed: the file chooser waits for its answer, and the
+            // menu would stay open behind it.
+            AppMenu {
+                id: anotherMenu
+                AppMenuItem {
+                    text: "Choose a spreadsheet I have…"
+                    iconName: "folder"
+                    onTriggered: Qt.callLater(card.home.chooseSpreadsheet)
+                }
+                AppMenuItem {
+                    text: "Create a new one…"
+                    iconName: "plusFile"
+                    onTriggered: Qt.callLater(card.home.createSpreadsheet)
+                }
+            }
+        }
+        Text {
+            height: 32
+            verticalAlignment: Text.AlignVCenter
+            text: "or drop one on this window"
+            color: Theme.muted
+            font.pixelSize: 13
         }
     }
 

@@ -22,6 +22,7 @@ from statement_tracker.gui.welcome import SPREADSHEET_FILES, STATEMENT_FILES, ne
 from statement_tracker.gui.undo import ENTERED, NAME
 from statement_tracker.gui.workers import Task
 from statement_tracker.kept_statement import KeptStatement, is_kept_statement
+from statement_tracker.price_cache import PriceCache
 from statement_tracker.settings import DEFAULT_TABLE_COLUMNS, TABLE_COLUMNS, TABLE_SHOWS
 from statement_tracker.workflow import Report, needs_price, update_spreadsheet, with_entered_prices
 
@@ -87,6 +88,10 @@ def listed(names: list[str]) -> str:
 
 
 STATEMENT_GONE = "This file has been moved or deleted since. The app uses the copy it kept."
+SHEET_GONE = (
+    "This file has been moved or deleted since. If you moved it, choose it where it is now with Use another spreadsheet. "
+    "Updating creates a new one here."
+)
 
 
 def statement_place(statement: Path | None, kept: KeptStatement | None, settings_path: Path) -> tuple[str, str, str]:
@@ -162,6 +167,8 @@ class Home(QObject):
         """The spreadsheet being written, on the thread pool."""
         self._write_again = False
         """A change came in while writing: written once more when that ends."""
+        self._update_wanted = False
+        """A fetch ended with "Update it by itself" on: the spreadsheet is written as soon as it can be."""
         """The day of the last successful update, by the same calendar the update itself used."""
         session.reportChanged.connect(self._clear_sheet_result)
         session.spreadsheetChanged.connect(self._other_spreadsheet)
@@ -169,7 +176,8 @@ class Home(QObject):
         session.settingsChanged.connect(self._update)
         session.busyChanged.connect(self._update)
         session.progressed.connect(self._show_progress)
-        session.pageChanged.connect(self._create_if_asked)
+        session.pageChanged.connect(self._write_if_asked)
+        session.fetched.connect(self._fetched)
 
     # -- what is shown -------------------------------------------------------------
 
@@ -369,6 +377,8 @@ class Home(QObject):
             return ""
         if self._writing is not None:
             return "Updating your spreadsheet…"
+        if self._session.busy and self._session.settings.auto_update and sheet.exists():
+            return "It will be updated as soon as today's prices are in."  # ahead of what the last update did
         if self._sheet_result == "error":
             return "Not updated today"
         if self._updated_at is not None and self._updated_on == self._session.today():
@@ -378,12 +388,29 @@ class Home(QObject):
                 return "It will be created as soon as today's prices are in."
             return "Ready once today's prices are in"
         if not sheet.exists():
-            return "It doesn't exist yet: updating creates it."
+            return "" if self._sheet_gone() else "It doesn't exist yet: updating creates it."
         changed = datetime.fromtimestamp(sheet.stat().st_mtime, UTC).astimezone().date()
         return f"Last changed {day_text(changed)}"
 
+    def _sheet_gone(self) -> bool:
+        """The spreadsheet is not where it was: the app has written to it or created it, so it has been moved
+        or deleted since. Not while it is being written, nor while one asked for there waits to be created."""
+        sheet = self._sheet()
+        if sheet is None or self._writing is not None or self._session.new_spreadsheet == sheet or sheet.exists():
+            return False
+        return PriceCache.beside(self._session.settings.path).knows(sheet)
+
     hasSpreadsheet = Property(bool, lambda self: self._sheet() is not None, notify=changed)
+    sheetNote = Property(str, lambda self: SHEET_GONE if self._sheet_gone() else "", notify=changed)
+
+    def _get_drop_sheet_line(self) -> str:
+        """Said over the card while a spreadsheet is dragged over the window."""
+        sheet = self._sheet()
+        return f"{sheet.name} stays as it is. The next update goes to the new one." if sheet else "The next update goes to it."
+
+    dropSheetLine = Property(str, _get_drop_sheet_line, notify=changed)
     sheetName = Property(str, lambda self: self._sheet().name if self._sheet() else "", notify=changed)
+    sheetFolder = Property(str, lambda self: f"In {self._sheet().absolute().parent}" if self._sheet() else "", notify=changed)
     sheetLine = Property(str, _get_sheet_line, notify=changed)
     sheetButton = Property(str, lambda self: "Try again" if self._sheet_result == "error" else "Update my spreadsheet", notify=changed)
     canUpdate = Property(
@@ -456,7 +483,7 @@ class Home(QObject):
         if not self._session.busy:
             self._progress = (0, 0, "")
         self._save_if_waiting()
-        self._create_if_asked()
+        self._write_if_asked()
         self.changed.emit()
 
     def _show_progress(self, done: int, total: int, text: str) -> None:
@@ -590,20 +617,30 @@ class Home(QObject):
         chosen = self._session.ask_save_file("Where should the new spreadsheet be saved?", start / new_spreadsheet_name(self._session.today()))
         if chosen is not None:
             sheet = chosen if chosen.suffix.lower() == ".xlsx" else chosen.with_name(chosen.name + ".xlsx")
+            self._session.new_spreadsheet = sheet  # first: the card says so as soon as it shows the new name
             self._session.use_spreadsheet(sheet)
-            self._session.new_spreadsheet = sheet
-            self._create_if_asked()
+            self._other_spreadsheet()  # a new file, even where the last one was: nothing said of that one holds
+            self._write_if_asked()
 
-    def _create_if_asked(self) -> None:
-        """Create the spreadsheet the user asked for ("Create a new one"), once the values are in: no need to
-        press "Update my spreadsheet" for it. One that exists by then is left for the button. Asked for in
-        Settings, it is created when Home shows again: nothing is written while Settings is open."""
-        sheet = self._session.new_spreadsheet
+    def _fetched(self) -> None:
+        if self._session.settings.auto_update and self._sheet() is not None:
+            self._update_wanted = True
+
+    def _write_if_asked(self) -> None:
+        """Write the spreadsheet without "Update my spreadsheet" being pressed, once the values are in (Spec F7):
+        a new one the user asked for ("Create a new one"), or, with "Update it by itself" on, the one there after
+        each fetch. Only one that is there is written by itself: a missing one is left for the button, so a
+        workbook moved elsewhere is never made again at its old place unasked. A new one that exists by then is
+        left for the button too. Nothing is written while Settings is open: it is when Home shows again."""
         session = self._session
-        if sheet is None or session.page != "home" or session.busy or session.report is None or self._writing is not None:
+        new, wanted = session.new_spreadsheet, self._update_wanted
+        if (new is None and not wanted) or session.page != "home" or session.busy or session.report is None or self._writing is not None:
             return
-        self._session.new_spreadsheet = None
-        if sheet == self._sheet() and not sheet.exists():
+        session.new_spreadsheet, self._update_wanted = None, False
+        sheet = self._sheet()
+        if sheet is None:
+            return
+        if (new == sheet and not sheet.exists()) or (wanted and sheet.exists()):
             self.updateSpreadsheet()
 
     def _other_spreadsheet(self) -> None:
@@ -615,6 +652,13 @@ class Home(QObject):
     def _clear_sheet_result(self) -> None:
         """New values: what an earlier update wrote is not what is shown any more."""
         self._sheet_result, self._sheet_title, self._sheet_lines, self._sheet_details = "", "", [], ""
+
+    @Slot()
+    def recheck(self) -> None:
+        """The window is active again: a file may have been moved, deleted or changed meanwhile (Spec F6, F7)."""
+        if self._sheet_gone() and self._sheet_result != "error":
+            self._other_spreadsheet()  # what the last update did is of a file not there now; what went wrong still holds
+        self.changed.emit()
 
     @Slot()
     def chooseStatement(self) -> None:

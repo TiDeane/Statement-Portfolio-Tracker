@@ -140,6 +140,10 @@ class PriceCache:
         self._created[str(spreadsheet)] = day.isoformat()
         self._changed = True
 
+    def knows(self, spreadsheet: Path) -> bool:
+        """Whether the app has written to ``spreadsheet``, or created it."""
+        return str(spreadsheet) in self._written or str(spreadsheet) in self._created
+
     def created_on(self, spreadsheet: Path) -> date | None:
         """The day the app created ``spreadsheet``, if it did."""
         try:

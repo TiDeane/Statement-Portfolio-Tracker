@@ -446,6 +446,20 @@ Item {
                                 onChangedTo: (value) => page.settings.setBackupsKept(value)
                             }
                         }
+                        Rectangle { visible: page.settings.hasSpreadsheet; Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
+                        ColumnLayout {
+                            visible: page.settings.hasSpreadsheet
+                            spacing: 2
+                            Layout.fillWidth: true
+                            AppSwitch {
+                                text: "Update it by itself"
+                                checked: page.settings.autoUpdate
+                                padding: 0  // in line with the backup copies' title and stepper above
+                                onToggled: page.settings.setAutoUpdate(checked)
+                                Layout.fillWidth: true
+                            }
+                            Muted { text: "As soon as today's prices are in: when the app opens, after Refresh prices and with a new statement." }
+                        }
                     }
 
                     Card {

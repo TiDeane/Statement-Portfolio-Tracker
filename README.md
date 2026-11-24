@@ -167,7 +167,7 @@ The app opens on **Home**, your investments, and looks up today's prices by itse
 - **Your statement** and **your spreadsheet**, side by side: where the values come from (the statement's file name and folder), and where they go.
 - **Your investments:** one row each, and the total. You can sort them, show only some of them, and choose the columns.
 
-To update your Excel file, press **Update my spreadsheet**. The app writes the values shown, without looking the prices up again, and says what it wrote in green under the button, or in red, with what to do, if it could not save the file (usually because it is open in Excel: close it there and press **Try again**). **Open folder** opens the folder the spreadsheet is in, with the file selected. Nothing is written until you press the button, except a spreadsheet you asked the app to create, which it makes as soon as today's prices are in; after that, a name you change or a value you enter is written to the spreadsheet straight away, until you close the app.
+To update your Excel file, press **Update my spreadsheet**. The app writes the values shown, without looking the prices up again, and says what it wrote in green under the button, or in red, with what to do, if it could not save the file (usually because it is open in Excel: close it there and press **Try again**). **Open folder** opens the folder the spreadsheet is in, with the file selected. To switch to another spreadsheet, press **Use another spreadsheet...** and pick **Choose a spreadsheet I have...** or **Create a new one...**, or drop an Excel file on the window: while you drag a file over it, the part of Home it will go to says so. If the spreadsheet has been moved or deleted, Home says so: choose it where it is now with **Use another spreadsheet...**, or press **Update my spreadsheet** to start a new one where it was. Nothing is written until you press the button, except a spreadsheet you asked the app to create, which it makes as soon as today's prices are in, and, if you turn on **Update it by itself** in Settings, your spreadsheet each time the app has worked out today's values (when it opens, after **Refresh prices** and with a new statement); after that, a name you change or a value you enter is written to the spreadsheet straight away, until you close the app.
 
 **Help** (the **?** at the top) shows where to get the statement, how your data is handled, and the app's version.
 
@@ -375,7 +375,7 @@ The statement the app keeps: the name and folder of the file it was copied from,
 
 ### Your spreadsheet
 
-The spreadsheet the app updates, with **Open folder**, **Choose another...** and **Stop using it** (or, without one, **Choose spreadsheet...** and **Create a new one...**). **Backup copies to keep** sets, with **−** and **+**, how many [backup copies](#backup-copies) of it are kept in all.
+The spreadsheet the app updates, with **Open folder**, **Choose another...** and **Stop using it** (or, without one, **Choose spreadsheet...** and **Create a new one...**). **Backup copies to keep** sets, with **−** and **+**, how many [backup copies](#backup-copies) of it are kept in all. **Update it by itself** writes the spreadsheet each time today's prices are in, without pressing **Update my spreadsheet**; it is off at first.
 
 ### Appearance
 

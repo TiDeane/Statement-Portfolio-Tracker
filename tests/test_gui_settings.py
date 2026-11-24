@@ -138,6 +138,34 @@ def test_the_switch_and_the_backup_copies_are_saved_at_once(app, tmp_path: Path)
     assert saved(tmp_path).backups_kept == 0
 
 
+def test_the_spreadsheet_can_update_by_itself(app, tmp_path: Path) -> None:
+    # Spec G1, F7: off at first; once on, the next fetch writes the spreadsheet, nothing before it.
+    from openpyxl import Workbook, load_workbook
+
+    Workbook().save(tmp_path / "mine.xlsx")
+    shell = home(app, tmp_path, spreadsheet=tmp_path / "mine.xlsx")
+    to_settings(shell)
+    assert shows(shell.window, "Update it by itself")
+    assert not saved(tmp_path).auto_update
+
+    click(find(shell.window, "Update it by itself"))
+    assert saved(tmp_path).auto_update
+    click(find(shell.window, "Your portfolio"))
+    settle(app)
+    assert load_workbook(tmp_path / "mine.xlsx").sheetnames == ["Sheet"]  # nothing until the values are worked out
+
+    click(find(shell.window, "Refresh prices"))
+    wait_until(app, lambda: shows(shell.window, "Your spreadsheet is up to date"))
+
+
+def test_without_a_spreadsheet_there_is_nothing_to_update_by_itself(app, tmp_path: Path) -> None:
+    # Spec G1.
+    shell = home(app, tmp_path)
+    to_settings(shell)
+
+    assert not shows(shell.window, "Update it by itself")
+
+
 def test_the_spreadsheet_can_be_changed_or_given_up(app, tmp_path: Path) -> None:
     # Spec G1.
     shell = home(app, tmp_path, spreadsheet=tmp_path / "mine.xlsx")

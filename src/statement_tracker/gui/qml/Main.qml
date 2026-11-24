@@ -32,6 +32,7 @@ ApplicationWindow {
     palette.placeholderText: Theme.muted
     palette.toolTipBase: Theme.surface
     palette.toolTipText: Theme.text
+    onActiveChanged: if (active) session.home.recheck()  // back from moving or deleting files elsewhere
     onClosing: {
         session.stopRun()  // closing stops a fetch: nothing of it is saved
         dialogs.cancel()
@@ -39,6 +40,7 @@ ApplicationWindow {
 
     readonly property var pages: ({ "welcome": "WelcomePage", "home": "HomePage", "settings": "SettingsPage" })
     readonly property bool dragging: dropArea.containsDrag
+    property var dragKinds: []  // what the files dragged over the window would be used as: "statement", "spreadsheet"
 
     // Files dropped on the window, as local file URLs; the session decides what each is for.
     function dropFiles(urls) {
@@ -53,7 +55,10 @@ ApplicationWindow {
     DropArea {
         id: dropArea
         anchors.fill: parent
+        onEntered: (drag) => { root.dragKinds = session.dropKinds(Array.from(drag.urls, (url) => url.toString())) }
+        onExited: root.dragKinds = []
         onDropped: (drop) => {
+            root.dragKinds = []
             root.dropFiles(drop.urls)
             drop.accept(Qt.CopyAction)
         }

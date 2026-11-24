@@ -7,6 +7,8 @@ import "../home"
 // Home: the investments with today's prices (mockups: Home and its states). The page scrolls.
 Item {
     id: page
+    // What files dragged over the window would be used as: the card each would go to says so (Spec F6, F7).
+    readonly property var dragKinds: ApplicationWindow.window ? ApplicationWindow.window.dragKinds : []
 
     ScrollView {
         id: scroll
@@ -59,6 +61,10 @@ Item {
                 StatementCard {
                     id: statementCard
                     objectName: "statementCard"
+                    dropping: page.dragKinds.indexOf("statement") >= 0
+                    faded: page.dragKinds.length > 0 && !dropping
+                    dropTitle: "Drop it to use this statement"
+                    dropText: "Today's values are worked out again from it."
                     // Side by side, the width that makes both cards about as tall (see RowBalancer).
                     Layout.fillWidth: !sources.sideBySide
                     Layout.fillHeight: true
@@ -67,6 +73,10 @@ Item {
                 SpreadsheetCard {
                     id: spreadsheetCard
                     objectName: "spreadsheetCard"
+                    dropping: page.dragKinds.indexOf("spreadsheet") >= 0
+                    faded: page.dragKinds.length > 0 && !dropping
+                    dropTitle: "Drop it to use this spreadsheet"
+                    dropText: session.home.dropSheetLine
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.preferredWidth: 1

@@ -91,7 +91,7 @@ Item {
 
     // A card's height at `width`, from how it is laid out now.
     function estimate(card) {
-        var parts = wrapping(card, [])
+        var parts = wrapping(card.body || card, [])  // a Card's content, not what is drawn over it during a drag
         var fixed = card.implicitHeight
         for (var i = 0; i < parts.length; i++)
             fixed -= parts[i].item.height

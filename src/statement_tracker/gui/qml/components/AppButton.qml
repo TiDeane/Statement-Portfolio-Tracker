@@ -5,11 +5,13 @@ import QtQuick.Layouts
 // The app's button. `kind`: "primary" (the one green action of an area), "secondary" (outlined),
 // "text" (minor actions) or "danger" (forgetting things). Outlined in the text colour only when
 // reached with the keyboard. `lit`: a secondary button drawn in the accent colours, for a choice in force.
+// `opensMenu`: a small arrow after the text, for a button that opens a menu of choices.
 Button {
     id: control
     property string kind: "secondary"
     property string iconName: ""
     property bool lit: false
+    property bool opensMenu: false
     readonly property color ink: kind === "primary" ? Theme.accentText
                                 : lit ? Theme.accentInk
                                 : kind === "text" ? Theme.accentInk
@@ -38,6 +40,11 @@ Button {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             Layout.fillWidth: true
+        }
+        Icon {
+            name: control.opensMenu ? "chevronDown" : ""
+            size: 14
+            color: control.ink
         }
     }
 

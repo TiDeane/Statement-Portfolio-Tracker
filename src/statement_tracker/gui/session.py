@@ -42,6 +42,11 @@ UNEXPECTED = UserFacingError(
 )
 
 
+def drop_kind(path: Path) -> str:
+    """What a file dropped on the window is used as: an Excel file is a spreadsheet, anything else a statement."""
+    return "spreadsheet" if path.suffix.lower() == ".xlsx" else "statement"
+
+
 def listing_question(resolution: Resolution, currency: str) -> dict:
     """The texts and options of the dialog asking which listing ``resolution.ticker`` is."""
     ticker = resolution.ticker
@@ -110,6 +115,8 @@ class Session(QObject):
     reportChanged = Signal()
     settingsChanged = Signal()
     spreadsheetChanged = Signal()
+    fetched = Signal()
+    """A fetch has worked out today's values (the app opening, Refresh prices, a new statement)."""
     """Another spreadsheet (or none) is to be updated from now on."""
     """Something shown changed in the settings: the spreadsheet chosen, the backups, a name."""
     progressed = Signal(int, int, str)
@@ -315,6 +322,7 @@ class Session(QObject):
         self.fetched_at = self.now()
         self.kept = kept
         self.history.run_finished()
+        self.fetched.emit()  # before the values show: Home then knows they come from a fetch
         self.reportChanged.emit()
         self.busyChanged.emit()
 
@@ -409,7 +417,7 @@ class Session(QObject):
         for url in urls:
             path = Path(QUrl(url).toLocalFile())
             on_welcome = self._page == "welcome"
-            if path.suffix.lower() == ".xlsx":
+            if drop_kind(path) == "spreadsheet":
                 if on_welcome and self._welcome.step == "spreadsheet":
                     self._welcome.use_spreadsheet(path)
                 elif self._page == "home":
@@ -418,6 +426,13 @@ class Session(QObject):
                 self._welcome.use_statement(path)
             elif self._page == "home":
                 self.use_statement(path)
+
+    @Slot(list, result=list)
+    def dropKinds(self, urls: list) -> list:
+        """What files dragged over the window would be used as if dropped there, each kind once: "statement",
+        "spreadsheet" or both (Spec F6, F7). Only files count: a link or a piece of text is no statement."""
+        kinds = [drop_kind(Path(QUrl(url).toLocalFile())) for url in urls if QUrl(url).isLocalFile()]
+        return list(dict.fromkeys(kinds))
 
     @Slot(str)
     def copyText(self, text: str) -> None:

@@ -160,6 +160,7 @@ class SettingsPage(QObject):
     )
     spreadsheetFolder = Property(str, _sheet_folder, notify=changed)
     backupsKept = Property(int, lambda self: self._settings.backups_kept, notify=changed)
+    autoUpdate = Property(bool, lambda self: self._settings.auto_update, notify=changed)
     maxBackups = Property(int, lambda self: MAX_BACKUPS_KEPT, constant=True)
     backupsHelp = Property(str, lambda self: BACKUPS_HELP, constant=True)
     appearance = Property(str, lambda self: self._settings.appearance, notify=changed)
@@ -238,6 +239,13 @@ class SettingsPage(QObject):
     def setAlwaysFirst(self, on: bool) -> None:
         self._settings.always_use_first_listing = on  # not undoable: switching it again does that
         self._saved()
+
+    @Slot(bool)
+    def setAutoUpdate(self, on: bool) -> None:
+        """Write the spreadsheet by itself after each fetch, or only when "Update my spreadsheet" is pressed."""
+        self._settings.auto_update = bool(on)
+        self._session.save_settings()
+        self._session.settingsChanged.emit()
 
     @Slot(int)
     def setBackupsKept(self, count: int) -> None:

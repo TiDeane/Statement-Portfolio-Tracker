@@ -32,7 +32,7 @@ QtQuick = pytest.importorskip("PySide6.QtQuick", exc_type=ImportError)
 
 from fakes import SAMPLE, FakeProvider, ranges_around  # noqa: E402
 from PySide6.QtCore import QCoreApplication, QEvent, QMimeData, QPoint, QPointF, Qt, QTimer, QUrl, qInstallMessageHandler  # noqa: E402
-from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent, QGuiApplication, QKeyEvent  # noqa: E402
+from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDragMoveEvent, QDropEvent, QGuiApplication, QKeyEvent, QWindow  # noqa: E402
 from PySide6.QtQuick import QQuickItem, QQuickWindow  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 
@@ -267,6 +267,13 @@ def editor(window: QQuickWindow) -> QQuickItem:
     return found[0]
 
 
+def item_named(window: QQuickWindow, name: str) -> QQuickItem:
+    """The one shown part of the window with this object name (a card, say), to read how it is shown."""
+    found = [item for item in _items(window) if item.objectName() == name and _shown(item)]
+    assert len(found) == 1, f"{len(found)} visible items are named {name!r}"
+    return found[0]
+
+
 def heading(window: QQuickWindow, text: str) -> QQuickItem:
     """The heading reading ``text`` in the investments list (not the same words elsewhere on Home)."""
     headers = [item for item in _items(window) if item.objectName() == "investmentHeader" and _shown(item)]
@@ -410,25 +417,60 @@ def type_text(window: QQuickWindow, text: str) -> None:
     settle(QGuiApplication.instance())
 
 
-def drop(window: QQuickWindow, *paths: Path, wait: bool = True) -> None:
-    """Drag files from the file manager and drop them on the middle of the window; unless ``wait`` is False,
-    wait for what that started in the background."""
+def _drag_events(window: QQuickWindow, paths: tuple[Path, ...], dropped: bool) -> tuple[QMimeData, list]:
+    """The events of files dragged from the file manager to the middle of the window, then dropped or not, with
+    the data they carry: the events do not keep it, so it must live until they have been sent."""
     data = QMimeData()
     data.setUrls([QUrl.fromLocalFile(str(path)) for path in paths])
     where = QPointF(window.width() / 2, window.height() / 2)
     action, buttons, keys = Qt.DropAction.CopyAction, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier
     with warnings.catch_warnings():  # PySide6 marks the only constructors it has as deprecated
         warnings.simplefilter("ignore", DeprecationWarning)
-        events = (
+        events = [
             QDragEnterEvent(where.toPoint(), action, data, buttons, keys),
             QDragMoveEvent(where.toPoint(), action, data, buttons, keys),
-            QDropEvent(where, action, data, buttons, keys),
-        )
+        ]
+        if dropped:
+            events.append(QDropEvent(where, action, data, buttons, keys))
+    return data, events
+
+
+def drop(window: QQuickWindow, *paths: Path, wait: bool = True) -> None:
+    """Drag files from the file manager and drop them on the middle of the window; unless ``wait`` is False,
+    wait for what that started in the background."""
+    data, events = _drag_events(window, paths, dropped=True)
     for event in events:
         QGuiApplication.sendEvent(window, event)
     settle(QGuiApplication.instance())
     if wait:
         _finish_quick_work(window)
+
+
+def drag_over(window: QQuickWindow, *paths: Path) -> None:
+    """Drag files from the file manager to the middle of the window, and hold them there."""
+    data, events = _drag_events(window, paths, dropped=False)
+    for event in events:
+        QGuiApplication.sendEvent(window, event)
+    settle(QGuiApplication.instance())
+
+
+def drag_away(window: QQuickWindow) -> None:
+    """Take the files being dragged over the window away again, without dropping them."""
+    QGuiApplication.sendEvent(window, QDragLeaveEvent())
+    settle(QGuiApplication.instance())
+
+
+def leave_and_come_back(shell: AppWindow) -> None:
+    """Switch to another window and back to the app's, as the user does after moving a file in the file manager."""
+    app = QGuiApplication.instance()
+    other = QWindow()
+    other.resize(100, 100)
+    other.show()
+    other.requestActivate()
+    wait_until(app, lambda: not shell.window.isActive(), 5)
+    other.destroy()
+    shell.window.requestActivate()
+    wait_until(app, lambda: shell.window.isActive(), 5)
 
 
 def when_a_dialog_opens(shell: AppWindow, act: Callable[[], object]) -> None:

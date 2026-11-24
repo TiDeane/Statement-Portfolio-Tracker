@@ -15,6 +15,7 @@ from quick_driver import (  # noqa: F401
     english_computer,
     find,
     find_starting,
+    leave_and_come_back,
     open_app,
     provider_with,
     rows,
@@ -289,6 +290,23 @@ def test_home_names_the_statement_file_and_its_folder(app, tmp_path: Path) -> No
     gone = open_app(tmp_path, provider_with("EQQB.DE"))
     settled(app, gone)
     assert shows(gone.window, "newer.csv", "This file has been moved or deleted since. The app uses the copy it kept.")
+
+
+def test_home_looks_again_when_the_window_comes_back(app, tmp_path: Path) -> None:
+    # Spec F6: a statement moved away while the app is open is said to be, once the window is active again.
+    shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
+    settled(app, shell)
+    newer = newer_statement(tmp_path)
+    drop(shell.window, newer)
+    settled(app, shell)
+    again = open_app(tmp_path, provider_with("EQQB.DE"))  # the next day: the copy kept is used
+    settled(app, again)
+    assert not shows(again.window, "This file has been moved or deleted since. The app uses the copy it kept.")
+
+    newer.unlink()  # the download is cleared away while the app is open
+    leave_and_come_back(again)
+
+    assert shows(again.window, "newer.csv", "This file has been moved or deleted since. The app uses the copy it kept.")
 
 
 def test_a_copy_kept_without_its_origin_names_no_file(app, tmp_path: Path) -> None:

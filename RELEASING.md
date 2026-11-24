@@ -11,7 +11,7 @@ The automated tests work out the spreadsheet's formulas with a small imitation o
 
 In a scratch folder, not your real spreadsheet:
 
-- [ ] Choose `samples/unpriced_investment.csv`, then **Create a new one...**, and press the green button. Pick the first listing for EQQB; skip ZQXJ.
+- [ ] Choose `samples/unpriced_investment.csv`, then **Create a new one...** (it suggests `investments_` and today's date), and **Show my investments**. Pick the first listing for EQQB; skip ZQXJ. The spreadsheet is created by itself once the prices are in, with no backup copy beside it.
 - [ ] Open the file in Excel. In **Current Holdings**, the ZQXJ row is grey and its Current Value reads "unavailable" in red. The Total covers EQQB only, and the percentages show with a % sign.
 - [ ] In **Portfolio History**, today's row is light orange, with a comment on its date saying it leaves out ZQXJ.
 - [ ] Type `400` over "unavailable". The row turns black, the Total and the percentages follow at once, and today's history row follows too and loses its orange.

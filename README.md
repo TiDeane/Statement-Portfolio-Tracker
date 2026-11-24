@@ -78,7 +78,7 @@ There are two ways to get the app. Most people want the first.
 
 ### Option 1: install with the `.exe` (Windows 10 and 11)
 
-Nothing else needs to be installed first. Installed, the app takes about 70 MB.
+Nothing else needs to be installed first. Installed, the app takes about 90 MB.
 
 1. Open the [Releases page](https://github.com/TiDeane/Statement-Portfolio-Tracker/releases) and download the file ending in `-windows-x64-setup.exe` from the latest release.
 2. Double-click it. Windows may show a blue box saying **"Windows protected your PC"**. If it does, this is because the app is not signed with a paid certificate, not because something was found in it. Click **More info**, then **Run anyway**.

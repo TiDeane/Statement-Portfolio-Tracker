@@ -352,6 +352,31 @@ def test_appearance_can_be_light_or_dark_and_is_remembered(app, tmp_path: Path) 
     assert again.window.property("color").name().upper() == LIGHT["bg"] and saved(tmp_path).appearance == "light"
 
 
+def test_the_frame_qt_draws_around_the_window_takes_the_apps_colours(app, tmp_path: Path) -> None:
+    # Spec F11: on Linux, Qt draws the window's title bar and frame itself, in the application's colours.
+    from PySide6.QtGui import QColor, QPalette
+
+    def frame() -> tuple[str, str]:
+        palette = QGuiApplication.palette()
+        return (palette.color(QPalette.ColorRole.Window).name().upper(),
+                palette.color(QPalette.ColorRole.WindowText).name().upper())
+
+    original = QGuiApplication.palette()
+    try:
+        shell = home(app, tmp_path)
+        to_settings(shell)
+        for look, colours in (("Dark", DARK), ("Light", LIGHT), ("Dark", DARK)):
+            click(find(shell.window, look))
+            assert frame() == (colours["bg"], colours["text"])
+
+        QGuiApplication.setPalette(QPalette(QColor("#EFEFEF")))  # a light computer
+        again = open_app(tmp_path, provider_with())
+        assert again.window.property("color").name().upper() == DARK["bg"]
+        assert frame() == (DARK["bg"], DARK["text"])  # from the start, not only after a change
+    finally:
+        QGuiApplication.setPalette(original)
+
+
 def test_the_investment_menu_is_drawn_in_the_apps_colours_under_its_button(app, tmp_path: Path) -> None:
     # Spec G1.
     from PySide6.QtCore import QPointF

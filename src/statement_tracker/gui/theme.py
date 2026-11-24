@@ -1,13 +1,15 @@
 """The window's colours, light and dark, as the design sets them. QML reads them from ``Theme``.
 
 Light or dark follows the system and switches while the app is open, unless the user chose one in
-Settings. Every pair of text and background colour reaches a contrast of 4.5:1.
+Settings. Every pair of text and background colour reaches a contrast of 4.5:1. The window's title
+bar and frame follow too: on Linux (Wayland) Qt draws them itself, from the application's palette; on
+Windows the system draws them, in the light or dark Qt asks for.
 """
 
 from __future__ import annotations
 
 from PySide6.QtCore import Property, QObject, Qt, Signal
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QColor, QGuiApplication, QPalette
 
 LIGHT = {
     "bg": "#F5F6F8",
@@ -61,6 +63,30 @@ DARK = {
 }
 
 
+QT_COLOURS = (
+    (QPalette.ColorRole.Window, "bg"),
+    (QPalette.ColorRole.WindowText, "text"),
+    (QPalette.ColorRole.Base, "surface"),
+    (QPalette.ColorRole.AlternateBase, "subtle"),
+    (QPalette.ColorRole.Text, "text"),
+    (QPalette.ColorRole.Button, "surface"),
+    (QPalette.ColorRole.ButtonText, "text"),
+    (QPalette.ColorRole.Light, "subtle"),
+    (QPalette.ColorRole.Midlight, "border"),
+    (QPalette.ColorRole.Mid, "borderStrong"),
+    (QPalette.ColorRole.Dark, "muted"),
+    (QPalette.ColorRole.Shadow, "borderStrong"),
+    (QPalette.ColorRole.Highlight, "accent"),
+    (QPalette.ColorRole.HighlightedText, "accentText"),
+    (QPalette.ColorRole.PlaceholderText, "muted"),
+    (QPalette.ColorRole.ToolTipBase, "surface"),
+    (QPalette.ColorRole.ToolTipText, "text"),
+)
+"""The application palette's roles and the colours they take: the same as Main.qml gives its window."""
+SCHEMES = {"light": Qt.ColorScheme.Light, "dark": Qt.ColorScheme.Dark}
+"""The user's choice, as asked of the system; "system" asks for nothing (Qt.ColorScheme.Unknown)."""
+
+
 def _colour(name: str):
     return lambda theme: (DARK if theme._dark else LIGHT)[name]
 
@@ -79,6 +105,10 @@ class Theme(QObject):
         self._dark = False
         self._system_dark = False
         self._choice = "system"
+        self._app: QGuiApplication | None = None
+        """The application whose own palette follows (once ``follow`` is called)."""
+        self._painted: bool | None = None
+        """Whether the application's palette was last made dark, or None before it was set."""
 
     def _is_dark(self) -> bool:
         return self._dark
@@ -93,16 +123,38 @@ class Theme(QObject):
     def set_choice(self, choice: str) -> None:
         """The user's choice in Settings: "system", "light" or "dark"."""
         self._choice = choice
+        if self._app is not None:
+            # Asked of the system, for the title bar it draws (Windows). Back on "system", the system's
+            # own light or dark is read again: it was not followed while the user's choice was asked for.
+            hints = self._app.styleHints()
+            hints.setColorScheme(SCHEMES.get(choice, Qt.ColorScheme.Unknown))
+            if choice == "system":
+                self._system_dark = hints.colorScheme() == Qt.ColorScheme.Dark
         self._apply()
+
+    def _scheme_changed(self, scheme: Qt.ColorScheme) -> None:
+        # While the user's choice is asked for, the scheme reported is that choice, not the system's.
+        if self._choice == "system":
+            self.set_dark(scheme == Qt.ColorScheme.Dark)
 
     def _apply(self) -> None:
         dark = self._choice == "dark" or (self._choice == "system" and self._system_dark)
         if dark != self._dark:
             self._dark = dark
             self.changed.emit()
+        if self._app is not None and self._painted is not dark:
+            # The application's palette, for what Qt draws outside QML: on Linux, the title bar and frame.
+            colours = DARK if dark else LIGHT
+            palette = QPalette(self._app.palette())
+            for role, name in QT_COLOURS:
+                palette.setColor(role, QColor(colours[name]))
+            self._app.setPalette(palette)
+            self._painted = dark
 
     def follow(self, app: QGuiApplication) -> None:
-        """Be light or dark as the system is, now and whenever the user switches it."""
+        """Be light or dark as the system is, now and whenever the user switches it, and give the
+        window's title bar and frame the same light or dark (see the module's docstring)."""
+        self._app = app
         hints = app.styleHints()
         self.set_dark(hints.colorScheme() == Qt.ColorScheme.Dark)
-        hints.colorSchemeChanged.connect(lambda scheme: self.set_dark(scheme == Qt.ColorScheme.Dark))
+        hints.colorSchemeChanged.connect(self._scheme_changed)

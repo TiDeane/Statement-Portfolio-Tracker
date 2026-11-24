@@ -45,9 +45,10 @@ KEPT_STATEMENT_COMMENT = "Worked out from the statement kept from last time"
 _PARTIAL_FILL_COLOUR = "FCE4D6"
 _PARTIAL_TEXT_COLOUR = "833C0B"
 """Light and dark orange from Excel's own theme colours, for history rows that leave something out."""
-BACKUPS_KEPT = 3
+BACKUPS_KEPT = 1
 """Backup copies kept next to the spreadsheet unless the user chooses otherwise, in all: one is made on
-each day it is updated, and the oldest is deleted when there are more."""
+each day it is updated, and the oldest is deleted when there are more. By default, each day's copy
+replaces the one before (maintainer's request, 2026-11-24; it was 3)."""
 MAX_BACKUPS_KEPT = 99
 ENTERED_COMMENT = "Value entered by hand"
 _EARLIER_ENTERED_COMMENT = "Price per share entered by hand"

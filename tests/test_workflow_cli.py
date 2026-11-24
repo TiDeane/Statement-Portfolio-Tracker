@@ -889,7 +889,7 @@ def test_damaged_settings_file_is_explained(tmp_path: Path) -> None:
 
 def test_the_days_of_backups_kept_are_saved_and_kept_in_range(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
-    assert Settings.load(path).backups_kept == 3
+    assert Settings.load(path).backups_kept == 1
     for saved, loaded in ((0, 0), (7, 7), (-2, 0), (500, 99)):
         settings = Settings(path)
         settings.backups_kept = saved

@@ -132,7 +132,7 @@ def test_the_switch_and_the_backup_copies_are_saved_at_once(app, tmp_path: Path)
     assert saved(tmp_path).always_use_first_listing
 
     click(find(shell.window, "One more"))
-    assert saved(tmp_path).backups_kept == 4
+    assert saved(tmp_path).backups_kept == 2  # one more than the default, 1
     for _ in range(6):
         click(find(shell.window, "One fewer"))
     assert saved(tmp_path).backups_kept == 0

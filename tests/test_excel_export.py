@@ -574,6 +574,17 @@ def test_one_backup_is_made_per_day_before_its_first_update(tmp_path: Path) -> N
     assert rows(tmp_path / "mine_backup_2026-10-13.xlsx", "Current Holdings")[1][3] == 1200
 
 
+def test_by_default_one_backup_is_kept(tmp_path: Path) -> None:
+    # Spec H5: each day's copy replaces the one before.
+    path = tmp_path / "mine.xlsx"
+    _users_workbook(path)
+
+    for day in (date(2026, 10, 1), date(2026, 10, 2), date(2026, 10, 9)):
+        ExcelExporter(path).export(valuation(), day)
+
+    assert backups(tmp_path) == ["mine_backup_2026-10-09.xlsx"]
+
+
 def test_backups_of_the_newest_three_days_are_kept(tmp_path: Path) -> None:
     # Spec H5.
     path = tmp_path / "mine.xlsx"
@@ -584,7 +595,7 @@ def test_backups_of_the_newest_three_days_are_kept(tmp_path: Path) -> None:
     _users_workbook(path)
 
     for day in (date(2026, 9, 28), date(2026, 9, 30), date(2026, 10, 1), date(2026, 10, 9), date(2026, 10, 15)):
-        ExcelExporter(path).export(valuation(), day)
+        ExcelExporter(path, backups_kept=3).export(valuation(), day)
 
     names = ["mine_backup_2026-10-01.xlsx", "mine_backup_2026-10-09.xlsx", "mine_backup_2026-10-15.xlsx"]
     assert backups(tmp_path) == names

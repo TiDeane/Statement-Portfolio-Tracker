@@ -22,6 +22,25 @@ from statement_tracker.core.ticker_resolver import DEFAULT_SUFFIXES
 APP_FOLDER = "StatementPortfolioTracker"
 APPEARANCES = ("system", "light", "dark")
 """The window's look: as the computer is set, or always light, or always dark."""
+TABLE_COLUMNS = ("shares", "average_cost", "price", "invested", "worth", "share", "invested_share", "gain", "realized", "dividends")
+"""The columns Home's investments table can show, in its order. The investment's name is always shown."""
+DEFAULT_TABLE_COLUMNS = ("invested", "worth", "share", "gain")
+TABLE_SHOWS = ("all", "gaining", "losing")
+"""Which investments the table shows."""
+
+
+def _table_columns(raw: object) -> tuple[str, ...]:
+    if not isinstance(raw, list):
+        return DEFAULT_TABLE_COLUMNS
+    return tuple(column for column in TABLE_COLUMNS if column in raw)
+
+
+def _table_sort(raw: object) -> tuple[str, bool] | None:
+    if isinstance(raw, list) and len(raw) == 2 and isinstance(raw[1], bool):
+        column = raw[0]
+        if column == "name" or column in TABLE_COLUMNS:
+            return column, raw[1]
+    return None
 
 
 @dataclass(frozen=True)
@@ -65,6 +84,12 @@ class Settings:
         """Backup copies kept next to the spreadsheet, at most one a day; 0 turns backups off. Set by the user."""
         self.appearance: str = "system"
         """Light or dark: "system" (as the computer is set), "light" or "dark". Set by the user."""
+        self.table_columns: tuple[str, ...] = DEFAULT_TABLE_COLUMNS
+        """The columns Home's investments table shows, besides the name, in ``TABLE_COLUMNS`` order."""
+        self.table_sort: tuple[str, bool] | None = None
+        """What the table is sorted by: (a column, or "name"; largest or Z first), or None for the statement's order."""
+        self.table_show: str = "all"
+        """Which investments the table shows: one of ``TABLE_SHOWS``."""
 
     @classmethod
     def load(cls, path: Path | None = None) -> Settings:
@@ -90,6 +115,12 @@ class Settings:
             settings.backups_kept = min(max(int(raw.get("backups_kept", BACKUPS_KEPT)), 0), MAX_BACKUPS_KEPT)
             appearance = raw.get("appearance", "system")
             settings.appearance = appearance if appearance in APPEARANCES else "system"
+            table = raw.get("table")
+            if isinstance(table, dict):  # anything else, or a damaged part, leaves the defaults
+                settings.table_columns = _table_columns(table.get("columns"))
+                settings.table_sort = _table_sort(table.get("sort"))
+                show = table.get("show")
+                settings.table_show = show if show in TABLE_SHOWS else "all"
         except (OSError, ValueError, TypeError, AttributeError) as exc:
             raise UserFacingError(
                 "The app's saved settings could not be read.",
@@ -112,6 +143,11 @@ class Settings:
             "history_sheet": self.history_sheet,
             "backups_kept": self.backups_kept,
             "appearance": self.appearance,
+            "table": {
+                "columns": list(self.table_columns),
+                "sort": list(self.table_sort) if self.table_sort else None,
+                "show": self.table_show,
+            },
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(".tmp")

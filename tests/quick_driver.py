@@ -242,6 +242,21 @@ def editor(window: QQuickWindow) -> QQuickItem:
     return found[0]
 
 
+def heading(window: QQuickWindow, text: str) -> QQuickItem:
+    """The heading reading ``text`` in the investments list (not the same words elsewhere on Home)."""
+    headers = [item for item in _items(window) if item.objectName() == "investmentHeader" and _shown(item)]
+    found = [item for item in _with_text(window) if _text(item) == text and any(_inside(item, header) for header in headers)]
+    assert len(found) == 1, f"{len(found)} headings read {text!r}"
+    return found[0]
+
+
+def field(window: QQuickWindow, placeholder: str) -> QQuickItem:
+    """The visible text field whose empty state reads ``placeholder``."""
+    found = [item for item in _items(window) if item.property("placeholderText") == placeholder and _shown(item)]
+    assert len(found) == 1, f"{len(found)} fields read {placeholder!r}"
+    return found[0]
+
+
 def row_items(window: QQuickWindow) -> list[QQuickItem]:
     """The rows of the investments list (the Total last), top to bottom, to click or double-click."""
     return sorted((item for item in _items(window) if item.objectName() == "investmentRow" and _shown(item)), key=_place)
@@ -296,9 +311,18 @@ def _window_of(item: QQuickItem) -> QQuickWindow:
 
 
 def scroll_to(item: QQuickItem) -> None:
-    """Scroll the page (any scrolling area around ``item``) until ``item`` is in view, as a user would."""
+    """Scroll the page (any scrolling area around ``item``, down or sideways) until ``item`` is in view, as a
+    user would."""
     parent = item.parentItem()
     while parent is not None:
+        if parent.property("contentX") is not None and parent.property("contentWidth") is not None:
+            content = parent.property("contentItem")
+            left = item.mapToItem(content, QPointF(0, 0)).x()
+            shown_from, width = parent.property("contentX"), parent.width()
+            if left < shown_from or left + item.width() > shown_from + width:
+                limit = max(0.0, parent.property("contentWidth") - width)
+                parent.setProperty("contentX", max(0.0, min(left + item.width() - width, limit)))
+                settle(QGuiApplication.instance())
         if parent.property("contentY") is not None and parent.property("contentHeight") is not None:
             content = parent.property("contentItem")
             top = item.mapToItem(content, QPointF(0, 0)).y()

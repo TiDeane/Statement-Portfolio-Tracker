@@ -197,8 +197,7 @@ def take(app: QGuiApplication, out: Path, scheme: str, work: Path) -> None:
     session.refresh()
     wait(app, lambda: not session.busy)
     session.ask_value = lambda choices, selected, currency: (selected, Decimal("627.50"))
-    tickers = [holding.position.ticker for holding in session.report.valuation.holdings]
-    session.home.enterValue(tickers.index("EDIV"))
+    session.home.enterValue("EDIV")
     wait(app, lambda: False, 0.3)
     # Only the list's first columns, up to "Worth now", so the marked value can be read when small.
     card = find(window, lambda item: item.objectName() == "investmentsCard")

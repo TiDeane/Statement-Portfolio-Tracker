@@ -13,7 +13,8 @@ from PySide6.QtCore import Property, QObject, QThreadPool, Signal, Slot
 
 from statement_tracker.core.models import MarketPrice
 from statement_tracker.gui.formatting import day_text, gain, money, shares_text, time_text
-from statement_tracker.gui.holdings_model import HoldingsModel, holding_rows, loading_rows, name_and_detail, total_row
+from statement_tracker.gui.holdings_model import HoldingsModel, holding_rows, loading_rows, name_and_detail, total_cells
+from statement_tracker.gui.table import HEADINGS, arrange, filter_line, next_sort
 
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.exporters.base import ExportResult
@@ -21,6 +22,7 @@ from statement_tracker.gui.welcome import NEW_SPREADSHEET_NAME, SPREADSHEET_FILE
 from statement_tracker.gui.undo import ENTERED, NAME
 from statement_tracker.gui.workers import Task
 from statement_tracker.kept_statement import KeptStatement, is_kept_statement
+from statement_tracker.settings import DEFAULT_TABLE_COLUMNS, TABLE_COLUMNS, TABLE_SHOWS
 from statement_tracker.workflow import Report, needs_price, update_spreadsheet, with_entered_prices
 
 if TYPE_CHECKING:
@@ -127,6 +129,14 @@ class Home(QObject):
         super().__init__(session)
         self._session = session
         self._holdings = HoldingsModel(self)
+        self._rows: list = []
+        """Every investment's row, in the usual order; the table shows them arranged (see ``_arrange``)."""
+        self._shown: list[str] = []
+        """The tickers the table shows, in its order."""
+        self._search = ""
+        """What is typed in the table's search box: not remembered."""
+        self._save_later = False
+        """A table choice was made while a fetch or an update could save the settings on its own thread."""
         self._progress = (0, 0, "")
         self._sheet_result = ""
         """What the last update of the spreadsheet did: "", "ok" or "error"."""
@@ -213,9 +223,105 @@ class Home(QObject):
             return f"{names[0]} has no price today, so these totals leave it out."
         return f"{listed(names)} have no price today, so these totals leave them out."
 
-    def _get_total_row(self) -> list[str]:
+    def _get_total_cells(self) -> dict[str, object]:
+        """The Total row's texts by column; empty while there is no Total."""
         report = self._report()
-        return total_row(report) if report and report.valuation.holdings else []
+        if report is None or not report.valuation.holdings or not self._shown:
+            return {}
+        return total_cells(report, self._shown, len(self._shown) < len(report.valuation.holdings))
+
+    # -- the table's columns ---------------------------------------------------------
+
+    def _get_columns(self) -> list[str]:
+        return list(self._session.settings.table_columns)
+
+    def _remember(self) -> None:
+        """Save the table's choices; during a fetch or an update, which may save the settings on their own
+        thread, once that ends."""
+        if self._session.busy or self._writing is not None:
+            self._save_later = True
+        else:
+            self._session.save_settings()
+
+    def _save_if_waiting(self) -> None:
+        if self._save_later and not self._session.busy and self._writing is None:
+            self._save_later = False
+            self._session.save_settings()
+
+    @Slot(str, bool)
+    def setColumnShown(self, key: str, shown: bool) -> None:
+        """Show or hide a column of the table (the name is always shown); remembered."""
+        settings = self._session.settings
+        if key not in TABLE_COLUMNS or (key in settings.table_columns) == shown:
+            return
+        settings.table_columns = tuple(column for column in TABLE_COLUMNS
+                                       if column == key and shown or column != key and column in settings.table_columns)
+        if not shown and settings.table_sort and settings.table_sort[0] == key:
+            settings.table_sort = None  # sorted by a column no longer shown: back to the usual order
+            self._arrange()
+        self._remember()
+        self.changed.emit()
+
+    @Slot()
+    def resetColumns(self) -> None:
+        """Back to the usual columns."""
+        settings = self._session.settings
+        settings.table_columns = DEFAULT_TABLE_COLUMNS
+        if settings.table_sort and settings.table_sort[0] not in ("name", *DEFAULT_TABLE_COLUMNS):
+            settings.table_sort = None
+            self._arrange()
+        self._remember()
+        self.changed.emit()
+
+    # -- the table's order -----------------------------------------------------------
+
+    def _sort(self) -> tuple[str, bool] | None:
+        return self._session.settings.table_sort
+
+    @Slot(str)
+    def sortBy(self, column: str) -> None:
+        """A heading was clicked: sort by its column, reverse, or go back to the usual order; remembered."""
+        settings = self._session.settings
+        if column != "name" and column not in settings.table_columns:
+            return
+        settings.table_sort = next_sort(settings.table_sort, column)
+        self._remember()
+        self._arrange()
+        self.changed.emit()
+
+    def _arrange(self) -> None:
+        settings = self._session.settings
+        shown = arrange(self._rows, settings.table_sort, settings.table_show, self._search, priced=self._report() is not None)
+        self._shown = [row.ticker for row in shown]
+        self._holdings.set_rows(shown)
+
+    # -- which investments the table shows -------------------------------------------
+
+    def _get_filter_line(self) -> str:
+        return filter_line(len(self._shown), len(self._rows), self._session.settings.table_show, self._search)
+
+    @Slot(str)
+    def setShow(self, choice: str) -> None:
+        """Show all investments, those gaining or those losing; remembered."""
+        if choice not in TABLE_SHOWS:
+            return
+        self._session.settings.table_show = choice
+        self._remember()
+        self._arrange()
+        self.changed.emit()
+
+    @Slot(str)
+    def setSearch(self, text: str) -> None:
+        """Keep the investments whose name or ticker contains ``text``; not remembered."""
+        self._search = text
+        self._arrange()
+        self.changed.emit()
+
+    @Slot()
+    def showAll(self) -> None:
+        """Every investment again: Show back to all, and the search emptied."""
+        self._search = ""
+        self.setShow("all")
 
     def _statement_place(self) -> tuple[str, str, str]:
         session = self._session
@@ -296,7 +402,16 @@ class Home(QObject):
     count = Property(str, _get_count, notify=changed)
     pricesLine = Property(str, _get_prices_line, notify=changed)
     leftOutLine = Property(str, _get_left_out_line, notify=changed)
-    totalRow = Property(list, _get_total_row, notify=changed)
+    totalCells = Property("QVariantMap", _get_total_cells, notify=changed)
+    columns = Property(list, _get_columns, notify=changed)
+    columnKeys = Property(list, lambda self: ["name", *TABLE_COLUMNS], constant=True)
+    headings = Property("QVariantMap", lambda self: dict(HEADINGS), constant=True)
+    sortColumn = Property(str, lambda self: self._sort()[0] if self._sort() else "", notify=changed)
+    show = Property(str, lambda self: self._session.settings.table_show, notify=changed)
+    showLabel = Property(str, lambda self: f"Show: {self._session.settings.table_show}", notify=changed)
+    search = Property(str, lambda self: self._search, notify=changed)
+    filterLine = Property(str, _get_filter_line, notify=changed)
+    sortDescending = Property(bool, lambda self: bool(self._sort() and self._sort()[1]), notify=changed)
     holdings = Property(QObject, lambda self: self._holdings, constant=True)
 
     # -- updating ------------------------------------------------------------------
@@ -304,11 +419,13 @@ class Home(QObject):
     def _update(self) -> None:
         report = self._report()
         if report is not None:
-            self._holdings.set_rows(holding_rows(report, self._session.settings))
+            self._rows = holding_rows(report, self._session.settings)
         else:
-            self._holdings.set_rows(loading_rows(self._session.loading_positions, self._session.settings))
+            self._rows = loading_rows(self._session.loading_positions, self._session.settings)
+        self._arrange()
         if not self._session.busy:
             self._progress = (0, 0, "")
+        self._save_if_waiting()
         self.changed.emit()
 
     def _show_progress(self, done: int, total: int, text: str) -> None:
@@ -361,20 +478,22 @@ class Home(QObject):
             self._session.unexpected(error)
 
     def _wrote(self) -> None:
+        self._save_if_waiting()
         self.changed.emit()
         if self._write_again:
             self._write_again = False
             self.updateSpreadsheet()
 
-    @Slot(int)
-    def enterValue(self, row: int) -> None:
-        """Let the user type in what the investment in ``row`` is worth now, when Yahoo has no current
+    @Slot(str)
+    def enterValue(self, ticker: str) -> None:
+        """Let the user type in what the investment ``ticker`` is worth now, when Yahoo has no current
         price for it. Kept as a price per share; the values are worked out again without fetching."""
         report = self._session.report
         if report is None or self._session.busy:
             return
         holdings = report.valuation.holdings
-        if not (0 <= row < len(holdings) and needs_price(holdings[row])):
+        clicked = next((holding for holding in holdings if holding.position.ticker == ticker), None)
+        if clicked is None or not needs_price(clicked):
             return
         settings = self._session.settings
         choices = [
@@ -383,7 +502,7 @@ class Home(QObject):
             for holding in holdings
             if needs_price(holding)
         ]
-        answer = self._session.ask_value(choices, holdings[row].position.ticker, report.statement.currency)
+        answer = self._session.ask_value(choices, ticker, report.statement.currency)
         if not answer:
             return
         ticker, value = answer
@@ -392,14 +511,14 @@ class Home(QObject):
         self._session.set_report(with_entered_prices(report, {ticker: value / shares}, settings, now=self._session.now()))
         self.rewrite_spreadsheet()
 
-    @Slot(int, str)
-    def rename(self, row: int, name: str) -> None:
-        """Show ``name`` for the investment in ``row`` from now on, here and in the spreadsheet. An empty
+    @Slot(str, str)
+    def rename(self, ticker: str, name: str) -> None:
+        """Show ``name`` for the investment ``ticker`` from now on, here and in the spreadsheet. An empty
         name goes back to the fund's name from Yahoo Finance."""
         report = self._session.report
-        if report is None or not 0 <= row < len(report.valuation.holdings):
+        if report is None or all(holding.position.ticker != ticker for holding in report.valuation.holdings):
             return
-        ticker, name = report.valuation.holdings[row].position.ticker, name.strip()
+        name = name.strip()
         settings = self._session.settings
         if name == (settings.index_name(ticker) or ""):
             return  # nothing changed

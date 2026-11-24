@@ -41,6 +41,8 @@ The app reads the account statement CSV file you export from the Revolut app. It
 - [Read Home](#read-home)
   - [The totals](#the-totals)
   - [The columns](#the-columns)
+  - [Sorting](#sorting)
+  - [Showing only some investments](#showing-only-some-investments)
   - [Renaming an investment](#renaming-an-investment)
   - [Undo](#undo)
 - [When a price is missing](#when-a-price-is-missing)
@@ -163,7 +165,7 @@ The app opens on **Home**, your investments, and looks up today's prices by itse
 
 - **The totals:** what everything is worth now, your gain or loss since you bought, and what you invested. **Refresh prices** looks the prices up again.
 - **Your statement** and **your spreadsheet**, side by side: where the values come from (the statement's file name and folder), and where they go.
-- **Your investments:** one row each, and the total.
+- **Your investments:** one row each, and the total. You can sort them, show only some of them, and choose the columns.
 
 To update your Excel file, press **Update my spreadsheet**. The app writes the values shown, without looking the prices up again, and says what it wrote in green under the button, or in red, with what to do, if it could not save the file (usually because it is open in Excel: close it there and press **Try again**). **Open folder** opens the folder the spreadsheet is in, with the file selected. Nothing is written until you press the button; after that, a name you change or a value you enter is written to the spreadsheet straight away, until you close the app.
 
@@ -203,7 +205,28 @@ The app remembers your answer and does not ask again. If you picked the wrong on
 | Share of total | How much of all your investments this one is, by what they are worth now. |
 | Gain or loss | Worth now minus invested, and as a percentage. |
 
-The last row is the total. Investments you have sold completely are not listed. The share of what you invested in each one is in your spreadsheet.
+The last row is the total. Investments you have sold completely are not listed.
+
+**Columns** (above the table) lets you tick the columns you want. Besides those above, it offers:
+
+| Column | Meaning |
+|---|---|
+| Shares | How many shares you hold. |
+| Average cost per share | What you paid for each share on average, fees included. |
+| Price per share | Today's price of one share, in your statement's currency. |
+| Share of invested | How much of what you invested went into this one. |
+| Gain from sales | What you gained or lost on the shares of it you sold. |
+| Dividends received | The dividends it paid you. |
+
+**Reset columns** brings back the usual ones. When the columns don't fit, the table scrolls sideways. The app remembers your columns; the spreadsheet keeps its own.
+
+### Sorting
+
+Click a column's heading to sort the table by it: the largest amounts first (names from A to Z). Click again for the other way round, and a third time for the usual order. An arrow beside the heading shows which column the table is sorted by. Investments without a value in that column always come last, and the total stays at the bottom. The app remembers how you sorted the table.
+
+### Showing only some investments
+
+**Show** chooses between **All investments**, **Gaining** (worth more than you paid) and **Losing** (worth less); an investment without a price today shows only under all. To find one investment, type part of its name or code in **Search by name or ticker**. While some investments are hidden, a line above the table says which ones are shown, with **Show all**, and the total covers only those: "Total of the 2 shown", with their part of your whole portfolio ("85.0 % of all"). **Worth now** at the top is always your whole portfolio. The app remembers what **Show** is set to, but not the search.
 
 Values that are not today's prices from Yahoo Finance are explained in [When a price is missing](#when-a-price-is-missing).
 

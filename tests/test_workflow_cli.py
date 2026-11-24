@@ -887,6 +887,33 @@ def test_damaged_settings_file_is_explained(tmp_path: Path) -> None:
     assert "saved settings could not be read" in str(error.value)
 
 
+def test_the_tables_choices_are_saved_and_damaged_ones_fall_back(tmp_path: Path) -> None:
+    # Spec F5: the columns, the sort and Show are remembered; a damaged entry falls back to the defaults.
+    import json
+
+    from statement_tracker.settings import DEFAULT_TABLE_COLUMNS
+
+    path = tmp_path / "settings.json"
+    fresh = Settings.load(path)
+    assert (fresh.table_columns, fresh.table_sort, fresh.table_show) == (DEFAULT_TABLE_COLUMNS, None, "all")
+
+    fresh.table_columns, fresh.table_sort, fresh.table_show = ("gain", "shares"), ("worth", True), "losing"
+    fresh.save()
+    loaded = Settings.load(path)
+    assert (loaded.table_columns, loaded.table_sort, loaded.table_show) == (("shares", "gain"), ("worth", True), "losing")
+
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["table"] = {"columns": ["shares", "nonsense", 3], "sort": ["nonsense", True], "show": "sideways"}
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    damaged = Settings.load(path)
+    assert (damaged.table_columns, damaged.table_sort, damaged.table_show) == (("shares",), None, "all")
+
+    raw["table"] = "broken"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    broken = Settings.load(path)
+    assert (broken.table_columns, broken.table_sort, broken.table_show) == (DEFAULT_TABLE_COLUMNS, None, "all")
+
+
 def test_the_days_of_backups_kept_are_saved_and_kept_in_range(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
     assert Settings.load(path).backups_kept == 1

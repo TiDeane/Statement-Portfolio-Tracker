@@ -4,12 +4,14 @@ import QtQuick.Layouts
 
 // The app's button. `kind`: "primary" (the one green action of an area), "secondary" (outlined),
 // "text" (minor actions) or "danger" (forgetting things). Outlined in the text colour only when
-// reached with the keyboard.
+// reached with the keyboard. `lit`: a secondary button drawn in the accent colours, for a choice in force.
 Button {
     id: control
     property string kind: "secondary"
     property string iconName: ""
+    property bool lit: false
     readonly property color ink: kind === "primary" ? Theme.accentText
+                                : lit ? Theme.accentInk
                                 : kind === "text" ? Theme.accentInk
                                 : kind === "danger" ? Theme.errInk
                                 : Theme.text
@@ -45,8 +47,10 @@ Button {
         color: control.kind === "primary"
                ? (control.down ? Qt.darker(Theme.accent, 1.12) : control.hovered ? Qt.darker(Theme.accent, 1.06) : Theme.accent)
                : control.kind === "text" ? (control.down || control.hovered ? Theme.subtle : "transparent")
+               : control.lit ? Theme.accentSoft
                : (control.down || control.hovered ? Theme.subtle : Theme.surface)
         border.width: control.visualFocus ? 2 : (control.kind === "primary" || control.kind === "text" ? 0 : 1)
-        border.color: control.visualFocus ? Theme.text : control.kind === "danger" ? Theme.errBorder : Theme.borderStrong
+        border.color: control.visualFocus ? Theme.text : control.kind === "danger" ? Theme.errBorder
+                    : control.lit ? Theme.accent : Theme.borderStrong
     }
 }

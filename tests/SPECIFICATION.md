@@ -109,7 +109,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - **Back** returns to step 1 with the statement still chosen. **Show my investments**, enabled once an option is chosen, remembers the choice and opens Home.
   - When a spreadsheet is already remembered (someone upgrading from version 1.3 or earlier), step 2 is skipped.
 - **F4.** Home, the totals: "Your portfolio", then **Worth now** in large type with the statement's currency, the gain or loss since buying (sign, arrow and colour, amount and %), **Invested** and the number of investments.
-  - While prices are fetched, the amounts show placeholders, a progress bar moves forward and a line says what is being done.
+  - While prices are fetched, the amounts show placeholders, a progress bar moves forward and a line says what is being done (reading the statement, then the spreadsheet for values typed into it, then the listings and prices).
   - Then "Today's prices from Yahoo Finance, <time>" and **Refresh prices**, which fetches again.
   - Totals cover only what has a value (B8). When something is left out, a line says "<names> has (have) no price today, so these totals leave it (them) out."
 - **F5.** Home, the investments list: one row per investment held, then a bold **Total**.

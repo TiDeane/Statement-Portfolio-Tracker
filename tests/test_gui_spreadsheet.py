@@ -168,6 +168,22 @@ def held_back(monkeypatch, target: str):
     return let_go
 
 
+def test_a_fetch_says_when_it_reads_the_spreadsheet(app, tmp_path: Path, monkeypatch) -> None:
+    # Spec F4: the line under the totals says what is being done, reading the spreadsheet included
+    # (values typed into it are looked for before prices are fetched), not "Reading your statement".
+    Workbook().save(tmp_path / "mine.xlsx")
+    shell = home_with_spreadsheet(app, tmp_path)
+    let_go = held_back(monkeypatch, "statement_tracker.gui.session.values_typed_in")
+
+    click(find(shell.window, "Refresh prices"), wait=False)
+
+    wait_until(app, lambda: shows(shell.window, "Reading your spreadsheet"))
+    assert not shows(shell.window, "Reading your statement")
+    let_go.set()
+    wait_until(app, lambda: not shell.session.home.property("busy"))
+    assert shows(shell.window, "589.31")  # 1.47328346 shares at 400
+
+
 def test_updating_the_spreadsheet_does_not_freeze_the_window(app, tmp_path: Path, monkeypatch) -> None:
     # Spec F7: a moving bar while it writes; its buttons and Settings wait.
     shell = home_with_spreadsheet(app, tmp_path)

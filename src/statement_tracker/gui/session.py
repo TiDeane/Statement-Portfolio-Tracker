@@ -257,6 +257,8 @@ class Session(QObject):
         def work() -> tuple[Report, KeptStatement | None]:
             progress(0, 0, "Reading your statement...")
             self.statementRead.emit(task, read_statement(statement))
+            if spreadsheet is not None and spreadsheet.exists():
+                progress(0, 0, "Reading your spreadsheet...")  # for values typed into it
             typed, typed_at = values_typed_in(self.settings, spreadsheet)
             report = build_report(
                 statement,

@@ -104,7 +104,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - A line says that everything stays on this computer and only fund codes and dates go to Yahoo Finance, with **About and privacy**.
   - Shown again (after the statement is forgotten in Settings), first launch starts afresh: step 1, nothing chosen.
 - **F3.** First launch, step 2: keep a spreadsheet up to date?
-  - Three options, one chosen at a time: **Use a spreadsheet I have** (opens the file chooser), **Create a new one** (asks where to save it; ".xlsx" is added when missing) and **Not now**. A file chosen shows in its option with **Choose another…**; cancelling the chooser keeps the choice before. An .xlsx dropped on the window is a spreadsheet I have.
+  - Three options, one chosen at a time: **Use a spreadsheet I have** (opens the file chooser), **Create a new one** (asks where to save it, suggesting "investments_<today's date>.xlsx", e.g. investments_2026-11-24.xlsx, as on Home and in Settings; ".xlsx" is added when missing; Home creates it as soon as today's prices are in, without **Update my spreadsheet**) and **Not now**. A file chosen shows in its option with **Choose another…**; cancelling the chooser keeps the choice before. An .xlsx dropped on the window is a spreadsheet I have.
   - A line says a backup copy is saved beside the file before each day's first change, and names the app's two sheets.
   - **Back** returns to step 1 with the statement still chosen. **Show my investments**, enabled once an option is chosen, remembers the choice and opens Home.
   - When a spreadsheet is already remembered (someone upgrading from version 1.3 or earlier), step 2 is skipped.
@@ -128,7 +128,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - **Update my spreadsheet** writes the values shown, without fetching again; it waits for the prices. Writing does not freeze the window: the card says "Updating your spreadsheet…" with a moving bar, and its buttons and Settings wait. The card then says "Your spreadsheet is up to date" (or "Your spreadsheet was created") in green, with what was written to Current Holdings, whether today's history row was added or updated (or why not, and what it leaves out) and the backup copy's name.
   - A spreadsheet that cannot be saved is said in red: "Your spreadsheet wasn't updated", what happened, what to do and **Copy details**; the values stay shown and the button reads **Try again**.
   - **Open folder** opens the folder the spreadsheet is in, with the file selected where the system allows it.
-  - Without a spreadsheet, the card offers **Choose spreadsheet…** and **Create a new one…**. An .xlsx dropped on Home becomes the spreadsheet.
+  - Without a spreadsheet, the card offers **Choose spreadsheet…** and **Create a new one…**. A new one is created as soon as today's prices are in, without pressing **Update my spreadsheet** (until then the card says "It will be created as soon as today's prices are in."); one asked for in Settings is created when Home shows again. An .xlsx dropped on Home becomes the spreadsheet.
   - When backup copies are turned off, the card says so in red.
 - **F8.** Values that are not today's from Yahoo:
   - An investment without a value is greyed: its Worth now reads "No price today", its share "Not in the total", and its gain is a button **Enter its value…**. Double-clicking the row does the same.

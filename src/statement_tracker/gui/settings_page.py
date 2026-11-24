@@ -12,7 +12,7 @@ from statement_tracker import __version__
 from statement_tracker.core.exporters.excel import MAX_BACKUPS_KEPT
 from statement_tracker.gui.formatting import day_text
 from statement_tracker.gui.texts import PRIVACY_TEXT, RELEASES_URL
-from statement_tracker.gui.welcome import NEW_SPREADSHEET_NAME, SPREADSHEET_FILES, STATEMENT_FILES
+from statement_tracker.gui.welcome import SPREADSHEET_FILES, STATEMENT_FILES, new_spreadsheet_name
 from statement_tracker.gui.home import statement_place
 from statement_tracker.kept_statement import forget_kept_statement
 from statement_tracker.price_cache import PriceCache
@@ -293,9 +293,11 @@ class SettingsPage(QObject):
 
     @Slot()
     def createSpreadsheet(self) -> None:
-        chosen = self._session.ask_save_file("Where should the new spreadsheet be saved?", self._session.start_folder() / NEW_SPREADSHEET_NAME)
+        chosen = self._session.ask_save_file("Where should the new spreadsheet be saved?", self._session.start_folder() / new_spreadsheet_name(self._session.today()))
         if chosen is not None:
-            self._session.use_spreadsheet(chosen if chosen.suffix.lower() == ".xlsx" else chosen.with_name(chosen.name + ".xlsx"))
+            sheet = chosen if chosen.suffix.lower() == ".xlsx" else chosen.with_name(chosen.name + ".xlsx")
+            self._session.use_spreadsheet(sheet)
+            self._session.new_spreadsheet = sheet  # created by Home once it shows again
 
     @Slot()
     def stopUsingSpreadsheet(self) -> None:

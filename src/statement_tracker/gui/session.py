@@ -153,6 +153,8 @@ class Session(QObject):
         self.statementRead.connect(self._statement_read)
         self.updated_this_session: Path | None = None
         """The spreadsheet updated while the app is open: changes made since are written to it at once."""
+        self.new_spreadsheet: Path | None = None
+        """A spreadsheet the user asked to create: written as soon as the values are in (Home)."""
 
         # The user's answers. Replaced in tests, which stand in for the user.
         self.ask_open_file: Callable[[str, str, Path], Path | None] = self._ask_open_file

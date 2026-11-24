@@ -127,6 +127,22 @@ def test_without_a_spreadsheet_the_card_offers_one(app, tmp_path: Path) -> None:
     assert shows(shell.window, "new.xlsx", "Update my spreadsheet")
 
 
+def test_a_new_spreadsheet_is_created_without_pressing_update(app, tmp_path: Path) -> None:
+    # Spec F7, H5: created at once, and updating it again the same day makes no backup copy of it.
+    shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
+    wait_until(app, lambda: not shell.session.home.property("busy"))
+    suggested = []
+    shell.session.ask_save_file = lambda title, start: (suggested.append(start.name), tmp_path / "new")[1]
+
+    click(find(shell.window, "Create a new one…"))
+    assert suggested == ["investments_2026-10-12.xlsx"]  # today's date
+
+    assert load_workbook(tmp_path / "new.xlsx").sheetnames == SHEETS
+    assert shows(shell.window, "Your spreadsheet was created")
+    update(shell)
+    assert not list(tmp_path.glob("new_backup_*.xlsx"))
+
+
 def test_a_spreadsheet_dropped_on_home_is_the_one_updated(app, tmp_path: Path) -> None:
     # Spec F7.
     shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)

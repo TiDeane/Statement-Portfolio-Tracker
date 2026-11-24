@@ -352,6 +352,22 @@ def test_appearance_can_be_light_or_dark_and_is_remembered(app, tmp_path: Path) 
     assert again.window.property("color").name().upper() == LIGHT["bg"] and saved(tmp_path).appearance == "light"
 
 
+def test_a_new_spreadsheet_made_in_settings_is_created_back_on_home(app, tmp_path: Path) -> None:
+    # Spec G1, F7: Settings waits for no writing; the spreadsheet is created once Home shows again.
+    shell = home(app, tmp_path)
+    to_settings(shell)
+    suggested = []
+    shell.session.ask_save_file = lambda title, start: (suggested.append(start.name), tmp_path / "new")[1]
+
+    click(find(shell.window, "Create a new one…"))
+    assert suggested == ["investments_2026-10-12.xlsx"]  # today's date
+    assert not (tmp_path / "new.xlsx").exists()
+    click(find(shell.window, "Your portfolio"))
+
+    wait_until(app, lambda: (tmp_path / "new.xlsx").exists() and not shell.session.home.property("writing"))
+    assert shows(shell.window, "Your spreadsheet was created")
+
+
 def test_the_frame_qt_draws_around_the_window_takes_the_apps_colours(app, tmp_path: Path) -> None:
     # Spec F11: on Linux, Qt draws the window's title bar and frame itself, in the application's colours.
     from PySide6.QtGui import QColor, QPalette

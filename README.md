@@ -167,7 +167,7 @@ The app opens on **Home**, your investments, and looks up today's prices by itse
 - **Your statement** and **your spreadsheet**, side by side: where the values come from (the statement's file name and folder), and where they go.
 - **Your investments:** one row each, and the total. You can sort them, show only some of them, and choose the columns.
 
-To update your Excel file, press **Update my spreadsheet**. The app writes the values shown, without looking the prices up again, and says what it wrote in green under the button, or in red, with what to do, if it could not save the file (usually because it is open in Excel: close it there and press **Try again**). **Open folder** opens the folder the spreadsheet is in, with the file selected. Nothing is written until you press the button; after that, a name you change or a value you enter is written to the spreadsheet straight away, until you close the app.
+To update your Excel file, press **Update my spreadsheet**. The app writes the values shown, without looking the prices up again, and says what it wrote in green under the button, or in red, with what to do, if it could not save the file (usually because it is open in Excel: close it there and press **Try again**). **Open folder** opens the folder the spreadsheet is in, with the file selected. Nothing is written until you press the button, except a spreadsheet you asked the app to create, which it makes as soon as today's prices are in; after that, a name you change or a value you enter is written to the spreadsheet straight away, until you close the app.
 
 **Help** (the **?** at the top) shows where to get the statement, how your data is handled, and the app's version.
 
@@ -268,7 +268,7 @@ Each time you press **Update my spreadsheet**, the app writes your values into t
 
 ### New or existing spreadsheet
 
-**Create a new one** makes an Excel file with only the app's two sheets. This is the safest choice.
+**Create a new one** makes an Excel file with only the app's two sheets, as soon as today's prices are in. It suggests a name with today's date, such as `investments_2026-11-24.xlsx`, which you can change. This is the safest choice.
 
 **Use a spreadsheet I have** adds the two sheets to an Excel file you already have. Your own sheets in it are not changed, but to save the file the app has to write all of it again:
 

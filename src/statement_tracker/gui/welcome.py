@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -19,7 +20,13 @@ if TYPE_CHECKING:
 
 STATEMENT_FILES = "Statement files (*.csv)"
 SPREADSHEET_FILES = "Excel spreadsheets (*.xlsx)"
-NEW_SPREADSHEET_NAME = "My investments.xlsx"
+
+
+def new_spreadsheet_name(day: date) -> str:
+    """The name suggested for a new spreadsheet, with ``day``'s date as the backup copies write it:
+    "investments_2026-11-24.xlsx"."""
+    return f"investments_{day.isoformat()}.xlsx"
+
 
 
 def statement_facts(summary: StatementSummary) -> list[str]:
@@ -171,7 +178,7 @@ class Welcome(QObject):
 
     @Slot()
     def chooseNew(self) -> None:
-        chosen = self._session.ask_save_file("Where should the new spreadsheet be saved?", self._sheet_folder() / NEW_SPREADSHEET_NAME)
+        chosen = self._session.ask_save_file("Where should the new spreadsheet be saved?", self._sheet_folder() / new_spreadsheet_name(self._session.today()))
         if chosen is not None:
             self._choice = "new"
             self._spreadsheet = chosen if chosen.suffix.lower() == ".xlsx" else chosen.with_name(chosen.name + ".xlsx")
@@ -192,5 +199,7 @@ class Welcome(QObject):
         if self._step == "spreadsheet":
             self._session.settings.spreadsheet_path = self._spreadsheet if self._choice != "none" else None
             self._session.save_settings()
+            if self._choice == "new":
+                self._session.new_spreadsheet = self._spreadsheet  # created once today's prices are in
         self._session.statement = self._statement
         self._session.open_home()

@@ -18,7 +18,7 @@ from statement_tracker.gui.table import HEADINGS, arrange, filter_line, next_sor
 
 from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.exporters.base import ExportResult
-from statement_tracker.gui.welcome import NEW_SPREADSHEET_NAME, SPREADSHEET_FILES, STATEMENT_FILES
+from statement_tracker.gui.welcome import SPREADSHEET_FILES, STATEMENT_FILES, new_spreadsheet_name
 from statement_tracker.gui.undo import ENTERED, NAME
 from statement_tracker.gui.workers import Task
 from statement_tracker.kept_statement import KeptStatement, is_kept_statement
@@ -156,6 +156,7 @@ class Home(QObject):
         session.settingsChanged.connect(self._update)
         session.busyChanged.connect(self._update)
         session.progressed.connect(self._show_progress)
+        session.pageChanged.connect(self._create_if_asked)
 
     # -- what is shown -------------------------------------------------------------
 
@@ -350,6 +351,8 @@ class Home(QObject):
         if self._updated_at is not None and self._updated_on == self._session.today():
             return f"Updated today at {time_text(self._updated_at)}"
         if self._session.busy:
+            if self._session.new_spreadsheet == sheet and not sheet.exists():
+                return "It will be created as soon as today's prices are in."
             return "Ready once today's prices are in"
         if not sheet.exists():
             return "It doesn't exist yet: updating creates it."
@@ -429,6 +432,7 @@ class Home(QObject):
         if not self._session.busy:
             self._progress = (0, 0, "")
         self._save_if_waiting()
+        self._create_if_asked()
         self.changed.emit()
 
     def _show_progress(self, done: int, total: int, text: str) -> None:
@@ -559,9 +563,24 @@ class Home(QObject):
     @Slot()
     def createSpreadsheet(self) -> None:
         start = self._sheet().parent if self._sheet() else self._session.start_folder()
-        chosen = self._session.ask_save_file("Where should the new spreadsheet be saved?", start / NEW_SPREADSHEET_NAME)
+        chosen = self._session.ask_save_file("Where should the new spreadsheet be saved?", start / new_spreadsheet_name(self._session.today()))
         if chosen is not None:
-            self._session.use_spreadsheet(chosen if chosen.suffix.lower() == ".xlsx" else chosen.with_name(chosen.name + ".xlsx"))
+            sheet = chosen if chosen.suffix.lower() == ".xlsx" else chosen.with_name(chosen.name + ".xlsx")
+            self._session.use_spreadsheet(sheet)
+            self._session.new_spreadsheet = sheet
+            self._create_if_asked()
+
+    def _create_if_asked(self) -> None:
+        """Create the spreadsheet the user asked for ("Create a new one"), once the values are in: no need to
+        press "Update my spreadsheet" for it. One that exists by then is left for the button. Asked for in
+        Settings, it is created when Home shows again: nothing is written while Settings is open."""
+        sheet = self._session.new_spreadsheet
+        session = self._session
+        if sheet is None or session.page != "home" or session.busy or session.report is None or self._writing is not None:
+            return
+        self._session.new_spreadsheet = None
+        if sheet == self._sheet() and not sheet.exists():
+            self.updateSpreadsheet()
 
     def _other_spreadsheet(self) -> None:
         """What was said of the spreadsheet before is not about this one."""

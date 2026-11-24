@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 from fakes import SAMPLE, SAMPLES, FakeProvider
-from quick_driver import app, click, close_windows_afterwards, drop, find, open_app, shows, wait_until  # noqa: F401
+from quick_driver import app, click, close_windows_afterwards, drop, find, open_app, provider_with, shows, wait_until  # noqa: F401
 
 from statement_tracker.settings import Settings
 
@@ -103,6 +103,21 @@ def test_create_a_new_one_adds_the_xlsx_ending(app, tmp_path: Path) -> None:
     click(find(shell.window, "Show my investments"))
 
     assert Settings.load(tmp_path / "settings.json").spreadsheet_path == tmp_path / "Investments.xlsx"
+
+
+def test_a_new_spreadsheet_is_created_once_the_prices_are_in(app, tmp_path: Path) -> None:
+    # Spec F3: no need to press "Update my spreadsheet" for the spreadsheet just asked for.
+    shell = open_app(tmp_path, provider_with("EQQB.DE"))
+    to_step_2(shell)
+    suggested = []
+    shell.session.ask_save_file = lambda title, start: (suggested.append(start.name), tmp_path / "Investments")[1]
+
+    click(find(shell.window, "Create a new one"))
+    assert suggested == ["investments_2026-10-12.xlsx"]  # today's date
+    click(find(shell.window, "Show my investments"))
+    wait_until(app, lambda: (tmp_path / "Investments.xlsx").exists() and not shell.session.home.property("writing"))
+
+    assert shows(shell.window, "Your spreadsheet was created")
 
 
 def test_cancelling_the_file_chooser_keeps_the_choice_before(app, tmp_path: Path) -> None:

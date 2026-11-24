@@ -15,7 +15,7 @@ In a scratch folder, not your real spreadsheet:
 - [ ] Open the file in Excel. In **Current Holdings**, the ZQXJ row is grey and its Current Value reads "unavailable" in red. The Total covers EQQB only, and the percentages show with a % sign.
 - [ ] In **Portfolio History**, today's row is light orange, with a comment on its date saying it leaves out ZQXJ.
 - [ ] Type `400` over "unavailable". The row turns black, the Total and the percentages follow at once, and today's history row follows too and loses its orange.
-- [ ] Save, close Excel, and press the green button again. ZQXJ shows 400.00 marked "(your value)".
+- [ ] Save, close Excel, and press "Update my spreadsheet" again. ZQXJ shows 400.00 marked "(your value)".
 
 ## 3. A long history
 

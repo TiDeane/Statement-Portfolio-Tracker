@@ -87,7 +87,7 @@ class Settings:
         self.table_columns: tuple[str, ...] = DEFAULT_TABLE_COLUMNS
         """The columns Home's investments table shows, besides the name, in ``TABLE_COLUMNS`` order."""
         self.table_sort: tuple[str, bool] | None = None
-        """What the table is sorted by: (a column, or "name"; largest or Z first), or None for the statement's order."""
+        """What the table is sorted by: (a column, or "name"; largest or Z first), or None for the usual order (by ticker)."""
         self.table_show: str = "all"
         """Which investments the table shows: one of ``TABLE_SHOWS``."""
 
@@ -119,6 +119,8 @@ class Settings:
             if isinstance(table, dict):  # anything else, or a damaged part, leaves the defaults
                 settings.table_columns = _table_columns(table.get("columns"))
                 settings.table_sort = _table_sort(table.get("sort"))
+                if settings.table_sort and settings.table_sort[0] not in ("name", *settings.table_columns):
+                    settings.table_sort = None  # by a column not shown: the usual order, as when it is hidden
                 show = table.get("show")
                 settings.table_show = show if show in TABLE_SHOWS else "all"
         except (OSError, ValueError, TypeError, AttributeError) as exc:

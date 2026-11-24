@@ -120,7 +120,7 @@ def worth_note(price: MarketPrice | None) -> str:
 
 
 def holding_rows(report: Report, settings: Settings) -> list[HoldingRow]:
-    """Home's rows for a valued portfolio, in statement order."""
+    """Home's rows for a valued portfolio, in the usual order (by ticker)."""
     rows = []
     for holding in report.valuation.holdings:
         ticker = holding.position.ticker

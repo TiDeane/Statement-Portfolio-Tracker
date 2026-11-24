@@ -18,6 +18,12 @@ Rectangle {
     implicitHeight: Math.max(38, cells.implicitHeight + 16)
     color: Theme.subtle
 
+    Rectangle {  // the line above the headings, apart from what is above them
+        width: parent.width
+        height: 1
+        color: Theme.border
+    }
+
     RowLayout {
         id: cells
         anchors.left: parent.left
@@ -42,7 +48,7 @@ Rectangle {
                 implicitHeight: label.implicitHeight
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
-                Layout.minimumWidth: Columns.minimum[modelData]
+                Layout.minimumWidth: Columns.minimumFor(modelData, header.columns)
                 Layout.horizontalStretchFactor: Columns.stretch[modelData]
                 onClicked: header.sortClicked(modelData)
 

@@ -897,10 +897,10 @@ def test_the_tables_choices_are_saved_and_damaged_ones_fall_back(tmp_path: Path)
     fresh = Settings.load(path)
     assert (fresh.table_columns, fresh.table_sort, fresh.table_show) == (DEFAULT_TABLE_COLUMNS, None, "all")
 
-    fresh.table_columns, fresh.table_sort, fresh.table_show = ("gain", "shares"), ("worth", True), "losing"
+    fresh.table_columns, fresh.table_sort, fresh.table_show = ("gain", "shares"), ("gain", True), "losing"
     fresh.save()
     loaded = Settings.load(path)
-    assert (loaded.table_columns, loaded.table_sort, loaded.table_show) == (("shares", "gain"), ("worth", True), "losing")
+    assert (loaded.table_columns, loaded.table_sort, loaded.table_show) == (("shares", "gain"), ("gain", True), "losing")
 
     raw = json.loads(path.read_text(encoding="utf-8"))
     raw["table"] = {"columns": ["shares", "nonsense", 3], "sort": ["nonsense", True], "show": "sideways"}
@@ -912,6 +912,19 @@ def test_the_tables_choices_are_saved_and_damaged_ones_fall_back(tmp_path: Path)
     path.write_text(json.dumps(raw), encoding="utf-8")
     broken = Settings.load(path)
     assert (broken.table_columns, broken.table_sort, broken.table_show) == (DEFAULT_TABLE_COLUMNS, None, "all")
+
+
+def test_a_saved_sort_on_a_column_not_shown_is_dropped(tmp_path: Path) -> None:
+    # Spec F5: as when the sorted column is hidden, the table goes back to its usual order.
+    import json
+
+    path = tmp_path / "settings.json"
+    Settings(path).save()
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    for sort, kept in ((["worth", True], None), (["shares", False], ("shares", False)), (["name", True], ("name", True))):
+        raw["table"] = {"columns": ["shares"], "sort": sort, "show": "all"}
+        path.write_text(json.dumps(raw), encoding="utf-8")
+        assert Settings.load(path).table_sort == kept
 
 
 def test_the_days_of_backups_kept_are_saved_and_kept_in_range(tmp_path: Path) -> None:

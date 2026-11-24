@@ -210,7 +210,7 @@ Rectangle {
             implicitHeight: worthColumn.implicitHeight
             Layout.fillWidth: true
             Layout.preferredWidth: 1
-            Layout.minimumWidth: Columns.minimum.worth
+            Layout.minimumWidth: Columns.minimumFor("worth", row.columns)
             Layout.horizontalStretchFactor: Columns.stretch.worth
             ColumnLayout {
                 id: worthColumn
@@ -238,9 +238,16 @@ Rectangle {
                     Layout.alignment: Qt.AlignRight
                 }
                 Chip {
-                    visible: row.missing
+                    visible: row.missing && row.columns.indexOf("gain") >= 0
                     text: "No price today"
                     tone: "warn"
+                    Layout.alignment: Qt.AlignRight
+                }
+                SecondaryButton {  // here when Gain or loss, where it usually is, is hidden
+                    visible: row.missing && row.columns.indexOf("gain") < 0
+                    implicitHeight: 36
+                    text: "Enter its value…"
+                    onClicked: row.doubleClicked()
                     Layout.alignment: Qt.AlignRight
                 }
             }

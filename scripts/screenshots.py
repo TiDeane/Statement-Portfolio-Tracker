@@ -199,14 +199,17 @@ def take(app: QGuiApplication, out: Path, scheme: str, work: Path) -> None:
     session.ask_value = lambda choices, selected, currency: (selected, Decimal("627.50"))
     session.home.enterValue("EDIV")
     wait(app, lambda: False, 0.3)
-    # Only the list's first columns, up to "Worth now", so the marked value can be read when small.
+    # Only the list's first columns, up to "Worth now", from its headings down (above them are the search box
+    # and the buttons), so the marked value can be read when small.
     card = find(window, lambda item: item.objectName() == "investmentsCard")
+    headings = find(window, lambda item: item.objectName() == "investmentHeader")
     share = find(window, lambda item: item.property("text") == "Share of total")
-    top_left = card.mapToScene(QPointF(0, 0))
+    left = card.mapToScene(QPointF(0, 0)).x()
+    top = headings.mapToScene(QPointF(0, 0)).y()
+    bottom = card.mapToScene(QPointF(0, card.height())).y()
     right = share.mapToScene(QPointF(0, 0)).x() - 8
     scale = window.devicePixelRatio()  # the picture is drawn at QT_SCALE_FACTOR, the items measured without it
-    crop = QRect(int(top_left.x() * scale), int(top_left.y() * scale),
-                 int((right - top_left.x()) * scale), int(card.height() * scale))
+    crop = QRect(int(left * scale), int(top * scale), int((right - left) * scale), int((bottom - top) * scale))
     window.grabWindow().copy(crop).save(str(out / f"entered-value-{scheme}.png"))
     print("saved", f"entered-value-{scheme}.png")
 

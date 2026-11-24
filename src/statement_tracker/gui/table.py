@@ -64,9 +64,9 @@ def arrange(rows: list[HoldingRow], sort: tuple[str, bool] | None, show: str, se
     return valued + [row for row in shown if row.sort_values.get(column) is None]
 
 
-def filter_line(shown: int, held: int, show: str, search: str) -> str:
-    """What the line above the table says while some investments are hidden: which ones are shown. ""
-    when none are hidden."""
+def filter_line(shown: int, held: int, show: str, search: str, total: bool = True) -> str:
+    """What the line above the table says while some investments are hidden: which ones are shown, and
+    (with a ``total`` row) that the Total covers only those. "" when none are hidden."""
     if shown == held:
         return ""
     if shown == 0:
@@ -77,5 +77,5 @@ def filter_line(shown: int, held: int, show: str, search: str) -> str:
         reasons.append(f"{'is' if one else 'are'} {show}")
     if search.strip():
         reasons.append(f"{'matches' if one else 'match'} \u201c{search.strip()}\u201d")
-    return (f"Showing the {shown} of your {held} investments that {' and '.join(reasons)}. "
-            "The Total below covers only these.")
+    line = f"Showing the {shown} of your {held} investments that {' and '.join(reasons)}."
+    return line + " The Total below covers only these." if total else line

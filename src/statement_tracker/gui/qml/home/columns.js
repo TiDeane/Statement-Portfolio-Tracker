@@ -18,6 +18,14 @@ var minimum = {
     share: 100, invested_share: 80, gain: 175, realized: 100, dividends: 90
 }
 
+// The least width of a column, given the columns shown: Worth now makes room for "Enter its value…"
+// when Gain or loss, where that button usually is, is hidden.
+function minimumFor(key, columns) {
+    if (key === "worth" && columns.indexOf("gain") < 0)
+        return 150
+    return minimum[key]
+}
+
 // Texts and bars start on the left; amounts end on the right.
 function leftAligned(key) {
     return key === "name" || key === "share"
@@ -27,6 +35,6 @@ function leftAligned(key) {
 function needed(columns) {
     var width = 2 * margin + minimum.name
     for (var i = 0; i < columns.length; i++)
-        width += spacing + minimum[columns[i]]
+        width += spacing + minimumFor(columns[i], columns)
     return width
 }

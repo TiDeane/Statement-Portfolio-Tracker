@@ -298,7 +298,10 @@ class Home(QObject):
     # -- which investments the table shows -------------------------------------------
 
     def _get_filter_line(self) -> str:
-        return filter_line(len(self._shown), len(self._rows), self._session.settings.table_show, self._search)
+        # While prices come in, Show waits for them and there is no Total yet: the line says neither.
+        priced = self._report() is not None
+        show = self._session.settings.table_show if priced else "all"
+        return filter_line(len(self._shown), len(self._rows), show, self._search, total=priced)
 
     @Slot(str)
     def setShow(self, choice: str) -> None:

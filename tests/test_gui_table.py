@@ -412,3 +412,35 @@ def test_table_choices_made_during_a_fetch_are_saved_once_it_ends(app, tmp_path:
         provider.let_go.set()
     wait_until(app, lambda: not again.session.home.property("busy"))
     assert Settings.load(tmp_path / "settings.json").table_sort == ("name", False)
+
+
+def test_while_prices_come_in_the_line_says_only_what_is_hidden(app, tmp_path: Path) -> None:
+    # Spec F5: Show waits for the values, and there is no Total yet.
+    shell = table(app, tmp_path)
+    choose_show(shell, "Gaining")
+    provider = HeldBack()
+    for ticker, price in PRICES.items():
+        provider.add(f"{ticker}.DE", "EUR", price=price)
+    again = open_app(tmp_path, provider)
+    try:
+        search_for(again, "tech")
+        assert names(again) == ["Tech fund"]
+        assert shows(again.window, "Showing the 1 of your 3 investments that matches \u201ctech\u201d.")
+        assert not shows(again.window, "gaining and")
+        assert not shows(again.window, "The Total below")
+    finally:
+        provider.let_go.set()
+    wait_until(app, lambda: not again.session.home.property("busy"))
+
+
+def test_a_value_can_be_entered_with_gain_or_loss_hidden(app, tmp_path: Path) -> None:
+    # Spec F5, F8: the button moves under Worth now.
+    shell = table(app, tmp_path, WXYZ=None)
+    click(find(shell.window, "Columns"))
+    click(column_choice(shell, "Gain or loss"))
+    click(find(shell.window, "Columns"))
+    asked = []
+    shell.session.ask_value = lambda choices, selected, currency: asked.append(selected)
+
+    click(find(shell.window, "Enter its value…"))
+    assert asked == ["WXYZ"]

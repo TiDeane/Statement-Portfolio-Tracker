@@ -376,3 +376,17 @@ def test_the_investment_menu_is_drawn_in_the_apps_colours_under_its_button(app, 
         press(shell.window, Qt.Key.Key_Escape)
         assert not shows(shell.window, "Rename")
 
+
+def test_settings_names_the_statement_file(app, tmp_path: Path) -> None:
+    # Spec G1, F6.
+    from test_gui_home import newer_statement
+
+    from quick_driver import drop
+
+    shell = home(app, tmp_path)
+    newer = newer_statement(tmp_path)
+    drop(shell.window, newer)
+    wait_until(app, lambda: not shell.session.busy)
+    to_settings(shell)
+
+    assert shows(shell.window, "newer.csv", f"In {newer.parent.resolve()}")

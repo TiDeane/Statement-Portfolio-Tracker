@@ -13,6 +13,7 @@ from statement_tracker.core.exporters.excel import MAX_BACKUPS_KEPT
 from statement_tracker.gui.formatting import day_text
 from statement_tracker.gui.texts import PRIVACY_TEXT, RELEASES_URL
 from statement_tracker.gui.welcome import NEW_SPREADSHEET_NAME, SPREADSHEET_FILES, STATEMENT_FILES
+from statement_tracker.gui.home import statement_place
 from statement_tracker.kept_statement import forget_kept_statement
 from statement_tracker.price_cache import PriceCache
 from statement_tracker.settings import APPEARANCES, Settings
@@ -136,6 +137,10 @@ class SettingsPage(QObject):
         kept = self._session.kept
         return f"Latest transaction {day_text(kept.latest)}" if kept else "No statement is kept."
 
+    def _statement_place(self) -> tuple[str, str, str]:
+        kept = self._session.kept
+        return statement_place(kept.path if kept else None, kept, self._settings.path)
+
     def _sheet_folder(self) -> str:
         sheet = self._settings.spreadsheet_path
         return f"In {sheet.parent}" if sheet else ""
@@ -146,6 +151,9 @@ class SettingsPage(QObject):
     alwaysFirst = Property(bool, lambda self: self._settings.always_use_first_listing, notify=changed)
     hasStatement = Property(bool, lambda self: self._session.kept is not None, notify=changed)
     statementLine = Property(str, _statement_line, notify=changed)
+    statementName = Property(str, lambda self: self._statement_place()[0], notify=changed)
+    statementFolder = Property(str, lambda self: self._statement_place()[1], notify=changed)
+    statementNote = Property(str, lambda self: self._statement_place()[2], notify=changed)
     hasSpreadsheet = Property(bool, lambda self: self._settings.spreadsheet_path is not None, notify=changed)
     spreadsheetName = Property(
         str, lambda self: self._settings.spreadsheet_path.name if self._settings.spreadsheet_path else "", notify=changed

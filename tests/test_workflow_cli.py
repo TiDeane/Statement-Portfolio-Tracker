@@ -1000,3 +1000,25 @@ def test_read_statement_summarises_a_statement_without_fetching_anything(tmp_pat
     assert summary.latest == max(t.timestamp for t in load_statement(SAMPLE).transactions).astimezone().date()
     with pytest.raises(UserFacingError):
         read_statement(write_statement(tmp_path, "2025-01-06T10:00:00.000Z,ABCD,SOMETHING ELSE,1,EUR 1,EUR 1,EUR,1"))
+
+
+def test_the_kept_statement_remembers_where_it_was_read_from(tmp_path: Path) -> None:
+    # Spec F1, J2.
+    from statement_tracker.kept_statement import find_kept_statement, forget_kept_statement, kept_statement_path
+
+    settings = tmp_path / "app" / "settings.json"
+    symbols = ("--symbol", "ABCD=ABCD.DE", "--symbol", "WXYZ=WXYZ.DE")
+    first = statement_in(tmp_path / "downloads", *TWO_HOLDINGS)
+    run_cli(str(first), *symbols, provider=two_holdings_provider(), settings=settings)
+    assert find_kept_statement(settings).source == first.resolve()
+
+    newer = statement_in(tmp_path / "elsewhere", *TWO_HOLDINGS)
+    run_cli(str(newer), provider=two_holdings_provider(), settings=settings)
+    assert find_kept_statement(settings).source == newer.resolve()
+
+    run_cli(provider=two_holdings_provider(), settings=settings)  # the kept copy itself, read again
+    assert find_kept_statement(settings).source == newer.resolve()
+
+    forget_kept_statement(settings)
+    kept_statement_path(settings).write_text(newer.read_text(encoding="utf-8"), encoding="utf-8")
+    assert find_kept_statement(settings).source is None  # forgotten with the copy

@@ -20,6 +20,7 @@ from statement_tracker.core.exporters.base import ExportResult
 from statement_tracker.gui.welcome import NEW_SPREADSHEET_NAME, SPREADSHEET_FILES, STATEMENT_FILES
 from statement_tracker.gui.undo import ENTERED, NAME
 from statement_tracker.gui.workers import Task
+from statement_tracker.kept_statement import KeptStatement, is_kept_statement
 from statement_tracker.workflow import Report, needs_price, update_spreadsheet, with_entered_prices
 
 if TYPE_CHECKING:
@@ -68,6 +69,25 @@ def value_question(choice: ValueChoice, currency: str) -> dict[str, str]:
 def listed(names: list[str]) -> str:
     """"A", "A and B", "A, B and C"."""
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+STATEMENT_GONE = "This file has been moved or deleted since. The app uses the copy it kept."
+
+
+def statement_place(statement: Path | None, kept: KeptStatement | None, settings_path: Path) -> tuple[str, str, str]:
+    """Which statement file the values come from: its name, "In <folder>", and a note (or "").
+
+    For the copy kept from last time, that is the file it was copied from, with a note if that file is no
+    longer there. Empty without a statement, or for a copy whose origin was not recorded: the app's own
+    copy, in its own folder, would tell the user nothing.
+    """
+    if statement is None:
+        return "", "", ""
+    if kept is not None and is_kept_statement(statement, settings_path):
+        if kept.source is None:
+            return "", "", ""
+        return kept.source.name, f"In {kept.source.parent}", "" if kept.source.exists() else STATEMENT_GONE
+    return statement.name, f"In {statement.resolve().parent}", ""
 
 
 def result_lines(report: Report, exported: ExportResult) -> list[str]:
@@ -197,6 +217,10 @@ class Home(QObject):
         report = self._report()
         return total_row(report) if report and report.valuation.holdings else []
 
+    def _statement_place(self) -> tuple[str, str, str]:
+        session = self._session
+        return statement_place(session.statement, session.kept, session.settings.path)
+
     def _get_statement_line(self) -> str:
         latest = self._session.statement_latest
         return f"Latest transaction {day_text(latest)}. Anything after it isn't included." if latest else ""
@@ -258,6 +282,9 @@ class Home(QObject):
 
     busy = Property(bool, _get_busy, notify=changed)
     statementLine = Property(str, _get_statement_line, notify=changed)
+    statementName = Property(str, lambda self: self._statement_place()[0], notify=changed)
+    statementFolder = Property(str, lambda self: self._statement_place()[1], notify=changed)
+    statementNote = Property(str, lambda self: self._statement_place()[2], notify=changed)
     hasReport = Property(bool, lambda self: self._report() is not None, notify=changed)
     progressText = Property(str, _get_progress_text, notify=changed)
     progressFraction = Property(float, _get_progress_fraction, notify=changed)

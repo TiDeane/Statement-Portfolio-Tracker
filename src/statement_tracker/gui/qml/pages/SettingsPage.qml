@@ -327,10 +327,33 @@ Item {
                                 spacing: 2
                                 Layout.fillWidth: true
                                 Text {
-                                    text: page.settings.statementLine
+                                    visible: text !== ""
+                                    text: page.settings.statementName
                                     color: Theme.text
                                     font.pixelSize: 14
                                     font.weight: Font.DemiBold
+                                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                                    Layout.fillWidth: true
+                                }
+                                Muted {
+                                    visible: text !== ""
+                                    text: page.settings.statementFolder
+                                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                                }
+                                Text {
+                                    visible: text !== ""
+                                    text: page.settings.statementNote
+                                    color: Theme.warnInk
+                                    font.pixelSize: 13
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                }
+                                Text {
+                                    text: page.settings.statementLine
+                                    color: page.settings.hasStatement ? Theme.muted : Theme.text
+                                    font.pixelSize: page.settings.hasStatement ? 13 : 14
+                                    font.weight: page.settings.hasStatement ? Font.Normal : Font.DemiBold
+                                    Layout.topMargin: page.settings.hasStatement ? 4 : 0
                                 }
                                 Muted {
                                     visible: page.settings.hasStatement

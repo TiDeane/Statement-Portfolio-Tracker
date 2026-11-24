@@ -95,7 +95,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
 ## F. The window
 
 - **F1.** Opening: with a statement kept from last time, the app opens on Home and fetches today's prices. With none, or one that can no longer be read, it opens on first launch, without an error message.
-  - Once a fetch has read a statement to the end, a copy of it is kept in the app's own folder, replacing the one kept before. One that cannot be read, or a fetch that is stopped, keeps the one from before.
+  - Once a fetch has read a statement to the end, a copy of it is kept in the app's own folder, replacing the one kept before, with where the file was read from. One that cannot be read, or a fetch that is stopped, keeps the one from before.
 - **F2.** First launch, step 1: the statement.
   - A drop area ("Drop your Revolut statement here", with **Choose statement file…**) beside "Where do I get it?": the Revolut steps and "Always pick All time".
   - Dropping a statement anywhere on the window or choosing one reads it at once, without freezing the window: the drop area says "Reading your statement…" with a moving bar meanwhile. One that reads shows its file name, "<n> transactions, the latest on <date>" and "<n> investments you still hold", with **Choose another file…**. One that does not read is explained (F11) and the step stays as it was.
@@ -115,7 +115,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
 - **F5.** Home, the investments list: one row per investment held, then a bold **Total**.
   - Columns: Investment, Invested, Worth now, Share of total, Gain or loss. The investment's name comes first (the user's own, else Yahoo's, else its ticker), with "TICKER · exchange" under it.
   - Many investments scroll with the page; the window keeps its size and long names are cut short.
-- **F6.** Home, the statement: a card "Your statement" with "Latest transaction <date>. Anything after it isn't included." and **Use a newer statement…**, "or drop it on this window".
+- **F6.** Home, the statement: a card "Your statement" with the statement's file name, "In <its folder>" (the whole path, wrapped if long), "Latest transaction <date>. Anything after it isn't included." and **Use a newer statement…**, "or drop it on this window". For the copy kept from last time, the file named is the one it was copied from; if that file has been moved or deleted since, the card says so and that the app's own copy is used. A copy kept before the app recorded where it came from names no file: its own copy, in the app's folder, would tell the user nothing.
   - A statement chosen or dropped anywhere on Home is read, prices are fetched for it, and it becomes the one kept (F1). One that does not read is explained and the one shown stays.
   - A new statement, **Refresh prices** or closing the window while prices are being fetched stops that fetch: nothing of it is saved or shown.
 - **F7.** Home, the spreadsheet: a card with the file's name and one of "Last changed <date>", "Updated today at <time>", "Not updated today", "Ready once today's prices are in" or "It doesn't exist yet: updating creates it.", with **Open folder** and **Update my spreadsheet**.
@@ -154,7 +154,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
 
 - **G1.** Settings is a page, reached from Home's **Settings** and left with **← Your portfolio** (first launch when no statement is kept). A side menu of its chapters (Your investments, Your statement, Your spreadsheet, Appearance, About and privacy) stays in place while the page scrolls, marks the chapter being read, and scrolls to a chapter when it is clicked.
   - **Your investments:** every investment the app keeps something about, with its name, "TICKER · symbol, exchange, currency" and a status (Chosen by you, Matched automatically, Asks you next time, Not matched yet, and "value entered by you"). Its **⋯** menu opens under the button, in the app's own colours (light or dark), and offers **Rename**, **Choose the listing next time** and **Forget…** (in red, set apart by a line) (asks first; removes the listing, the name and the value entered). **Forget all investments…** asks first and keeps the spreadsheet, the statement and the last prices. The switch **Take the first listing without asking**. With nothing kept, the list says why. Ctrl+Z takes back the last change (F10).
-  - **Your statement:** its latest transaction, **Use a newer one…** and **Forget it…** (asks first; then first launch asks for a statement again). With none kept, it says so.
+  - **Your statement:** the file it was read from (as in F6), its latest transaction, **Use a newer one…** and **Forget it…** (asks first; then first launch asks for a statement again). With none kept, it says so.
   - **Your spreadsheet:** its name and folder, **Open folder**, **Choose another…** and **Stop using it**; without one, **Choose spreadsheet…** and **Create a new one…**. **Backup copies to keep**, from 0 to 99, with **−** and **+**.
   - **Appearance:** **Use device theme** (the default), **Light** or **Dark**, applied at once and remembered.
   - **About and privacy:** the version, where new versions are, the privacy text and the disclaimer.
@@ -222,7 +222,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
 ## J. Privacy, safety, packaging
 
 - **J1.** Only ticker symbols and dates are sent to Yahoo. Amounts, quantities and the statement are never sent.
-- **J2.** Only listings, names, prices per share, settings and a copy of the last statement read (F1) are kept, all in the app's own folder. No amount from the statement is kept anywhere else.
+- **J2.** Only listings, names, prices per share, settings and a copy of the last statement read with where it was read from (F1) are kept, all in the app's own folder. No amount from the statement is kept anywhere else.
 - **J3.** A damaged settings file is explained, not silently reset. Tests never touch the real settings or the network.
 - **J4.** The packaged app's smoke test reads the sample offline and writes a spreadsheet.
 - **J5.** On Windows, the installer can tell that the app is open.

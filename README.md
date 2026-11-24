@@ -162,7 +162,7 @@ The app opens on a short welcome in two steps.
 The app opens on **Home**, your investments, and looks up today's prices by itself: the amounts fill in after a few seconds, with a progress bar until then. Home has three parts:
 
 - **The totals:** what everything is worth now, your gain or loss since you bought, and what you invested. **Refresh prices** looks the prices up again.
-- **Your statement** and **your spreadsheet**, side by side: where the values come from, and where they go.
+- **Your statement** and **your spreadsheet**, side by side: where the values come from (the statement's file name and folder), and where they go.
 - **Your investments:** one row each, and the total.
 
 To update your Excel file, press **Update my spreadsheet**. The app writes the values shown, without looking the prices up again, and says what it wrote in green under the button, or in red, with what to do, if it could not save the file (usually because it is open in Excel: close it there and press **Try again**). **Open folder** opens the folder the spreadsheet is in, with the file selected. Nothing is written until you press the button; after that, a name you change or a value you enter is written to the spreadsheet straight away, until you close the app.
@@ -171,7 +171,7 @@ To update your Excel file, press **Update my spreadsheet**. The app writes the v
 
 ### Today's values without a new statement
 
-The app keeps a copy of the last statement you used, so it does not need a new one each time. The **Your statement** part of Home says the date of its latest transaction.
+The app keeps a copy of the last statement you used, so it does not need a new one each time. The **Your statement** part of Home names the file it was copied from, with its folder, and says the date of its latest transaction. The copy still works if you move or delete that file; Home then says so.
 
 > **Bought, sold or added money since then?** The statement from last time doesn't know about it, so the amounts invested, the cash and the money put in would be out of date. Get a new statement from Revolut and drop it anywhere on the window, or press **Use a newer statement...**. The app looks up the prices for it and keeps that one from then on.
 
@@ -348,7 +348,7 @@ The switch **Take the first listing without asking** is explained in [If the app
 
 ### Your statement
 
-The date of the latest transaction in the statement the app keeps, which lets it [look up today's values without a new statement](#todays-values-without-a-new-statement). **Use a newer one...** reads a new statement. **Forget it...** deletes the app's copy, after asking: the app then asks for a statement again, and keeps the next one you use. Your investments, your spreadsheet and the file you downloaded from Revolut are not changed. Ctrl+Z does not bring the copy back.
+The statement the app keeps: the name and folder of the file it was copied from, and the date of its latest transaction. This copy lets the app [look up today's values without a new statement](#todays-values-without-a-new-statement). **Use a newer one...** reads a new statement. **Forget it...** deletes the app's copy, after asking: the app then asks for a statement again, and keeps the next one you use. Your investments, your spreadsheet and the file you downloaded from Revolut are not changed. Ctrl+Z does not bring the copy back.
 
 ### Your spreadsheet
 
@@ -368,7 +368,7 @@ Everything happens on your computer. There are no accounts, and the app does not
 
 The only information that leaves your computer are the codes of your investments and dates, sent to Yahoo Finance to look up prices. Your amounts and your statement file are never sent anywhere.
 
-The app keeps its settings (your confirmed investments and where your spreadsheet is), the last price it found for each fund, any values you entered, and a copy of the last statement you used (`last_statement.csv`, so that [today's values need no new statement](#todays-values-without-a-new-statement)), in your user folder: `%LOCALAPPDATA%\StatementPortfolioTracker` on Windows, `~/Library/Application Support/StatementPortfolioTracker` on macOS and `~/.config/StatementPortfolioTracker` on Linux. Prices and values are kept as prices per share. The copy of your statement holds your whole trading history, like the file you downloaded from Revolut, so anyone who can open your user folder can read it; **Settings** can [forget it](#your-statement). Together they take a few kilobytes. Uninstalling the app on Windows deletes that folder; otherwise (macOS, or running from the source), delete it yourself.
+The app keeps its settings (your confirmed investments and where your spreadsheet is), the last price it found for each fund, any values you entered, and a copy of the last statement you used (`last_statement.csv`, so that [today's values need no new statement](#todays-values-without-a-new-statement), with where you loaded it from in `last_statement.json`), in your user folder: `%LOCALAPPDATA%\StatementPortfolioTracker` on Windows, `~/Library/Application Support/StatementPortfolioTracker` on macOS and `~/.config/StatementPortfolioTracker` on Linux. Prices and values are kept as prices per share. The copy of your statement holds your whole trading history, like the file you downloaded from Revolut, so anyone who can open your user folder can read it; **Settings** can [forget it](#your-statement). Together they take a few kilobytes. Uninstalling the app on Windows deletes that folder; otherwise (macOS, or running from the source), delete it yourself.
 
 ## Known limitations
 

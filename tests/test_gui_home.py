@@ -268,3 +268,36 @@ def test_a_newer_statement_is_read_without_freezing_the_window(app, tmp_path: Pa
     let_go.set()
     settled(app, shell)
     assert shows(shell.window, "629.31")
+
+
+def test_home_names_the_statement_file_and_its_folder(app, tmp_path: Path) -> None:
+    # Spec F6, F1.
+    shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
+    settled(app, shell)
+    newer = newer_statement(tmp_path)
+
+    drop(shell.window, newer)
+    settled(app, shell)
+    assert shows(shell.window, "newer.csv", f"In {newer.parent.resolve()}")
+
+    again = open_app(tmp_path, provider_with("EQQB.DE"))  # the next day: the copy kept is used
+    settled(app, again)
+    assert shows(again.window, "newer.csv", f"In {newer.parent.resolve()}")
+    assert not shows(again.window, "This file has been moved or deleted since. The app uses the copy it kept.")
+
+    newer.unlink()  # the download is cleared away
+    gone = open_app(tmp_path, provider_with("EQQB.DE"))
+    settled(app, gone)
+    assert shows(gone.window, "newer.csv", "This file has been moved or deleted since. The app uses the copy it kept.")
+
+
+def test_a_copy_kept_without_its_origin_names_no_file(app, tmp_path: Path) -> None:
+    # Spec F6: kept by an earlier version, which did not record where the statement came from. The app's
+    # own copy, in its own folder, would tell the user nothing.
+    shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
+    settled(app, shell)
+
+    latest = max(t.timestamp for t in load_statement(SAMPLE).transactions).astimezone().date()
+    assert shows(shell.window, "Your statement", f"Latest transaction {day_text(latest)}. Anything after it isn't included.")
+    assert not shows(shell.window, "last_statement.csv")
+    assert not any(text.startswith("In ") for text in texts(shell.window))

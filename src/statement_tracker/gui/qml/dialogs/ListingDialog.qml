@@ -166,20 +166,11 @@ Popup {
             }
         }
 
-        CheckBox {
+        AppCheckBox {
             id: always
             visible: dialog.hasOptions
             text: "From now on, take the first listing without asking. The best match always comes first."
-            font.pixelSize: 13
             Layout.fillWidth: true
-            contentItem: Text {
-                text: always.text
-                font: always.font
-                color: Theme.text
-                wrapMode: Text.Wrap
-                leftPadding: always.indicator.width + always.spacing
-                verticalAlignment: Text.AlignVCenter
-            }
         }
 
         RowLayout {

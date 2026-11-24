@@ -350,3 +350,29 @@ def test_appearance_can_be_light_or_dark_and_is_remembered(app, tmp_path: Path) 
 
     again = open_app(tmp_path, provider_with())
     assert again.window.property("color").name().upper() == LIGHT["bg"] and saved(tmp_path).appearance == "light"
+
+
+def test_the_investment_menu_is_drawn_in_the_apps_colours_under_its_button(app, tmp_path: Path) -> None:
+    # Spec G1.
+    from PySide6.QtCore import QPointF
+
+    shell = home(app, tmp_path)
+    to_settings(shell)
+    for look, colours in (("Dark", DARK), ("Light", LIGHT)):
+        click(find(shell.window, look))
+        button = find(shell.window, "More for Nasdaq fund")
+        click(button)
+        rename = find(shell.window, "Rename")
+        inside = rename.mapToScene(QPointF(3, rename.height() / 2))
+        ratio = shell.window.devicePixelRatio()
+
+        def colour_inside() -> str:
+            picture = shell.window.grabWindow()
+            return picture.pixelColor(int(inside.x() * ratio), int(inside.y() * ratio)).name().upper()
+
+        wait_until(app, lambda: colour_inside() == colours["surface"], 2)  # once it has faded in
+        menu_right = rename.mapToScene(QPointF(rename.width(), 0)).x()
+        assert menu_right <= button.mapToScene(QPointF(button.width(), 0)).x() + 8  # not past its button
+        press(shell.window, Qt.Key.Key_Escape)
+        assert not shows(shell.window, "Rename")
+

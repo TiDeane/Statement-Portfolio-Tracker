@@ -110,3 +110,49 @@ def test_take_the_first_from_now_on_is_saved_at_once(app, tmp_path: Path) -> Non
     wait_until(app, lambda: not shell.session.home.property("busy"))
 
     assert Settings.load(tmp_path / "settings.json").always_use_first_listing
+
+
+def test_the_tick_box_follows_the_apps_colours_not_the_computers(app, tmp_path: Path) -> None:
+    # Spec F9, F11: with the computer in dark mode and Light chosen in the app (and the other way round),
+    # the tick box is drawn in the app's colours: empty, the card's colour; ticked, the green.
+    from PySide6.QtCore import QPointF
+    from PySide6.QtGui import QColor, QGuiApplication, QPalette
+
+    from statement_tracker.gui.theme import DARK, LIGHT
+
+    original = QGuiApplication.palette()
+    try:
+        for look, computer, colours in (("light", "#000000", LIGHT), ("dark", "#FFFFFF", DARK)):
+            computer_palette = QPalette(original)
+            for role in (QPalette.ColorRole.Base, QPalette.ColorRole.Window, QPalette.ColorRole.Button,
+                         QPalette.ColorRole.Mid, QPalette.ColorRole.Light, QPalette.ColorRole.Dark):
+                computer_palette.setColor(role, QColor(computer))
+            QGuiApplication.setPalette(computer_palette)
+            folder = tmp_path / look
+            folder.mkdir()
+            chosen = Settings.load(folder / "settings.json")
+            chosen.appearance = look
+            chosen.save()
+            shell = open_app(folder, provider_with(), real_dialogs=True)
+            seen = []
+
+            def look_at_the_tick_box(shell) -> None:
+                box = find(shell.window, "From now on, take the first listing without asking. The best match always comes first.")
+                mark = box.property("indicator")
+                ratio = shell.window.devicePixelRatio()
+
+                def colour() -> str:
+                    point = mark.mapToScene(QPointF(4, mark.height() - 4))
+                    return shell.window.grabWindow().pixelColor(int(point.x() * ratio), int(point.y() * ratio)).name().upper()
+
+                wait_until(app, lambda: colour() == colours["surface"], 2)
+                click(box)
+                wait_until(app, lambda: colour() == colours["accent"], 2)
+                seen.append(look)
+                click(find(shell.window, "Skip this investment"))
+
+            when_a_dialog_opens(shell, lambda: look_at_the_tick_box(shell))
+            shell.session.ask_listing(ambiguous())
+            assert seen == [look]
+    finally:
+        QGuiApplication.setPalette(original)

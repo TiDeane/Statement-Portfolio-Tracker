@@ -12,6 +12,26 @@ ApplicationWindow {
     minimumHeight: 560
     title: "Statement Portfolio Tracker"
     color: Theme.bg
+
+    // Qt's own parts (scroll bars, selected text, anything the app does not draw itself) take these
+    // colours rather than the computer's: the app can be light on a computer in dark mode, and the other way round.
+    palette.window: Theme.bg
+    palette.windowText: Theme.text
+    palette.base: Theme.surface
+    palette.alternateBase: Theme.subtle
+    palette.text: Theme.text
+    palette.button: Theme.surface
+    palette.buttonText: Theme.text
+    palette.light: Theme.subtle
+    palette.midlight: Theme.border
+    palette.mid: Theme.borderStrong
+    palette.dark: Theme.muted
+    palette.shadow: Theme.borderStrong
+    palette.highlight: Theme.accent
+    palette.highlightedText: Theme.accentText
+    palette.placeholderText: Theme.muted
+    palette.toolTipBase: Theme.surface
+    palette.toolTipText: Theme.text
     onClosing: {
         session.stopRun()  // closing stops a fetch: nothing of it is saved
         dialogs.cancel()

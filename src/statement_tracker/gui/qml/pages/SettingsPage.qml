@@ -254,13 +254,14 @@ Item {
                                         id: more
                                         text: "More for " + investment.name
                                         iconName: "more"
-                                        onClicked: menu.popup(more, 0, more.height)
+                                        onClicked: menu.popup(more, more.width - menu.width, more.height + 4)  // under it, right edges lined up
                                     }
                                 }
-                                Menu {
+                                AppMenu {
                                     id: menu
-                                    MenuItem {
+                                    AppMenuItem {
                                         text: "Rename"
+                                        iconName: "pencil"
                                         onTriggered: {
                                             editor.text = investment.editName
                                             investment.editing = true
@@ -268,13 +269,17 @@ Item {
                                             editor.selectAll()
                                         }
                                     }
-                                    MenuItem {
+                                    AppMenuItem {
                                         text: "Choose the listing next time"
+                                        iconName: "refresh"
                                         enabled: !investment.status.startsWith("Asks") && !investment.status.startsWith("Not matched")
                                         onTriggered: page.settings.chooseAgain(investment.ticker)
                                     }
-                                    MenuItem {
+                                    AppMenuSeparator {}
+                                    AppMenuItem {
                                         text: "Forget…"
+                                        iconName: "trash"
+                                        danger: true
                                         onTriggered: page.settings.forget(investment.ticker)
                                     }
                                 }

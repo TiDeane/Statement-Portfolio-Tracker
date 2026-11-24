@@ -33,6 +33,19 @@ BACKUPS_OFF = "No backup copy will be made before it is changed: backups are tur
 NO_HISTORY_ROW = (
     "Updating now writes these values, without a history row: Portfolio History only takes days with today's prices."
 )
+CELL_TEXTS = {
+    "shares": ("shares",),
+    "average_cost": ("average_cost",),
+    "price": ("price",),
+    "invested": ("invested",),
+    "worth": ("worth", "worth_note"),
+    "share": ("share",),
+    "invested_share": ("invested_share",),
+    "gain": ("gain",),
+    "realized": ("realized",),
+    "dividends": ("dividends",),
+}
+"""What each column of the table shows, by HoldingRow field."""
 VALUE_NOTE = "It's marked \u201cyour value\u201d here and in the spreadsheet, and kept until Yahoo Finance has a price again."
 
 
@@ -233,6 +246,16 @@ class Home(QObject):
 
     # -- the table's columns ---------------------------------------------------------
 
+    def _get_widest(self) -> dict[str, str]:
+        """The longest text of each column, in its rows and the Total: the window makes each column at
+        least that wide, measured in the font it is drawn in, so no amount spills into the next one."""
+        total = self._get_total_cells()
+        widest = {}
+        for column, names in CELL_TEXTS.items():
+            texts = [str(getattr(row, name)) for row in self._rows for name in names]
+            widest[column] = max([*texts, str(total.get(column, ""))], key=len)
+        return widest
+
     def _get_columns(self) -> list[str]:
         return list(self._session.settings.table_columns)
 
@@ -411,6 +434,7 @@ class Home(QObject):
     totalCells = Property("QVariantMap", _get_total_cells, notify=changed)
     columns = Property(list, _get_columns, notify=changed)
     columnKeys = Property(list, lambda self: ["name", *TABLE_COLUMNS], constant=True)
+    widest = Property("QVariantMap", _get_widest, notify=changed)
     headings = Property("QVariantMap", lambda self: dict(HEADINGS), constant=True)
     sortColumn = Property(str, lambda self: self._sort()[0] if self._sort() else "", notify=changed)
     show = Property(str, lambda self: self._session.settings.table_show, notify=changed)

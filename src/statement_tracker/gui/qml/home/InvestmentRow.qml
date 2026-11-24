@@ -10,6 +10,7 @@ Rectangle {
     id: row
     property string mode: "holding"
     property var columns: []
+    property var widths: ({})  // each column's least width, from columns.js minimums()
     property string name: ""
     property string detail: ""
     property string shares: ""
@@ -56,6 +57,7 @@ Rectangle {
     component Amount: Text {
         property string key
         property var shownColumns: []
+        property var widths: ({})
         property bool waiting: false  // its value is on its way: a placeholder instead
 
         visible: shownColumns.indexOf(key) >= 0
@@ -66,7 +68,7 @@ Rectangle {
         elide: Text.ElideRight
         Layout.fillWidth: true
         Layout.preferredWidth: 1
-        Layout.minimumWidth: Columns.minimum[key]
+        Layout.minimumWidth: Columns.widthOf(key, shownColumns, widths)
         Layout.horizontalStretchFactor: Columns.stretch[key]
 
         Skeleton {
@@ -94,7 +96,7 @@ Rectangle {
             Accessible.name: row.name
             Layout.fillWidth: true
             Layout.preferredWidth: 1
-            Layout.minimumWidth: Columns.minimum.name
+            Layout.minimumWidth: Columns.widthOf("name", row.columns, row.widths)
             Layout.horizontalStretchFactor: Columns.stretch.name
 
             function startEditing() {
@@ -182,18 +184,21 @@ Rectangle {
         Amount {
             key: "shares"
             shownColumns: row.columns
+            widths: row.widths
             text: row.shares
             font.weight: row.weight
         }
         Amount {
             key: "average_cost"
             shownColumns: row.columns
+            widths: row.widths
             text: row.averageCost
             font.weight: row.weight
         }
         Amount {
             key: "price"
             shownColumns: row.columns
+            widths: row.widths
             text: row.loading ? "" : row.price
             waiting: row.loading
             font.weight: row.weight
@@ -201,6 +206,7 @@ Rectangle {
         Amount {
             key: "invested"
             shownColumns: row.columns
+            widths: row.widths
             text: row.invested
             font.weight: row.weight
         }
@@ -210,7 +216,7 @@ Rectangle {
             implicitHeight: worthColumn.implicitHeight
             Layout.fillWidth: true
             Layout.preferredWidth: 1
-            Layout.minimumWidth: Columns.minimumFor("worth", row.columns)
+            Layout.minimumWidth: Columns.widthOf("worth", row.columns, row.widths)
             Layout.horizontalStretchFactor: Columns.stretch.worth
             ColumnLayout {
                 id: worthColumn
@@ -258,7 +264,7 @@ Rectangle {
             spacing: 10
             Layout.fillWidth: true
             Layout.preferredWidth: 1
-            Layout.minimumWidth: Columns.minimum.share
+            Layout.minimumWidth: Columns.widthOf("share", row.columns, row.widths)
             Layout.horizontalStretchFactor: Columns.stretch.share
             ProgressLine {
                 visible: row.mode === "holding" && !row.loading && row.share !== ""
@@ -290,6 +296,7 @@ Rectangle {
         Amount {
             key: "invested_share"
             shownColumns: row.columns
+            widths: row.widths
             text: row.investedShare
             color: Theme.muted
             font.weight: row.total ? Font.DemiBold : Font.Normal
@@ -300,7 +307,7 @@ Rectangle {
             implicitHeight: gainText.implicitHeight
             Layout.fillWidth: true
             Layout.preferredWidth: 1
-            Layout.minimumWidth: Columns.minimum.gain
+            Layout.minimumWidth: Columns.widthOf("gain", row.columns, row.widths)
             Layout.horizontalStretchFactor: Columns.stretch.gain
             Text {
                 id: gainText
@@ -332,6 +339,7 @@ Rectangle {
         Amount {
             key: "realized"
             shownColumns: row.columns
+            widths: row.widths
             text: row.realized
             color: row.realizedTone === "up" ? Theme.gain : row.realizedTone === "down" ? Theme.loss : Theme.text
             font.weight: row.weight
@@ -339,6 +347,7 @@ Rectangle {
         Amount {
             key: "dividends"
             shownColumns: row.columns
+            widths: row.widths
             text: row.dividends
             font.weight: row.weight
         }

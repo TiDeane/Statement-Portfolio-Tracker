@@ -10,6 +10,7 @@ Rectangle {
     id: header
     property var columns: []
     property var headings: ({})
+    property var widths: ({})  // each column's least width, from columns.js minimums()
     property string sortColumn: ""
     property bool sortDescending: true
     signal sortClicked(string column)
@@ -48,7 +49,7 @@ Rectangle {
                 implicitHeight: label.implicitHeight
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
-                Layout.minimumWidth: Columns.minimumFor(modelData, header.columns)
+                Layout.minimumWidth: Columns.widthOf(modelData, header.columns, header.widths)
                 Layout.horizontalStretchFactor: Columns.stretch[modelData]
                 onClicked: header.sortClicked(modelData)
 

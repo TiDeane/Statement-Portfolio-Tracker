@@ -377,12 +377,12 @@ def test_the_toolbar_moves_under_the_title_on_a_small_window(app, tmp_path: Path
 
 
 def test_long_numbers_fit_their_columns(app, tmp_path: Path, english_computer) -> None:
-    # Spec F5: Shares with all its decimals, and a large loss inside its own column.
+    # Spec F5: Shares with all its decimals, and a large loss inside its own column, whatever the font.
     with_listings(tmp_path, ABCD=("ABCD.DE", "World fund"))
-    statement = write_statement(tmp_path, "2025-01-06T09:00:00.000Z,,CASH TOP-UP,,,EUR 12000,EUR,1",
-                                "2025-01-06T10:00:00.000Z,ABCD,BUY - MARKET,31.47328346,EUR 367.53,EUR 11567.21,EUR,1")
+    statement = write_statement(tmp_path, "2025-01-06T09:00:00.000Z,,CASH TOP-UP,,,EUR 1200000000,EUR,1",
+                                "2025-01-06T10:00:00.000Z,ABCD,BUY - MARKET,31.47328346,EUR 36752020.00,EUR 1156721000,EUR,1")
     provider = FakeProvider()
-    provider.add("ABCD.DE", "EUR", price="11.18")
+    provider.add("ABCD.DE", "EUR", price="1118000")
     shell = open_app(tmp_path, provider, kept=statement)
     wait_until(app, lambda: not shell.session.home.property("busy"))
     click(find(shell.window, "Columns"))
@@ -393,8 +393,11 @@ def test_long_numbers_fit_their_columns(app, tmp_path: Path, english_computer) -
 
     shares = find(shell.window, "31.47328346")
     assert not shares.property("truncated")
-    loss = find_all(shell.window, "▼ -11,215.34 (-96.96 %)")[0]
-    assert loss.width() <= loss.parentItem().width()
+    losses = [item for item in find_all(shell.window, "▼ -1,121,533,869.09 (-96.96 %)")
+              if item.parentItem().parentItem().parentItem().objectName() == "investmentRow"]
+    assert len(losses) == 2  # its row and the Total
+    for loss in losses:
+        assert loss.width() <= loss.parentItem().width()
 
 
 def test_table_choices_made_during_a_fetch_are_saved_once_it_ends(app, tmp_path: Path) -> None:

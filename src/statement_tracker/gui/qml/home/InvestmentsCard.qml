@@ -18,6 +18,15 @@ Rectangle {
     clip: true
     implicitHeight: column.implicitHeight + 2
 
+    // Each column's least width: never narrower than its longest text in the table's font (bold, as
+    // the Total is), so that amounts fit whatever font the computer draws them in.
+    FontMetrics {
+        id: tableFont
+        font.pixelSize: 14
+        font.weight: Font.Bold
+    }
+    readonly property var widths: Columns.minimums(card.home.columns, card.home.widest, tableFont)
+
     // Open the Columns panel clear of its button: the page first scrolls the toolbar towards the top, then
     // the panel opens below the button, or above it when there is more room there.
     function openColumns() {
@@ -250,7 +259,7 @@ Rectangle {
             id: table
             readonly property bool scrolls: contentWidth > width + 0.5
 
-            contentWidth: Math.max(width, Columns.needed(card.home.columns))
+            contentWidth: Math.max(width, Columns.needed(card.home.columns, card.widths))
             contentHeight: rows.implicitHeight
             implicitHeight: rows.implicitHeight + (scrolls ? sideways.height : 0)
             flickableDirection: Flickable.HorizontalFlick
@@ -271,6 +280,7 @@ Rectangle {
 
                 InvestmentHeader {
                     columns: card.home.columns
+                    widths: card.widths
                     headings: card.home.headings
                     sortColumn: card.home.sortColumn
                     sortDescending: card.home.sortDescending
@@ -284,6 +294,7 @@ Rectangle {
                         required property var model
                         onDoubleClicked: card.home.enterValue(model.ticker)
                         columns: card.home.columns
+                        widths: card.widths
                         name: model.name
                         detail: model.detail
                         shares: model.shares
@@ -312,6 +323,7 @@ Rectangle {
                     visible: cells.name !== undefined
                     mode: "total"
                     columns: card.home.columns
+                    widths: card.widths
                     name: cells.name || ""
                     invested: cells.invested || ""
                     worth: cells.worth || ""

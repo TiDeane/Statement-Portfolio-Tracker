@@ -1,4 +1,5 @@
-"""Shared for every test: no test may reach the network (Spec J3)."""
+"""Shared for every test: no test may reach the network (Spec J3), and none depends on the computer's own
+language and region settings."""
 
 import socket
 
@@ -19,3 +20,18 @@ def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(socket, "create_connection", refuse)
     monkeypatch.setattr(socket.socket, "connect", refuse)
     monkeypatch.setattr(socket.socket, "connect_ex", refuse)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def the_same_number_formats_on_every_computer():
+    """Write numbers and dates the same way whatever the computer is set to ("1000.00", not "1000,00" on a
+    Portuguese Windows): Qt's neutral C locale, as on Linux. Tests of a particular locale set their own."""
+    try:
+        from PySide6.QtCore import QLocale
+    except ImportError:
+        yield
+        return
+    before = QLocale()
+    QLocale.setDefault(QLocale.c())
+    yield
+    QLocale.setDefault(before)

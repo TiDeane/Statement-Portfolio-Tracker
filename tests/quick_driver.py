@@ -13,6 +13,7 @@ from __future__ import annotations
 import gc
 import os
 import shutil
+import sys
 import time
 import warnings
 from collections.abc import Callable
@@ -22,11 +23,15 @@ from pathlib import Path
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+if sys.platform == "win32":
+    # Offscreen, Qt on Windows finds no fonts of its own and draws every letter as a box, wider than real
+    # text: layouts then overflow and clicks miss. The system's fonts make the window look as it does.
+    os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"))
 pytest.importorskip("PySide6.QtGui", exc_type=ImportError)
 QtQuick = pytest.importorskip("PySide6.QtQuick", exc_type=ImportError)
 
 from fakes import SAMPLE, FakeProvider, ranges_around  # noqa: E402
-from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, Qt, QTimer, QUrl, qInstallMessageHandler  # noqa: E402
+from PySide6.QtCore import QCoreApplication, QEvent, QMimeData, QPoint, QPointF, Qt, QTimer, QUrl, qInstallMessageHandler  # noqa: E402
 from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent, QGuiApplication, QKeyEvent  # noqa: E402
 from PySide6.QtQuick import QQuickItem, QQuickWindow  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
@@ -42,9 +47,21 @@ EQQB_BUYS = buys_by_ticker(load_statement(SAMPLE))["EQQB"]
 
 @pytest.fixture(scope="module")
 def app():
+    return _application()
+
+
+def _application():
+    """The application, set up for the tests: on Windows, with the font Windows draws its windows in.
+    (Offscreen, Qt there knows no system font; the fonts folder it is given has many, and the first one
+    is not that.)"""
     from statement_tracker.gui.app import make_application
 
-    return make_application([])
+    application = make_application([])
+    if sys.platform == "win32":
+        from PySide6.QtGui import QFont
+
+        application.setFont(QFont("Segoe UI"))
+    return application
 
 
 @pytest.fixture(autouse=True)
@@ -118,6 +135,7 @@ def open_app(
     about a listing is answered by ``ask_listing`` (set before the app starts fetching), else skipped
     and noted in ``shell.questions``.
     """
+    _application()  # before the window, so that it is drawn in the tests' font from the start
     settings_path = tmp_path / "settings.json"
     if kept is not None:
         shutil.copyfile(kept, tmp_path / "last_statement.csv")
@@ -154,11 +172,18 @@ def settle(app) -> None:
 
 
 def wait_until(app, condition: Callable[[], bool], seconds: float = 20) -> None:
+    """Wait until ``condition`` holds and still holds once the window has settled: what was true only of
+    the state before a change just made (not handled yet) does not count, and what is shown is laid out."""
     deadline = time.monotonic() + seconds
-    while not condition() and time.monotonic() < deadline:
+    while True:
         app.processEvents()
+        if condition():
+            settle(app)
+            if condition():
+                return
+        if time.monotonic() >= deadline:
+            break
         time.sleep(0.01)
-    app.processEvents()
     assert condition(), "waited in vain"
 
 
@@ -435,6 +460,10 @@ def when_a_dialog_opens(shell: AppWindow, act: Callable[[], object]) -> None:
             if dialogs.property("isOpen") and _ASKED[0] == before:
                 _STUCK.append(f"a dialog was left open: {texts(shell.window)}")
                 dialogs.cancel()
+            # Answering the dialog ended its wait (a QEventLoop) while this ran inside it, and the events
+            # processed here since can use up the wake-up that ending it sends (on Windows). An offscreen
+            # window has nothing else to wake it, so the wait would sleep on for ever: wake it once more.
+            QCoreApplication.postEvent(QGuiApplication.instance(), QEvent(QEvent.Type.User))
 
     dialogs.opened.connect(opened)
     dialogs.opened.connect(_count_asked)
@@ -442,6 +471,7 @@ def when_a_dialog_opens(shell: AppWindow, act: Callable[[], object]) -> None:
 
 _ASKED = [0]
 """How many dialogs have opened: a dialog that opens another (asking again) is not stuck."""
+
 _STUCK: list[str] = []
 
 

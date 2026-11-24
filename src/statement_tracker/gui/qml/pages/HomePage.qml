@@ -14,6 +14,7 @@ Item {
         contentWidth: availableWidth
 
         ColumnLayout {
+            id: column
             width: Math.min(scroll.availableWidth - 48, 992)
             x: (scroll.availableWidth - width) / 2
             spacing: 16
@@ -50,21 +51,36 @@ Item {
             GridLayout {
                 id: sources
                 readonly property bool sideBySide: page.width > 820
+                readonly property real shared: column.width - columnSpacing  // set by the page, never by the cards
                 columns: sideBySide ? 2 : 1
                 columnSpacing: 16
                 rowSpacing: 16
                 Layout.fillWidth: true
                 StatementCard {
-                    // A third of the row: the spreadsheet's longer texts must not squeeze it.
+                    id: statementCard
+                    objectName: "statementCard"
+                    // Side by side, the width that makes both cards about as tall (see RowBalancer).
                     Layout.fillWidth: !sources.sideBySide
                     Layout.fillHeight: true
-                    Layout.preferredWidth: sources.sideBySide ? Math.max(300, (sources.width - 16) * 0.36) : -1
+                    Layout.preferredWidth: !sources.sideBySide ? -1 : balancer.firstWidth > 0 ? balancer.firstWidth : sources.shared * 0.4
                 }
                 SpreadsheetCard {
+                    id: spreadsheetCard
+                    objectName: "spreadsheetCard"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.preferredWidth: 1
                 }
+            }
+            RowBalancer {
+                id: balancer
+                first: statementCard
+                second: spreadsheetCard
+                available: sources.sideBySide ? sources.shared : 0
+            }
+            Connections {
+                target: session.home
+                function onChanged() { balancer.refresh() }  // new texts in either card
             }
             InvestmentsCard { Layout.fillWidth: true }
 

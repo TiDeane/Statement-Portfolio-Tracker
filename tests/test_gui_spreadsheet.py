@@ -182,3 +182,32 @@ def test_updating_the_spreadsheet_does_not_freeze_the_window(app, tmp_path: Path
     let_go.set()
     wait_until(app, lambda: shows(shell.window, "Your spreadsheet was created"))
     assert find(shell.window, "Settings").isEnabled()
+
+
+def empty_space_in_the_cards(shell) -> list[float]:
+    """How much empty height each of the two side-by-side cards shows, below what it has to say."""
+    from quick_driver import _items
+
+    cards = [item for item in _items(shell.window) if item.objectName() in ("statementCard", "spreadsheetCard")]
+    assert len(cards) == 2
+    return [card.height() - card.property("implicitHeight") for card in cards]
+
+
+def test_the_statement_and_spreadsheet_cards_share_the_row_with_little_empty_space(app, tmp_path: Path) -> None:
+    # Spec F6, F7.
+    downloads = tmp_path / "Users" / "someone" / "Documents" / "Revolut statements" / "Downloads"
+    downloads.mkdir(parents=True)
+    statement = downloads / "trading-account-statement_2024-01-01_2026-11-20_en-gb.csv"
+    statement.write_text(SAMPLE.read_text(encoding="utf-8"), encoding="utf-8")
+    shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
+    wait_until(app, lambda: not shell.session.home.property("busy"))
+    drop(shell.window, statement)  # a long name and folder; no spreadsheet yet
+    wait_until(app, lambda: not shell.session.home.property("busy"))
+    wait_until(app, lambda: max(empty_space_in_the_cards(shell)) <= 24, 3)
+
+    shell.session.use_spreadsheet(tmp_path / "mine.xlsx")
+    wait_until(app, lambda: max(empty_space_in_the_cards(shell)) <= 24, 3)
+
+    update(shell)  # what was written, under the button
+    wait_until(app, lambda: shows(shell.window, "Your spreadsheet was created"))
+    wait_until(app, lambda: max(empty_space_in_the_cards(shell)) <= 24, 3)

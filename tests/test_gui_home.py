@@ -18,6 +18,7 @@ from quick_driver import (  # noqa: F401
     english_computer,
     find,
     find_starting,
+    is_minimized,
     leave_and_come_back,
     open_app,
     provider_with,
@@ -333,29 +334,23 @@ def test_refresh_uses_the_copy_once_a_dropped_statement_is_deleted(app, tmp_path
 
 def test_opened_at_sign_in_the_window_starts_minimized(app, tmp_path: Path) -> None:
     # Spec F12: and does what opening it does: today's values are worked out.
-    from PySide6.QtCore import Qt
-
     shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE, minimized=True)
     settled(app, shell)
 
-    assert shell.window.windowStates() & Qt.WindowState.WindowMinimized
+    assert is_minimized(shell.window)
     assert shows(shell.window, "589.31")
 
 
 def test_with_nothing_kept_it_opens_normally_even_at_sign_in(app, tmp_path: Path) -> None:
     # Spec F12: first launch needs the user.
-    from PySide6.QtCore import Qt
-
     shell = open_app(tmp_path, provider_with("EQQB.DE"), minimized=True)
 
-    assert not shell.window.windowStates() & Qt.WindowState.WindowMinimized
+    assert not is_minimized(shell.window)
     assert shows(shell.window, "Drop your Revolut statement here")
 
 
 def test_opening_the_app_again_shows_the_window_that_is_open(app, tmp_path: Path) -> None:
     # Spec F12: instead of a second copy, which would write the same settings and spreadsheet.
-    from PySide6.QtCore import Qt
-
     from statement_tracker.gui.one_window import OneWindow, window_name
 
     shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE, minimized=True)
@@ -366,7 +361,7 @@ def test_opening_the_app_again_shows_the_window_that_is_open(app, tmp_path: Path
     try:
         assert not OneWindow(window_name(tmp_path / "settings.json")).claim()  # opened again
 
-        wait_until(app, lambda: not shell.window.windowStates() & Qt.WindowState.WindowMinimized)
+        wait_until(app, lambda: not is_minimized(shell.window))
         assert shell.window.isVisible()
     finally:
         first.release()

@@ -115,6 +115,8 @@ class Session(QObject):
     busyChanged = Signal()
     reportChanged = Signal()
     settingsChanged = Signal()
+    activated = Signal()
+    """The window is the one in use again: files, and the sign-in entry, may have been changed elsewhere meanwhile."""
     spreadsheetChanged = Signal()
     fetched = Signal()
     """A fetch has worked out today's values (the app opening, Refresh prices, a new statement)."""
@@ -175,7 +177,7 @@ class Session(QObject):
         self.attention: Callable[[], object] = lambda: None
         """Ask for the user: the window's taskbar button flashes (its Dock icon bounces) unless it is the window
         in use. Set by the window; the app may be minimized, opened at sign-in."""
-        self.dialogs.opened.connect(lambda *_: self.attention())  # a question or a message waits for the user
+        self.dialogs.opened.connect(self._wants_the_user)  # a question or a message waits for the user
         self.ask_listing: Callable[[Resolution], tuple[str | None, bool]] = self._ask_listing
         self.ask_value: Callable[[list, str, str], tuple[str, Decimal] | None] = self._ask_value
         """What an investment is worth now: (ticker, value of the whole holding), or None."""
@@ -212,14 +214,17 @@ class Session(QObject):
 
     def start(self) -> None:
         """The window is showing: on Home, fetch today's prices. An entry that opens the app at sign-in is
-        written again, so it opens the app from where it is now (moved, or installed elsewhere)."""
-        try:
-            if self.login_start.is_on():
+        turned on again, so it opens the app from where it is now (moved, or installed elsewhere)."""
+        if self.login_start.is_on():
+            try:
                 self.login_start.turn_on()
-        except OSError:
-            pass  # it still opens the app from where it was; the switch in Settings says if it cannot be changed
+            except OSError:
+                pass  # it still opens the app from where it was; the switch in Settings says if it cannot be changed
         if self._page == "home":
             self.refresh()
+
+    def _wants_the_user(self, *_dialog: object) -> None:
+        self.attention()
 
     welcome = Property(QObject, lambda self: self._welcome, constant=True)
     home = Property(QObject, lambda self: self._home, constant=True)
@@ -252,15 +257,19 @@ class Session(QObject):
 
     busy = Property(bool, _get_busy, notify=busyChanged)
 
-    def refresh(self) -> None:
-        """Fetch today's prices for the statement, again if they were fetched before. A statement chosen this
-        session that has been moved or deleted since is read from the copy the app kept of it."""
+    def statement_to_read(self) -> Path | None:
+        """The statement Home works out, as a file to read: the one chosen, or, once it has been moved or deleted,
+        the copy the app kept of it."""
         statement = self.statement
-        if statement is None:
-            return
-        if not statement.exists() and self.kept is not None and self.kept.is_copy_of(statement):
-            statement = self.kept.path
-        self.start_run(statement)
+        if statement is not None and not statement.exists() and self.kept is not None and self.kept.is_copy_of(statement):
+            return self.kept.path
+        return statement
+
+    def refresh(self) -> None:
+        """Fetch today's prices for the statement, again if they were fetched before."""
+        statement = self.statement_to_read()
+        if statement is not None:
+            self.start_run(statement)
 
     def use_statement(self, statement: Path) -> None:
         """A newer statement, chosen or dropped on Home: fetch its prices; it becomes the one shown and

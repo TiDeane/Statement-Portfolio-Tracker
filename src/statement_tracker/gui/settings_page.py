@@ -30,13 +30,16 @@ BACKUPS_HELP = (
     "the oldest goes. 0 turns backups off."
 )
 LOGIN_SWITCH = {"windows": "Open when I sign in", "mac": "Open when I log in", "linux": "Open when I log in"}
+IN_THE_TASKBAR = (
+    "It opens minimized in the taskbar and works out today's values. With Update it by itself on, your spreadsheet is "
+    "updated too. Its button flashes when it needs you."
+)
 LOGIN_HELP = {
-    "windows": "It opens minimized in the taskbar and works out today's values. With Update it by itself on, your "
-    "spreadsheet is updated too. Its button flashes when it needs you.",
+    "windows": IN_THE_TASKBAR,
     "mac": "It opens minimized in the Dock and works out today's values. With Update it by itself on, your spreadsheet "
     "is updated too. Its icon bounces when it needs you.",
+    "linux": IN_THE_TASKBAR,
 }
-LOGIN_HELP["linux"] = LOGIN_HELP["windows"]
 LOGIN_FAILED = "The app couldn't be set to open by itself."
 LOGIN_FAILED_HELP = "Try again. If it keeps failing, the app can still be opened as usual."
 DISCLAIMER = "Unofficial: not made by or affiliated with Revolut. Not financial advice. Prices come from Yahoo Finance and may be delayed or wrong."
@@ -128,6 +131,7 @@ class SettingsPage(QObject):
         session.settingsChanged.connect(self.refresh)
         session.reportChanged.connect(self.refresh)
         session.pageChanged.connect(self.refresh)
+        session.activated.connect(self.changed)  # the statement, the spreadsheet or the sign-in entry changed elsewhere
 
     @property
     def _settings(self) -> Settings:
@@ -175,18 +179,11 @@ class SettingsPage(QObject):
     maxBackups = Property(int, lambda self: MAX_BACKUPS_KEPT, constant=True)
     backupsHelp = Property(str, lambda self: BACKUPS_HELP, constant=True)
     appearance = Property(str, lambda self: self._settings.appearance, notify=changed)
-
-    def _login_on(self) -> bool:
-        try:
-            return self._session.login_start.is_on()
-        except OSError:
-            return False
-
-    loginStartOn = Property(bool, _login_on, notify=changed)
-    canStartAtLogin = Property(bool, lambda self: self._session.login_start.unavailable == "", notify=changed)
-    loginStartLabel = Property(str, lambda self: LOGIN_SWITCH[self._session.login_start.system], notify=changed)
-    loginStartHelp = Property(str, lambda self: LOGIN_HELP[self._session.login_start.system], notify=changed)
-    loginStartNote = Property(str, lambda self: self._session.login_start.unavailable, notify=changed)
+    loginStartOn = Property(bool, lambda self: self._session.login_start.is_on(), notify=changed)  # changed elsewhere too
+    loginStartLabel = Property(str, lambda self: LOGIN_SWITCH[self._session.login_start.system], constant=True)
+    loginStartHelp = Property(str, lambda self: LOGIN_HELP[self._session.login_start.system], constant=True)
+    loginStartNote = Property(str, lambda self: self._session.login_start.unavailable, constant=True)
+    """Why the switch cannot be turned on, or "" when it can."""
     version = Property(str, lambda self: f"Version {__version__}", constant=True)
     releasesUrl = Property(str, lambda self: RELEASES_URL, constant=True)
     privacyText = Property(str, lambda self: PRIVACY_TEXT, constant=True)
@@ -269,11 +266,6 @@ class SettingsPage(QObject):
         self._settings.auto_update = bool(on)
         self._session.save_settings()
         self._session.settingsChanged.emit()
-
-    @Slot()
-    def recheck(self) -> None:
-        """The window is active again: a file or the sign-in entry may have been changed elsewhere meanwhile."""
-        self.changed.emit()
 
     @Slot(bool)
     def setLoginStart(self, on: bool) -> None:

@@ -1,9 +1,19 @@
 import QtQuick
 import QtQuick.Controls.Basic
 
-// An on/off switch with its label on the left, in the app's colours.
+// An on/off switch with its label on the left, in the app's colours. It shows `on` (what was saved); a click
+// says `switched(value)`, and the switch then shows `on` again, whatever the click did: what could not be
+// saved, or was changed again by something else later, shows as it is.
 Switch {
     id: control
+    property bool on: false
+    signal switched(bool value)
+
+    checked: on
+    onToggled: {
+        switched(checked)
+        checked = Qt.binding(() => control.on)
+    }
     font.pixelSize: 14
     font.weight: Font.DemiBold
     spacing: 16

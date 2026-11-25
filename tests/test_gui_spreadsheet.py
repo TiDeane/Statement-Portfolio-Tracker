@@ -516,7 +516,8 @@ def test_while_prices_come_in_the_card_says_it_will_be_updated(app, tmp_path: Pa
 
 
 def test_a_spreadsheet_open_in_excel_at_launch_says_so(app, tmp_path: Path, monkeypatch) -> None:
-    # Spec F7, F11: written by itself, it fails as the button would, with Try again.
+    # Spec F7, F11, F12: written by itself, it fails as the button would, with Try again; the app may be
+    # minimized (opened at sign-in), so its taskbar button flashes.
     Workbook().save(tmp_path / "mine.xlsx")
 
     def locked(source, target) -> None:
@@ -528,20 +529,6 @@ def test_a_spreadsheet_open_in_excel_at_launch_says_so(app, tmp_path: Path, monk
         wait_until(app, lambda: shows(shell.window, "Your spreadsheet wasn't updated"))
 
     assert shows(shell.window, "Try again", "589.31")  # the values stay shown
-
-
-def test_a_spreadsheet_not_written_by_itself_asks_for_the_user(app, tmp_path: Path, monkeypatch) -> None:
-    # Spec F12: opened minimized at sign-in, its taskbar button flashes.
-    Workbook().save(tmp_path / "mine.xlsx")
-
-    def locked(source, target) -> None:
-        raise PermissionError(13, "being used by another process")
-
-    with monkeypatch.context() as patched:
-        patched.setattr("statement_tracker.core.exporters.excel.replace_file", locked)
-        shell = home_with_spreadsheet(app, tmp_path, auto=True)
-        wait_until(app, lambda: shows(shell.window, "Your spreadsheet wasn't updated"))
-
     assert len(shell.attentions) == 1
 
 

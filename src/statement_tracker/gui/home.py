@@ -98,9 +98,8 @@ def statement_place(statement: Path | None, kept: KeptStatement | None, settings
     """Which statement file the values come from: its name, "In <folder>", and a note (or "").
 
     For the copy kept from last time, that is the file it was copied from, with a note if that file is no
-    longer there; the same for a statement chosen this session once it is gone, if the copy is of it.
-    Empty without a statement, or for a copy whose origin was not recorded: the app's own copy, in its own
-    folder, would tell the user nothing.
+    longer there. Empty without a statement, or for a copy whose origin was not recorded: the app's own
+    copy, in its own folder, would tell the user nothing.
     """
     if statement is None:
         return "", "", ""
@@ -108,8 +107,7 @@ def statement_place(statement: Path | None, kept: KeptStatement | None, settings
         if kept.source is None:
             return "", "", ""
         return kept.source.name, f"In {kept.source.parent}", "" if kept.source.exists() else STATEMENT_GONE
-    gone = not statement.exists() and kept is not None and kept.is_copy_of(statement)
-    return statement.name, f"In {statement.resolve().parent}", STATEMENT_GONE if gone else ""
+    return statement.name, f"In {statement.resolve().parent}", ""
 
 
 def result_lines(report: Report, exported: ExportResult) -> list[str]:
@@ -180,6 +178,7 @@ class Home(QObject):
         session.progressed.connect(self._show_progress)
         session.pageChanged.connect(self._write_if_asked)
         session.fetched.connect(self._fetched)
+        session.activated.connect(self.recheck)
 
     # -- what is shown -------------------------------------------------------------
 
@@ -362,7 +361,7 @@ class Home(QObject):
 
     def _statement_place(self) -> tuple[str, str, str]:
         session = self._session
-        return statement_place(session.statement, session.kept, session.settings.path)
+        return statement_place(session.statement_to_read(), session.kept, session.settings.path)
 
     def _get_statement_line(self) -> str:
         latest = self._session.statement_latest
@@ -373,10 +372,8 @@ class Home(QObject):
     def _sheet(self) -> Path | None:
         return self._session.settings.spreadsheet_path
 
-    def _get_sheet_line(self) -> str:
-        sheet = self._sheet()
-        if sheet is None:
-            return ""
+    def _sheet_status(self, sheet: Path) -> str:
+        """When the spreadsheet last changed, or what is happening to it; "" for one gone (its note says so)."""
         if self._writing is not None:
             return "Updating your spreadsheet…"
         if self._session.busy and self._session.settings.auto_update and sheet.exists():
@@ -418,8 +415,7 @@ class Home(QObject):
         sheet = self._sheet()
         if sheet is None:
             return ""
-        line = self._get_sheet_line()
-        return f"In {sheet.absolute().parent} · {line}" if line else f"In {sheet.absolute().parent}"
+        return " · ".join(part for part in (f"In {sheet.absolute().parent}", self._sheet_status(sheet)) if part)
 
     sheetPlace = Property(str, _get_sheet_place, notify=changed)
     sheetButton = Property(str, lambda self: "Try again" if self._sheet_result == "error" else "Update my spreadsheet", notify=changed)
@@ -664,7 +660,6 @@ class Home(QObject):
         """New values: what an earlier update wrote is not what is shown any more."""
         self._sheet_result, self._sheet_title, self._sheet_lines, self._sheet_details = "", "", [], ""
 
-    @Slot()
     def recheck(self) -> None:
         """The window is active again: a file may have been moved, deleted or changed meanwhile (Spec F6, F7)."""
         if self._sheet_gone() and self._sheet_result != "error":

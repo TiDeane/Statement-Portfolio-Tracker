@@ -290,8 +290,8 @@ Item {
                         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.border }
                         AppSwitch {
                             text: "Take the first listing without asking"
-                            checked: page.settings.alwaysFirst
-                            onToggled: page.settings.setAlwaysFirst(checked)
+                            on: page.settings.alwaysFirst
+                            onSwitched: (value) => page.settings.setAlwaysFirst(value)
                             Layout.fillWidth: true
                             Layout.leftMargin: 24
                             Layout.rightMargin: 24
@@ -455,9 +455,9 @@ Item {
                             Layout.fillWidth: true
                             AppSwitch {
                                 text: "Update it by itself"
-                                checked: page.settings.autoUpdate
+                                on: page.settings.autoUpdate
                                 padding: 0  // in line with the backup copies' title and stepper above
-                                onToggled: page.settings.setAutoUpdate(checked)
+                                onSwitched: (value) => page.settings.setAutoUpdate(value)
                                 Layout.fillWidth: true
                             }
                             Muted { text: "As soon as today's prices are in: when the app opens, after Refresh prices and with a new statement." }
@@ -474,15 +474,10 @@ Item {
                             Layout.fillWidth: true
                             AppSwitch {
                                 text: page.settings.loginStartLabel
-                                checked: page.settings.loginStartOn
-                                enabled: page.settings.canStartAtLogin
+                                on: page.settings.loginStartOn
+                                enabled: page.settings.loginStartNote === ""
                                 padding: 0
-                                // What the system's entry is, whatever the click did: one that could not be
-                                // written leaves it as it was.
-                                onToggled: {
-                                    page.settings.setLoginStart(checked)
-                                    checked = Qt.binding(() => page.settings.loginStartOn)
-                                }
+                                onSwitched: (value) => page.settings.setLoginStart(value)
                                 Layout.fillWidth: true
                             }
                             Muted { text: page.settings.loginStartHelp }

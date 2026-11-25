@@ -15,6 +15,7 @@ import traceback  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 from statement_tracker import APP_NAME, __version__  # noqa: E402
+from statement_tracker.login_start import MINIMIZED  # noqa: E402
 
 RUNNING_MUTEX = "StatementPortfolioTracker"
 """Named while the window is open on Windows. The installer and uninstaller look for it (AppMutex in
@@ -132,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--smoke-test", metavar="CSV", type=Path, help="load CSV, write a report and exit")
     parser.add_argument("--smoke-out", metavar="JSON", type=Path, help="where the smoke test writes its report")
     parser.add_argument("--smoke-quote", metavar="SYMBOL", help="also try one price fetch (uses the network)")
-    parser.add_argument("--minimized", action="store_true", help="open minimized, as when opened at sign-in")
+    parser.add_argument(MINIMIZED, action="store_true", help="open minimized, as when opened at sign-in")
     args, _unknown = parser.parse_known_args(argv)
 
     if args.smoke_test is not None:

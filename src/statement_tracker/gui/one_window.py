@@ -15,7 +15,7 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 WAIT_MS = 1000
-"""How long a later copy waits to reach the first, and for its request to go."""
+"""How long a later copy waits to reach the first."""
 
 
 def window_name(settings_path: Path) -> str:
@@ -40,10 +40,8 @@ class OneWindow(QObject):
         it to show its window: this copy should close."""
         other = QLocalSocket()
         other.connectToServer(self._name)
-        if other.waitForConnected(WAIT_MS):
+        if other.waitForConnected(WAIT_MS):  # reaching it is the whole request
             _let_the_other_come_forward()
-            other.write(b"show\n")
-            other.waitForBytesWritten(WAIT_MS)
             other.disconnectFromServer()
             return False
         QLocalServer.removeServer(self._name)  # what a copy that crashed left (not on Windows)
@@ -56,17 +54,14 @@ class OneWindow(QObject):
         return True
 
     def release(self) -> None:
-        """Stop listening (the app is closing; or a test is done)."""
+        """Stop listening (a copy that ends stops by itself)."""
         if self._server is not None:
             self._server.close()
             self._server = None
 
     def _asked(self) -> None:
-        server = self._server
-        if server is None:
-            return
-        while server.hasPendingConnections():
-            connection = server.nextPendingConnection()
+        while self._server.hasPendingConnections():
+            connection = self._server.nextPendingConnection()
             connection.disconnected.connect(connection.deleteLater)
             connection.disconnectFromServer()
         self.showWanted.emit()

@@ -469,6 +469,11 @@ def drag_away(window: QQuickWindow) -> None:
     settle(QGuiApplication.instance())
 
 
+def is_minimized(window: QWindow) -> bool:
+    """True if the window is minimized: in the taskbar (the Dock on a Mac)."""
+    return bool(window.windowStates() & Qt.WindowState.WindowMinimized)
+
+
 def leave_and_come_back(shell: AppWindow) -> None:
     """Switch to another window and back to the app's, as the user does after moving a file in the file manager."""
     app = QGuiApplication.instance()

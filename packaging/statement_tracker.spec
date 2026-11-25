@@ -11,10 +11,9 @@ from pathlib import Path
 ROOT = Path(SPECPATH).parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from statement_tracker import APP_NAME, __version__  # noqa: E402
+from statement_tracker import APP_NAME, BUNDLE_ID, __version__  # noqa: E402
 
 EXE_NAME = "StatementPortfolioTracker"
-BUNDLE_ID = "io.github.tideane.statementportfoliotracker"
 ICONS = ROOT / "packaging" / "icon"  # drawn by packaging/make_icon.py
 WINDOW_ICON = ROOT / "src" / "statement_tracker" / "gui" / "icon.png"
 QML_FILES = ROOT / "src" / "statement_tracker" / "gui" / "qml"

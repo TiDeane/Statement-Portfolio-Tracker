@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
+from functools import partial
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -88,7 +89,7 @@ class AppWindow(QObject):
         """The window: a QQuickWindow (shown as one wherever PySide's QtQuick module is loaded, as in the tests)."""
         self.window.setIcon(QIcon(str(APP_ICON)))
         # Until the window is the one in use again; Qt does nothing for the window in use.
-        self.session.attention = lambda: self.window.alert(0)
+        self.session.attention = partial(self.window.alert, 0)
 
     def show(self, minimized: bool = False) -> None:
         """Show the window and start: on Home, fetch today's prices. ``minimized``, as when opened at sign-in:

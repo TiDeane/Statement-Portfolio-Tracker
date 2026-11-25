@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
-from statement_tracker import APP_NAME
+from statement_tracker import APP_NAME, BUNDLE_ID
 
 MINIMIZED = "--minimized"
 """On the app's command line: open minimized, as at sign-in."""
@@ -24,8 +24,8 @@ ENTRY_NAME = "StatementPortfolioTracker"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 APPROVED_KEY = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
 """Where Windows' Startup apps (Task Manager, Settings) mark a Run entry turned on or off."""
-MAC_LABEL = "io.github.tideane.statementportfoliotracker"
-"""The launch agent's label and file name: the app's bundle ID (BUNDLE_ID in packaging/statement_tracker.spec)."""
+MAC_LABEL = BUNDLE_ID
+"""The launch agent's label and file name."""
 LINUX_FILE = "statement-portfolio-tracker.desktop"
 
 NOT_INSTALLED = "Only the installed app can open by itself."
@@ -41,11 +41,12 @@ class LoginStart:
     """Why it cannot be turned on, or "" when it can."""
 
     def is_on(self) -> bool:
-        """True if the app opens when the user signs in."""
+        """True if the app opens when the user signs in. Never raises: an entry that cannot be read is off."""
         raise NotImplementedError
 
     def turn_on(self) -> None:
-        """Make the app open at sign-in; written again if it was already, so it opens the app from where it is now.
+        """Make the app open at sign-in, from where it is now: an entry that opens it from elsewhere (the app was
+        moved) is written again; one already right is left as it is.
 
         Raises OSError if the entry cannot be written."""
         raise NotImplementedError
@@ -74,7 +75,8 @@ class Unavailable(LoginStart):
 class Registry(Protocol):
     """The current user's part of the Windows registry: string values, and the Startup apps' binary ones."""
 
-    def get(self, key: str, name: str) -> str | bytes | None: ...
+    def get(self, key: str, name: str) -> str | bytes | None:
+        """The value, or None if it is not there or cannot be read."""
 
     def set_text(self, key: str, name: str, value: str) -> None: ...
 
@@ -91,7 +93,7 @@ class WinRegistry:
         try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as handle:
                 value, _kind = winreg.QueryValueEx(handle, name)
-        except FileNotFoundError:
+        except OSError:  # not there, or not readable
             return None
         return value
 
@@ -120,16 +122,20 @@ class WindowsRun(LoginStart):
         self._command, self._registry = command, registry
 
     def is_on(self) -> bool:
-        if not isinstance(self._registry.get(RUN_KEY, ENTRY_NAME), str):
-            return False
-        approved = self._registry.get(APPROVED_KEY, ENTRY_NAME)
-        # Windows writes an even first byte (02, 06) for an entry turned on there, an odd one (03, 07) and when
-        # for one turned off.
-        return not isinstance(approved, bytes) or not approved or approved[0] % 2 == 0
+        return isinstance(self._registry.get(RUN_KEY, ENTRY_NAME), str) and not self._turned_off_in_startup_apps()
 
     def turn_on(self) -> None:
-        self._registry.set_text(RUN_KEY, ENTRY_NAME, subprocess.list2cmdline(self._command))
-        self._registry.delete(APPROVED_KEY, ENTRY_NAME)  # turned off in Startup apps: on again
+        command = subprocess.list2cmdline(self._command)
+        if self._registry.get(RUN_KEY, ENTRY_NAME) != command:
+            self._registry.set_text(RUN_KEY, ENTRY_NAME, command)
+        if self._turned_off_in_startup_apps():
+            self._registry.delete(APPROVED_KEY, ENTRY_NAME)  # on again there too
+
+    def _turned_off_in_startup_apps(self) -> bool:
+        # Windows writes an even first byte (02, 06) for an entry turned on there, an odd one (03, 07) and when
+        # for one turned off.
+        approved = self._registry.get(APPROVED_KEY, ENTRY_NAME)
+        return isinstance(approved, bytes) and len(approved) > 0 and approved[0] % 2 == 1
 
     def turn_off(self) -> None:
         self._registry.delete(RUN_KEY, ENTRY_NAME)
@@ -145,12 +151,11 @@ class MacLaunchAgent(LoginStart):
         self._command, self._file = command, folder / f"{MAC_LABEL}.plist"
 
     def is_on(self) -> bool:
-        return self._file.exists()
+        return os.path.exists(self._file)  # False, not an error, for a folder that cannot be read
 
     def turn_on(self) -> None:
-        self._file.parent.mkdir(parents=True, exist_ok=True)
         agent = {"Label": MAC_LABEL, "ProgramArguments": self._command, "RunAtLoad": True, "ProcessType": "Interactive"}
-        self._file.write_bytes(plistlib.dumps(agent))
+        _write_if_changed(self._file, plistlib.dumps(agent))
 
     def turn_off(self) -> None:
         self._file.unlink(missing_ok=True)
@@ -172,14 +177,23 @@ class LinuxAutostart(LoginStart):
         return not any(line.replace(" ", "").lower() == "hidden=true" for line in lines)
 
     def turn_on(self) -> None:
-        self._file.parent.mkdir(parents=True, exist_ok=True)
         exec_line = " ".join(_desktop_argument(part) for part in self._command)
-        self._file.write_text(
-            f"[Desktop Entry]\nType=Application\nName={APP_NAME}\nExec={exec_line}\nTerminal=false\n", encoding="utf-8"
-        )
+        entry = f"[Desktop Entry]\nType=Application\nName={APP_NAME}\nExec={exec_line}\nTerminal=false\n"
+        _write_if_changed(self._file, entry.encode("utf-8"))
 
     def turn_off(self) -> None:
         self._file.unlink(missing_ok=True)
+
+
+def _write_if_changed(file: Path, content: bytes) -> None:
+    """Write ``content`` to ``file``, making its folder, unless the file holds it already."""
+    try:
+        if file.read_bytes() == content:
+            return
+    except OSError:
+        pass  # not there yet, or not readable: written
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_bytes(content)
 
 
 def _desktop_argument(argument: str) -> str:

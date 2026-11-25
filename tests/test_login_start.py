@@ -29,12 +29,14 @@ class FakeRegistry:
 
     def __init__(self) -> None:
         self.values: dict[tuple[str, str], str | bytes] = {}
+        self.writes = 0
 
     def get(self, key: str, name: str) -> str | bytes | None:
         return self.values.get((key, name))
 
     def set_text(self, key: str, name: str, value: str) -> None:
         self.values[(key, name)] = value
+        self.writes += 1
 
     def delete(self, key: str, name: str) -> None:
         self.values.pop((key, name), None)
@@ -143,6 +145,29 @@ def test_on_windows_an_entry_turned_off_in_startup_apps_is_off_until_turned_on_a
     entry.turn_off()
 
     assert registry.values == {}
+
+
+def test_an_entry_already_right_is_left_as_it_is(tmp_path: Path) -> None:
+    # Spec F12: the app turns its entry on again each time it opens; only one that changed is written (macOS
+    # announces a launch agent written again as a new background item).
+    import os
+
+    for entry, file in [
+        (LinuxAutostart([LINUX_APP, "--minimized"], tmp_path / "autostart"), tmp_path / "autostart" / "statement-portfolio-tracker.desktop"),
+        (MacLaunchAgent([MAC_APP, "--minimized"], tmp_path / "LaunchAgents"), tmp_path / "LaunchAgents" / f"{MAC_LABEL}.plist"),
+    ]:
+        entry.turn_on()
+        os.utime(file, (1_000_000_000, 1_000_000_000))
+
+        entry.turn_on()
+
+        assert file.stat().st_mtime == 1_000_000_000
+
+    registry = FakeRegistry()
+    windows = WindowsRun([WINDOWS_APP, "--minimized"], registry)
+    windows.turn_on()
+    windows.turn_on()
+    assert registry.writes == 1
 
 
 def test_run_from_the_source_the_app_cannot_open_by_itself(tmp_path: Path) -> None:

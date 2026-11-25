@@ -26,11 +26,12 @@ from quick_driver import (  # noqa: F401
     when_a_dialog_opens,
 )
 from test_gui_values import bond_without_a_price
+from test_login_start import LINUX_APP
 
 from statement_tracker import __version__
 from statement_tracker.gui.theme import DARK, LIGHT
 from statement_tracker.kept_statement import find_kept_statement
-from statement_tracker.login_start import LINUX_FILE, LinuxAutostart, login_start
+from statement_tracker.login_start import LINUX_FILE, MINIMIZED, LinuxAutostart, login_start
 from statement_tracker.price_cache import PriceCache
 from statement_tracker.settings import Settings
 
@@ -169,19 +170,25 @@ def test_without_a_spreadsheet_there_is_nothing_to_update_by_itself(app, tmp_pat
     assert not find_all(shell.window, "Update it by itself")  # the switch (Opening the app's help names it)
 
 
-LINUX_APP = "/opt/Statement Tracker/StatementPortfolioTracker"
+LOGIN_SWITCH = "Open when I log in"
 OPENS_MINIMIZED = (
     "It opens minimized in the taskbar and works out today's values. With Update it by itself on, your spreadsheet "
     "is updated too. Its button flashes when it needs you."
 )
 
 
+
+def linux_entry(folder: Path) -> LinuxAutostart:
+    """The installed app's entry in an autostart folder of the test's own."""
+    return LinuxAutostart([LINUX_APP, MINIMIZED], folder)
+
+
 def test_the_app_can_be_set_to_open_when_the_user_logs_in(app, tmp_path: Path) -> None:
     # Spec G1, F12: off at first; the switch writes the system's entry, and takes it away.
     autostart = tmp_path / "autostart"
-    shell = home(app, tmp_path, login_start=LinuxAutostart([LINUX_APP, "--minimized"], autostart))
+    shell = home(app, tmp_path, login_start=linux_entry(autostart))
     to_settings(shell)
-    switch = find(shell.window, "Open when I log in")
+    switch = find(shell.window, LOGIN_SWITCH)
     assert not switch.property("checked")
     assert shows(shell.window, OPENS_MINIMIZED)
     assert not autostart.exists()
@@ -200,16 +207,16 @@ def test_the_app_can_be_set_to_open_when_the_user_logs_in(app, tmp_path: Path) -
 def test_the_switch_shows_an_entry_turned_off_in_the_systems_own_list(app, tmp_path: Path) -> None:
     # Spec G1, F12: turned off elsewhere while the app is open, it shows as off once the user comes back.
     autostart = tmp_path / "autostart"
-    shell = home(app, tmp_path, login_start=LinuxAutostart([LINUX_APP, "--minimized"], autostart))
+    shell = home(app, tmp_path, login_start=linux_entry(autostart))
     to_settings(shell)
-    click(find(shell.window, "Open when I log in"))
-    assert find(shell.window, "Open when I log in").property("checked")
+    click(find(shell.window, LOGIN_SWITCH))
+    assert find(shell.window, LOGIN_SWITCH).property("checked")
 
     with (autostart / LINUX_FILE).open("a", encoding="utf-8") as entry:
         entry.write("Hidden=true\n")  # how a desktop's startup list turns it off
     leave_and_come_back(shell)
 
-    assert not find(shell.window, "Open when I log in").property("checked")
+    assert not find(shell.window, LOGIN_SWITCH).property("checked")
 
 
 def test_run_from_the_source_the_app_cannot_open_by_itself(app, tmp_path: Path) -> None:
@@ -218,20 +225,20 @@ def test_run_from_the_source_the_app_cannot_open_by_itself(app, tmp_path: Path) 
     shell = home(app, tmp_path, login_start=source)
     to_settings(shell)
 
-    assert not find(shell.window, "Open when I log in").isEnabled()
+    assert not find(shell.window, LOGIN_SWITCH).isEnabled()
     assert shows(shell.window, "Only the installed app can open by itself.")
 
 
 def test_an_entry_that_cannot_be_written_is_explained(app, tmp_path: Path) -> None:
     # Spec G1, F12, F11.
     (tmp_path / "autostart").write_text("", encoding="utf-8")  # a file where the folder would go
-    shell = home(app, tmp_path, login_start=LinuxAutostart([LINUX_APP, "--minimized"], tmp_path / "autostart"))
+    shell = home(app, tmp_path, login_start=linux_entry(tmp_path / "autostart"))
     to_settings(shell)
 
-    click(find(shell.window, "Open when I log in"))
+    click(find(shell.window, LOGIN_SWITCH))
 
     assert [error.what_happened for error in shell.errors] == ["The app couldn't be set to open by itself."]
-    assert not find(shell.window, "Open when I log in").property("checked")
+    assert not find(shell.window, LOGIN_SWITCH).property("checked")
 
 
 def test_an_entry_from_elsewhere_follows_the_app(app, tmp_path: Path) -> None:
@@ -239,7 +246,7 @@ def test_an_entry_from_elsewhere_follows_the_app(app, tmp_path: Path) -> None:
     autostart = tmp_path / "autostart"
     LinuxAutostart(["/old/place/StatementPortfolioTracker", "--minimized"], autostart).turn_on()
 
-    home(app, tmp_path, login_start=LinuxAutostart([LINUX_APP, "--minimized"], autostart))
+    home(app, tmp_path, login_start=linux_entry(autostart))
 
     assert f'Exec="{LINUX_APP}" --minimized' in (autostart / LINUX_FILE).read_text(encoding="utf-8")
 

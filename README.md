@@ -60,6 +60,7 @@ The app reads the account statement CSV file you export from the Revolut app. It
   - [Your investments](#your-investments)
   - [Your statement](#your-statement)
   - [Your spreadsheet](#your-spreadsheet)
+  - [Opening the app](#opening-the-app)
   - [Appearance](#appearance)
   - [About and privacy](#about-and-privacy)
 - [Privacy](#privacy)
@@ -377,6 +378,12 @@ The statement the app keeps: the name and folder of the file it was copied from,
 
 The spreadsheet the app updates, with **Open folder**, **Choose another...** and **Stop using it** (or, without one, **Choose spreadsheet...** and **Create a new one...**). **Backup copies to keep** sets, with **−** and **+**, how many [backup copies](#backup-copies) of it are kept in all. **Update it by itself** writes the spreadsheet each time today's prices are in, without pressing **Update my spreadsheet**; it is off at first.
 
+### Opening the app
+
+**Open when I sign in** (**Open when I log in** on macOS and Linux) opens the app each time you sign in to your computer, minimized in the taskbar (the Dock on a Mac), where it works out today's values. With **Update it by itself** on, your spreadsheet is then updated every day without you opening anything. When the app needs you (a new investment to confirm, or a spreadsheet it could not save because it is open in Excel), its taskbar button flashes (its icon bounces in the Dock). It is off at first, and only the installed app can turn it on; on a Mac, move the app to Applications first. You can also turn it off in your computer's own list of startup apps (on Windows: **Settings > Apps > Startup**, or Task Manager), and the switch shows it.
+
+Opening the app while it is already open, minimized or not, brings up the window that is open instead of a second one.
+
 ### Appearance
 
 **Use device theme** (the first time) makes the app light or dark as your computer is set, and follows it when that changes. **Light** or **Dark** keeps it that way whatever the computer does.
@@ -391,7 +398,7 @@ Everything happens on your computer. There are no accounts, and the app does not
 
 The only information that leaves your computer are the codes of your investments and dates, sent to Yahoo Finance to look up prices. Your amounts and your statement file are never sent anywhere.
 
-The app keeps its settings (your confirmed investments and where your spreadsheet is), the last price it found for each fund, any values you entered, and a copy of the last statement you used (`last_statement.csv`, so that [today's values need no new statement](#todays-values-without-a-new-statement), with where you loaded it from in `last_statement.json`), in your user folder: `%LOCALAPPDATA%\StatementPortfolioTracker` on Windows, `~/Library/Application Support/StatementPortfolioTracker` on macOS and `~/.config/StatementPortfolioTracker` on Linux. Prices and values are kept as prices per share. The copy of your statement holds your whole trading history, like the file you downloaded from Revolut, so anyone who can open your user folder can read it; **Settings** can [forget it](#your-statement). Together they take a few kilobytes. Uninstalling the app on Windows deletes that folder; otherwise (macOS, or running from the source), delete it yourself.
+The app keeps its settings (your confirmed investments and where your spreadsheet is), the last price it found for each fund, any values you entered, and a copy of the last statement you used (`last_statement.csv`, so that [today's values need no new statement](#todays-values-without-a-new-statement), with where you loaded it from in `last_statement.json`), in your user folder: `%LOCALAPPDATA%\StatementPortfolioTracker` on Windows, `~/Library/Application Support/StatementPortfolioTracker` on macOS and `~/.config/StatementPortfolioTracker` on Linux. Prices and values are kept as prices per share. The copy of your statement holds your whole trading history, like the file you downloaded from Revolut, so anyone who can open your user folder can read it; **Settings** can [forget it](#your-statement). Together they take a few kilobytes. Uninstalling the app on Windows deletes that folder, and takes the app out of your startup apps; otherwise (macOS, or running from the source), delete it yourself, and turn off [Open when I log in](#opening-the-app) before deleting the app (or delete `~/Library/LaunchAgents/io.github.tideane.statementportfoliotracker.plist` on macOS, `~/.config/autostart/statement-portfolio-tracker.desktop` on Linux).
 
 ## Known limitations
 

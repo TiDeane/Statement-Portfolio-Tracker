@@ -23,6 +23,7 @@ from statement_tracker.core.models import Position
 from statement_tracker.core.ticker_resolver import Confidence, Resolution
 from statement_tracker.gui.dialog_host import DialogHost
 from statement_tracker.kept_statement import KeptStatement, find_kept_statement
+from statement_tracker.login_start import LoginStart, login_start
 from statement_tracker.settings import Settings
 from statement_tracker.gui.undo import ChangeHistory
 from statement_tracker.gui.workers import QuestionBridge, Task
@@ -162,6 +163,8 @@ class Session(QObject):
         """The spreadsheet updated while the app is open: changes made since are written to it at once."""
         self.new_spreadsheet: Path | None = None
         """A spreadsheet the user asked to create: written as soon as the values are in (Home)."""
+        self.login_start: LoginStart = login_start()
+        """The system's entry that opens the app when the user signs in. Replaced in tests."""
 
         # The user's answers. Replaced in tests, which stand in for the user.
         self.ask_open_file: Callable[[str, str, Path], Path | None] = self._ask_open_file
@@ -169,6 +172,10 @@ class Session(QObject):
         self.show_error: Callable[[UserFacingError], object] = self._show_error
         self.confirm: Callable[[str, str], bool] = self._confirm
         self.show_in_folder: Callable[[Path], object] = show_in_folder
+        self.attention: Callable[[], object] = lambda: None
+        """Ask for the user: the window's taskbar button flashes (its Dock icon bounces) unless it is the window
+        in use. Set by the window; the app may be minimized, opened at sign-in."""
+        self.dialogs.opened.connect(lambda *_: self.attention())  # a question or a message waits for the user
         self.ask_listing: Callable[[Resolution], tuple[str | None, bool]] = self._ask_listing
         self.ask_value: Callable[[list, str, str], tuple[str, Decimal] | None] = self._ask_value
         """What an investment is worth now: (ticker, value of the whole holding), or None."""
@@ -204,7 +211,13 @@ class Session(QObject):
         self.refresh()
 
     def start(self) -> None:
-        """The window is showing: on Home, fetch today's prices."""
+        """The window is showing: on Home, fetch today's prices. An entry that opens the app at sign-in is
+        written again, so it opens the app from where it is now (moved, or installed elsewhere)."""
+        try:
+            if self.login_start.is_on():
+                self.login_start.turn_on()
+        except OSError:
+            pass  # it still opens the app from where it was; the switch in Settings says if it cannot be changed
         if self._page == "home":
             self.refresh()
 

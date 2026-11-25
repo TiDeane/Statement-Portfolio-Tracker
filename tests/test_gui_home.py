@@ -1,9 +1,12 @@
 """Home in the new window, driven as a user would. Rule numbers refer to tests/SPECIFICATION.md."""
 
+import sys
 import threading
 import time
 from datetime import date
 from pathlib import Path
+
+import pytest
 
 from fakes import SAMPLE, SAMPLES, FakeProvider, ranges_around, write_statement
 from quick_driver import (  # noqa: F401
@@ -326,6 +329,63 @@ def test_refresh_uses_the_copy_once_a_dropped_statement_is_deleted(app, tmp_path
 
     assert shell.errors == []
     assert shows(shell.window, "629.31")
+
+
+def test_opened_at_sign_in_the_window_starts_minimized(app, tmp_path: Path) -> None:
+    # Spec F12: and does what opening it does: today's values are worked out.
+    from PySide6.QtCore import Qt
+
+    shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE, minimized=True)
+    settled(app, shell)
+
+    assert shell.window.windowStates() & Qt.WindowState.WindowMinimized
+    assert shows(shell.window, "589.31")
+
+
+def test_with_nothing_kept_it_opens_normally_even_at_sign_in(app, tmp_path: Path) -> None:
+    # Spec F12: first launch needs the user.
+    from PySide6.QtCore import Qt
+
+    shell = open_app(tmp_path, provider_with("EQQB.DE"), minimized=True)
+
+    assert not shell.window.windowStates() & Qt.WindowState.WindowMinimized
+    assert shows(shell.window, "Drop your Revolut statement here")
+
+
+def test_opening_the_app_again_shows_the_window_that_is_open(app, tmp_path: Path) -> None:
+    # Spec F12: instead of a second copy, which would write the same settings and spreadsheet.
+    from PySide6.QtCore import Qt
+
+    from statement_tracker.gui.one_window import OneWindow, window_name
+
+    shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE, minimized=True)
+    settled(app, shell)
+    first = OneWindow(window_name(tmp_path / "settings.json"))
+    assert first.claim()
+    first.showWanted.connect(shell.bring_forward)
+    try:
+        assert not OneWindow(window_name(tmp_path / "settings.json")).claim()  # opened again
+
+        wait_until(app, lambda: not shell.window.windowStates() & Qt.WindowState.WindowMinimized)
+        assert shell.window.isVisible()
+    finally:
+        first.release()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="on Windows, what the app listens on goes with it")
+def test_a_copy_that_crashed_does_not_keep_the_app_from_opening(app, tmp_path: Path) -> None:
+    # Spec F12: a copy that did not close properly leaves the file it listened on (in the temporary folder;
+    # here, in the test's own, by giving the whole path).
+    from statement_tracker.gui.one_window import OneWindow
+
+    left = tmp_path / "StatementPortfolioTracker-0123456789ab"
+    left.write_text("", encoding="utf-8")
+    one = OneWindow(str(left))
+    try:
+        assert one.claim()
+        assert not OneWindow(str(left)).claim()  # and the next start finds it
+    finally:
+        one.release()
 
 
 def test_a_copy_kept_without_its_origin_names_no_file(app, tmp_path: Path) -> None:

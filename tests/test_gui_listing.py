@@ -50,6 +50,17 @@ def test_the_dialog_lists_the_listings_and_returns_the_one_chosen(app, tmp_path:
     assert answer == ("EQQB.MI", False) and seen == [True]
 
 
+def test_a_question_asks_for_the_users_attention(app, tmp_path: Path) -> None:
+    # Spec F12: the window may be minimized (opened at sign-in): its taskbar button flashes.
+    shell = open_app(tmp_path, provider_with(), real_dialogs=True)
+    assert shell.attentions == []
+    when_a_dialog_opens(shell, lambda: click(find(shell.window, "Skip this investment")))
+
+    shell.session.ask_listing(ambiguous())
+
+    assert len(shell.attentions) == 1
+
+
 def test_a_typed_symbol_wins(app, tmp_path: Path) -> None:
     # Spec F9.
     def type_one(shell) -> None:

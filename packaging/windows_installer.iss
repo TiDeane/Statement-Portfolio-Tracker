@@ -69,3 +69,19 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// "Open when I sign in" (Settings) adds the app to the user's startup list: a Run value, and a
+// StartupApproved one once it is turned off or on in Startup apps. Both go with the app. The name must
+// match ENTRY_NAME in statement_tracker/login_start.py. Upgrades do not run the uninstaller: they keep it.
+const
+  StartupEntry = 'StatementPortfolioTracker';
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Run', StartupEntry);
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run', StartupEntry);
+  end;
+end;

@@ -39,6 +39,7 @@ from PySide6.QtTest import QTest  # noqa: E402
 from statement_tracker.core.calculator import buys_by_ticker  # noqa: E402
 from statement_tracker.core.parser import load_statement  # noqa: E402
 from statement_tracker.gui.app import AppWindow  # noqa: E402
+from statement_tracker.login_start import LoginStart  # noqa: E402
 from statement_tracker.settings import Settings  # noqa: E402
 
 TODAY = date(2026, 10, 12)
@@ -127,13 +128,17 @@ def open_app(
     spreadsheet: Path | None = None,
     real_dialogs: bool = False,
     ask_listing: Callable | None = None,
+    login_start: LoginStart | None = None,
+    minimized: bool = False,
 ) -> AppWindow:
     """The app as it opens, on its own settings in ``tmp_path``, shown.
 
     ``kept`` is the statement kept from last time; ``spreadsheet`` the one remembered. Unless
     ``real_dialogs``, error messages are collected in ``shell.errors`` instead of shown, and a question
     about a listing is answered by ``ask_listing`` (set before the app starts fetching), else skipped
-    and noted in ``shell.questions``.
+    and noted in ``shell.questions``. ``login_start`` stands in for the system's entry that opens the app at
+    sign-in (by default the one of an app run from the source code, which cannot be turned on); ``minimized``
+    opens it as that entry does.
     """
     _application()  # before the window, so that it is drawn in the tests' font from the start
     settings_path = tmp_path / "settings.json"
@@ -151,8 +156,12 @@ def open_app(
     if not real_dialogs:
         session.show_error = shell.errors.append
         session.ask_listing = ask_listing or (lambda resolution: (shell.questions.append(resolution.ticker), (None, False))[1])
+    shell.attentions = []  # each time the app asked for the user (its taskbar button flashing)
+    session.attention = lambda: shell.attentions.append(True)
+    if login_start is not None:
+        session.login_start = login_start
     (_OPENED[-1] if _OPENED else _UNMANAGED).append(shell)
-    shell.show()
+    shell.show(minimized=minimized)
     settle(QGuiApplication.instance())
     return shell
 

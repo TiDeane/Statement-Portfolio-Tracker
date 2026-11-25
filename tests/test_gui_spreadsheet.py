@@ -530,6 +530,31 @@ def test_a_spreadsheet_open_in_excel_at_launch_says_so(app, tmp_path: Path, monk
     assert shows(shell.window, "Try again", "589.31")  # the values stay shown
 
 
+def test_a_spreadsheet_not_written_by_itself_asks_for_the_user(app, tmp_path: Path, monkeypatch) -> None:
+    # Spec F12: opened minimized at sign-in, its taskbar button flashes.
+    Workbook().save(tmp_path / "mine.xlsx")
+
+    def locked(source, target) -> None:
+        raise PermissionError(13, "being used by another process")
+
+    with monkeypatch.context() as patched:
+        patched.setattr("statement_tracker.core.exporters.excel.replace_file", locked)
+        shell = home_with_spreadsheet(app, tmp_path, auto=True)
+        wait_until(app, lambda: shows(shell.window, "Your spreadsheet wasn't updated"))
+
+    assert len(shell.attentions) == 1
+
+
+def test_a_spreadsheet_written_by_itself_does_not_disturb_the_user(app, tmp_path: Path) -> None:
+    # Spec F12: nothing flashes when all went well.
+    Workbook().save(tmp_path / "mine.xlsx")
+
+    shell = home_with_spreadsheet(app, tmp_path, auto=True)
+    wait_until(app, lambda: shows(shell.window, "Your spreadsheet is up to date"))
+
+    assert shell.attentions == []
+
+
 def test_a_moved_spreadsheet_is_not_created_again_by_itself(app, tmp_path: Path) -> None:
     # Spec F7: only a spreadsheet that is there is written by itself.
     Workbook().save(tmp_path / "mine.xlsx")

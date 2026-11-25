@@ -541,6 +541,7 @@ class Home(QObject):
             self._sheet_result, self._sheet_title = "error", "Your spreadsheet wasn't updated"
             self._sheet_lines, self._sheet_details = [error.what_happened, error.what_to_do], error.details
             self._wrote()
+            self._session.attention()  # written by itself, maybe while the window is minimized
         else:
             self.changed.emit()
             self._session.unexpected(error)

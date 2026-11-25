@@ -31,15 +31,19 @@ def mark_running() -> int | None:
     return ctypes.windll.kernel32.CreateMutexW(None, False, RUNNING_MUTEX) or None
 
 
-def _run_gui() -> int:
+def _run_gui(minimized: bool = False) -> int:
     from PySide6.QtCore import QTimer
 
     from statement_tracker.core.errors import UserFacingError
     from statement_tracker.gui.app import AppWindow, make_application
+    from statement_tracker.gui.one_window import OneWindow, window_name
     from statement_tracker.settings import Settings, default_settings_path
 
-    mark_running()
     app = make_application(sys.argv[:1])
+    one = OneWindow(window_name(default_settings_path()))
+    if not one.claim():
+        return 0  # the app is open already: its window was asked to show itself
+    mark_running()
     damaged: UserFacingError | None = None
     try:
         settings = Settings.load()
@@ -47,7 +51,8 @@ def _run_gui() -> int:
         # Damaged settings must not keep the app from starting: start fresh, and explain once it shows.
         damaged, settings = error, Settings(default_settings_path())
     window = AppWindow(settings)
-    window.show()
+    one.showWanted.connect(window.bring_forward)
+    window.show(minimized=minimized)
     if damaged is not None:
         QTimer.singleShot(0, lambda: window.session.show_error(damaged))
     return app.exec()
@@ -127,11 +132,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--smoke-test", metavar="CSV", type=Path, help="load CSV, write a report and exit")
     parser.add_argument("--smoke-out", metavar="JSON", type=Path, help="where the smoke test writes its report")
     parser.add_argument("--smoke-quote", metavar="SYMBOL", help="also try one price fetch (uses the network)")
+    parser.add_argument("--minimized", action="store_true", help="open minimized, as when opened at sign-in")
     args, _unknown = parser.parse_known_args(argv)
 
     if args.smoke_test is not None:
         return _run_smoke_test(args.smoke_test, args.smoke_out, args.smoke_quote)
-    return _run_gui()
+    return _run_gui(minimized=args.minimized)
 
 
 if __name__ == "__main__":

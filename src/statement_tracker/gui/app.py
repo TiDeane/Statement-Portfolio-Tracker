@@ -7,7 +7,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QUrl
+from PySide6.QtCore import QObject, Qt, QUrl
 from PySide6.QtGui import QGuiApplication, QIcon, QWindow
 from PySide6.QtQml import QQmlApplicationEngine
 
@@ -87,10 +87,26 @@ class AppWindow(QObject):
         self.window: QWindow = roots[0]
         """The window: a QQuickWindow (shown as one wherever PySide's QtQuick module is loaded, as in the tests)."""
         self.window.setIcon(QIcon(str(APP_ICON)))
+        # Until the window is the one in use again; Qt does nothing for the window in use.
+        self.session.attention = lambda: self.window.alert(0)
 
-    def show(self) -> None:
-        self.window.show()
+    def show(self, minimized: bool = False) -> None:
+        """Show the window and start: on Home, fetch today's prices. ``minimized``, as when opened at sign-in:
+        in the taskbar, unless there is nothing to work out yet (first launch needs the user)."""
+        if minimized and self.session.page == "home":
+            self.window.showMinimized()
+        else:
+            self.window.show()
         self.session.start()
+
+    def bring_forward(self) -> None:
+        """The app was opened again: show this window as it was before it was minimized (maximized stays so),
+        in front of the others."""
+        window = self.window
+        window.setWindowStates(window.windowStates() & ~Qt.WindowState.WindowMinimized)
+        window.setVisible(True)
+        window.raise_()
+        window.requestActivate()
 
     def close(self) -> None:
         self.session.stop_run()

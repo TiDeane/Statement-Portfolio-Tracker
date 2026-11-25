@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QAbstractListModel, QByteArray, QModelIndex, QObject, QPersistentModelIndex, Property, Qt, Signal, Slot
 
 from statement_tracker import __version__
+from statement_tracker.core.errors import UserFacingError
 from statement_tracker.core.exporters.excel import MAX_BACKUPS_KEPT
 from statement_tracker.gui.formatting import day_text
 from statement_tracker.gui.texts import PRIVACY_TEXT, RELEASES_URL
@@ -28,6 +29,16 @@ BACKUPS_HELP = (
     "Before the first change each day, a copy of the file is saved beside it. Once there are more than this, "
     "the oldest goes. 0 turns backups off."
 )
+LOGIN_SWITCH = {"windows": "Open when I sign in", "mac": "Open when I log in", "linux": "Open when I log in"}
+LOGIN_HELP = {
+    "windows": "It opens minimized in the taskbar and works out today's values. With Update it by itself on, your "
+    "spreadsheet is updated too. Its button flashes when it needs you.",
+    "mac": "It opens minimized in the Dock and works out today's values. With Update it by itself on, your spreadsheet "
+    "is updated too. Its icon bounces when it needs you.",
+}
+LOGIN_HELP["linux"] = LOGIN_HELP["windows"]
+LOGIN_FAILED = "The app couldn't be set to open by itself."
+LOGIN_FAILED_HELP = "Try again. If it keeps failing, the app can still be opened as usual."
 DISCLAIMER = "Unofficial: not made by or affiliated with Revolut. Not financial advice. Prices come from Yahoo Finance and may be delayed or wrong."
 
 
@@ -164,6 +175,18 @@ class SettingsPage(QObject):
     maxBackups = Property(int, lambda self: MAX_BACKUPS_KEPT, constant=True)
     backupsHelp = Property(str, lambda self: BACKUPS_HELP, constant=True)
     appearance = Property(str, lambda self: self._settings.appearance, notify=changed)
+
+    def _login_on(self) -> bool:
+        try:
+            return self._session.login_start.is_on()
+        except OSError:
+            return False
+
+    loginStartOn = Property(bool, _login_on, notify=changed)
+    canStartAtLogin = Property(bool, lambda self: self._session.login_start.unavailable == "", notify=changed)
+    loginStartLabel = Property(str, lambda self: LOGIN_SWITCH[self._session.login_start.system], notify=changed)
+    loginStartHelp = Property(str, lambda self: LOGIN_HELP[self._session.login_start.system], notify=changed)
+    loginStartNote = Property(str, lambda self: self._session.login_start.unavailable, notify=changed)
     version = Property(str, lambda self: f"Version {__version__}", constant=True)
     releasesUrl = Property(str, lambda self: RELEASES_URL, constant=True)
     privacyText = Property(str, lambda self: PRIVACY_TEXT, constant=True)
@@ -246,6 +269,22 @@ class SettingsPage(QObject):
         self._settings.auto_update = bool(on)
         self._session.save_settings()
         self._session.settingsChanged.emit()
+
+    @Slot()
+    def recheck(self) -> None:
+        """The window is active again: a file or the sign-in entry may have been changed elsewhere meanwhile."""
+        self.changed.emit()
+
+    @Slot(bool)
+    def setLoginStart(self, on: bool) -> None:
+        """Open the app when the user signs in, or not: the system's own entry, changed at once (not part of
+        Ctrl+Z). One that cannot be changed is explained, and the switch shows what is."""
+        entry = self._session.login_start
+        try:
+            entry.turn_on() if on else entry.turn_off()
+        except OSError as error:
+            self._session.show_error(UserFacingError(LOGIN_FAILED, LOGIN_FAILED_HELP, f"{type(error).__name__}: {error}"))
+        self.changed.emit()
 
     @Slot(int)
     def setBackupsKept(self, count: int) -> None:

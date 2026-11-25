@@ -121,7 +121,7 @@ jobs:
             --report "dist\build-report-${{ matrix.label }}.md"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Uninstall and check that the app's saved data goes too (Windows)
+      - name: Uninstall and check that the app's saved data and startup entry go too (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -131,6 +131,12 @@ jobs:
           New-Item -ItemType Directory -Force $saved | Out-Null
           Set-Content (Join-Path $saved 'settings.json') '{}'
           Set-Content (Join-Path $saved 'last_prices.json') '{}'
+          # What "Open when I sign in" writes (statement_tracker/login_start.py), turned off once in Startup apps.
+          $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+          $approved = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
+          if (-not (Test-Path $approved)) { New-Item $approved | Out-Null }  # -Force would empty one that is there
+          New-ItemProperty -Force -Path $run -Name StatementPortfolioTracker -Value "`"$target\StatementPortfolioTracker.exe`" --minimized" | Out-Null
+          New-ItemProperty -Force -Path $approved -Name StatementPortfolioTracker -PropertyType Binary -Value ([byte[]](3,0,0,0,0,0,0,0,0,0,0,0)) | Out-Null
           Start-Process (Join-Path $target 'unins000.exe') -Wait -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
           # The uninstaller hands over to a copy of itself and returns early: wait for it to finish.
           for ($second = 0; $second -lt 120 -and ((Test-Path $saved) -or (Test-Path "$target\_internal")); $second++) {
@@ -138,6 +144,11 @@ jobs:
           }
           if (Test-Path "$target\_internal") { throw "The uninstaller left the app's files in $target" }
           if (Test-Path $saved) { throw "The uninstaller left the app's saved data in $saved" }
+          foreach ($key in $run, $approved) {
+            if ($null -ne (Get-ItemProperty -Path $key -Name StatementPortfolioTracker -ErrorAction SilentlyContinue)) {
+              throw "The uninstaller left the app's startup entry in $key"
+            }
+          }
 
       # ------------------------------------------------------------------ macOS
       - name: Build macOS disk image

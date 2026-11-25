@@ -1,6 +1,6 @@
 # Releasing
 
-The automated tests work out the spreadsheet's formulas with a small imitation of Excel, and never open Excel itself. These checks, about ten minutes in real Excel on Windows, cover what only Excel can show. Do them on the pre-release build (a `-rc` tag), installed over the current version.
+The automated tests work out the spreadsheet's formulas with a small imitation of Excel, and never open Excel itself. These checks, about fifteen minutes in real Excel on Windows, cover what only Excel and Windows can show. Do them on the pre-release build (a `-rc` tag), installed over the current version.
 
 ## 1. The installed app
 
@@ -27,6 +27,17 @@ In a scratch folder, not your real spreadsheet:
 On a **copy** of your real spreadsheet:
 
 - [ ] On Home, choose it with **Use another...** > **Use an existing spreadsheet...**, and press **Update my spreadsheet**. Your own sheets, tables and charts look as before, and charts that read the app's sheets show today's figures.
+
+## 5. Opening when you sign in
+
+The uninstaller's removal of the startup entry is checked by the release build; these need a real sign-in.
+
+- [ ] In **Settings**, turn on **Open when I sign in**, and **Update it by itself** with the scratch spreadsheet of section 2. Windows' **Settings > Apps > Startup** lists the app, turned on.
+- [ ] Sign out and in again. The app opens minimized in the taskbar, without a window popping up, and once you open it the spreadsheet card says it was updated at that time.
+- [ ] With it open, start it again from the Start menu: the window that is open comes to the front, and no second one opens.
+- [ ] Open the scratch spreadsheet in Excel. In the app, press **Refresh prices** and at once click Excel's window: once the prices are in, the app's taskbar button flashes, and the card says the spreadsheet wasn't updated.
+- [ ] Turn the app off in **Settings > Apps > Startup**: back in the app's Settings, the switch is off. Turn the switch on again: Startup apps shows it on.
+- [ ] Put the switches and your spreadsheet back as you had them.
 
 ## How to release
 

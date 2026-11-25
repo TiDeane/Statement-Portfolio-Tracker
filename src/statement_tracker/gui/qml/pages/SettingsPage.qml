@@ -13,9 +13,11 @@ Item {
     readonly property real frameWidth: Math.min(width - 48, 992)
     readonly property real frameX: (width - frameWidth) / 2
     readonly property bool withMenu: width > 760
-    readonly property var chapterCards: [investmentsCard, statementCard, sheetCard, appearanceCard, aboutCard]
-    readonly property var chapterNames: ["Your investments", "Your statement", "Your spreadsheet", "Appearance", "About and privacy"]
-    readonly property var chapterIcons: ["trend", "file", "sheet", "contrast", "info"]
+    readonly property var chapterCards: [investmentsCard, statementCard, sheetCard, openingCard, appearanceCard, aboutCard]
+    readonly property var chapterNames: [
+        "Your investments", "Your statement", "Your spreadsheet", "Opening the app", "Appearance", "About and privacy"
+    ]
+    readonly property var chapterIcons: ["trend", "file", "sheet", "power", "contrast", "info"]
 
     property int chosenChapter: -1  // clicked in the menu: marked until the page is scrolled by hand
     readonly property int currentChapter: {
@@ -459,6 +461,36 @@ Item {
                                 Layout.fillWidth: true
                             }
                             Muted { text: "As soon as today's prices are in: when the app opens, after Refresh prices and with a new statement." }
+                        }
+                    }
+
+                    Card {  // opening when the user signs in (Spec F12)
+                        id: openingCard
+                        spacing: 14
+                        Layout.fillWidth: true
+                        SectionTitle { text: "Opening the app" }
+                        ColumnLayout {
+                            spacing: 2
+                            Layout.fillWidth: true
+                            AppSwitch {
+                                text: page.settings.loginStartLabel
+                                checked: page.settings.loginStartOn
+                                enabled: page.settings.canStartAtLogin
+                                padding: 0
+                                // What the system's entry is, whatever the click did: one that could not be
+                                // written leaves it as it was.
+                                onToggled: {
+                                    page.settings.setLoginStart(checked)
+                                    checked = Qt.binding(() => page.settings.loginStartOn)
+                                }
+                                Layout.fillWidth: true
+                            }
+                            Muted { text: page.settings.loginStartHelp }
+                            Muted {
+                                visible: text !== ""
+                                text: page.settings.loginStartNote
+                                color: Theme.warnInk
+                            }
                         }
                     }
 

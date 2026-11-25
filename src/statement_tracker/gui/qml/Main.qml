@@ -32,7 +32,12 @@ ApplicationWindow {
     palette.placeholderText: Theme.muted
     palette.toolTipBase: Theme.surface
     palette.toolTipText: Theme.text
-    onActiveChanged: if (active) session.home.recheck()  // back from moving or deleting files elsewhere
+    onActiveChanged: {
+        if (active) {  // back from moving or deleting files, or changing the startup apps, elsewhere
+            session.home.recheck()
+            session.settingsPage.recheck()
+        }
+    }
     onClosing: {
         session.stopRun()  // closing stops a fetch: nothing of it is saved
         dialogs.cancel()

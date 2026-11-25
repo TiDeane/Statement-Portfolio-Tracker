@@ -159,6 +159,7 @@ A test names the rule it checks, for example `# Spec H3`. When a behaviour chang
   - One dialog at a time: a question or a message wanted while another dialog is open waits for it to close, and is never lost.
   - Light and dark follow the system and switch while the app is open, unless Settings says otherwise (G1); the green buttons are #107C41 in light and #33C481 in dark. Everything in the window, tick boxes, menus and scroll bars included, takes the app's colours, never the computer's: the app can be light on a computer in dark mode. So do the window's title bar and frame (drawn by Qt on Linux, by the system on Windows).
   - The window shows the app's icon.
+  - Changing page (first launch, Home, Settings) is not a cut: the new page fades in as it rises a little (8 px, about 180 ms) while the one left fades out. Settings opens over Home, which stays as it was under it; first launch replaces everything. A change asked for while another is under way ends on the page asked for last.
   - Numbers follow the computer's locale, and the currency is the statement's, never assumed. Dates are written in figures in the computer's order with a four-digit year (14/11/2026 in Portugal, 11/14/2026 in the United States), never with month or day names, which would be in the computer's language among English words.
   - The Windows program, its installer and the macOS app show the same icon as the window.
 - **F12.** Opening when the user signs in, with **Open when I sign in** (Windows; **Open when I log in** on macOS and Linux) on in Settings (G1):

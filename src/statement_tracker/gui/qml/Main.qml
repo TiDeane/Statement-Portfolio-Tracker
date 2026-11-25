@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import "dialogs"
+import "pages"
 
 // The window: one page at a time (first launch, Home or Settings), files dropped anywhere on it,
 // and the dialogs the session opens.
@@ -38,7 +39,6 @@ ApplicationWindow {
         dialogs.cancel()
     }
 
-    readonly property var pages: ({ "welcome": "WelcomePage", "home": "HomePage", "settings": "SettingsPage" })
     readonly property bool dragging: dropArea.containsDrag
     property var dragKinds: []  // what the files dragged over the window would be used as: "statement", "spreadsheet"
 
@@ -47,9 +47,57 @@ ApplicationWindow {
         session.dropFiles(Array.from(urls, (url) => url.toString()))
     }
 
-    Loader {
+    // The page shown (Spec F11). Settings goes over Home, which stays as it was under it; first launch replaces
+    // everything. The new page fades in as it rises a little, the one left fades out.
+    StackView {
+        id: pageStack
+        objectName: "pages"
         anchors.fill: parent
-        source: "pages/" + root.pages[session.page] + ".qml"
+
+        readonly property var pageComponents: ({ "welcome": welcomePage, "home": homePage, "settings": settingsPage })
+
+        function show(name) {
+            if (currentItem && currentItem.objectName === "page-" + name)
+                return
+            if (depth > 1 && get(depth - 2).objectName === "page-" + name)
+                pop()
+            else if (name === "settings")
+                push(pageComponents[name])
+            else
+                replace(null, pageComponents[name])  // the whole stack
+        }
+
+        initialItem: pageComponents[session.page]
+        Connections {
+            target: session
+            function onPageChanged() { pageStack.show(session.page) }
+        }
+
+        component Arrive: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
+            NumberAnimation { property: "y"; from: 8; to: 0; duration: 180; easing.type: Easing.OutCubic }
+        }
+        component Leave: Transition {
+            NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 120; easing.type: Easing.OutCubic }
+        }
+        pushEnter: Arrive {}
+        pushExit: Leave {}
+        popEnter: Arrive {}
+        popExit: Leave {}
+        replaceEnter: Arrive {}
+        replaceExit: Leave {}
+    }
+    Component {
+        id: welcomePage
+        WelcomePage { objectName: "page-welcome" }
+    }
+    Component {
+        id: homePage
+        HomePage { objectName: "page-home" }
+    }
+    Component {
+        id: settingsPage
+        SettingsPage { objectName: "page-settings" }
     }
 
     DropArea {

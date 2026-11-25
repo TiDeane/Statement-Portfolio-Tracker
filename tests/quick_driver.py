@@ -173,11 +173,24 @@ def opening_app() -> AppWindow:
 
 def settle(app) -> None:
     """Let work queued for "once the current event is handled" run, and Qt Quick lay out what changed
-    (it does so on its next frame, a few milliseconds later)."""
+    (it does so on its next frame, a few milliseconds later). A page change under way is let finish: until
+    then, both pages are shown."""
     for _ in range(6):
         app.processEvents()
         time.sleep(0.005)
     app.processEvents()
+    deadline = time.monotonic() + 5
+    while _pages_changing() and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(0.01)
+
+
+def _pages_changing() -> bool:
+    for window in QGuiApplication.topLevelWindows():
+        if isinstance(window, QQuickWindow):
+            if any(item.objectName() == "pages" and item.property("busy") for item in _items(window)):
+                return True
+    return False
 
 
 def wait_until(app, condition: Callable[[], bool], seconds: float = 20) -> None:

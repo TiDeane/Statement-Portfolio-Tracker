@@ -426,6 +426,47 @@ def current_chapter(window) -> str:
     return next(name for name, item in chapters(window).items() if item.property("current"))
 
 
+def test_a_page_change_fades_the_new_page_in(app, tmp_path: Path) -> None:
+    # Spec F11: the new page fades in as it rises a little; the one left goes.
+    import time
+
+    from PySide6.QtTest import QTest
+    from quick_driver import _centre, _items
+
+    shell = home(app, tmp_path)
+
+    QTest.mouseClick(shell.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _centre(find(shell.window, "Settings")))
+    seen = []  # how the Settings page is shown, frame after frame, until it is fully there
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and (not seen or seen[-1] != (1, 0)):
+        app.processEvents()
+        page = next((item for item in _items(shell.window) if item.objectName() == "page-settings"), None)
+        if page is not None:
+            seen.append((page.opacity(), page.y()))
+        time.sleep(0.005)
+
+    assert any(0 < opacity < 1 and y > 0 for opacity, y in seen)  # on its way in, rising
+    assert seen[-1] == (1, 0)
+    settle(app)
+    assert not shows(shell.window, "Double-click a name to rename it.")  # Home's list went
+
+
+def test_page_changes_asked_for_quickly_end_on_the_last(app, tmp_path: Path) -> None:
+    # Spec F11: a change asked for while another is under way.
+    from quick_driver import _items
+
+    shell = home(app, tmp_path)
+
+    shell.session.goTo("settings")
+    shell.session.goTo("home")
+    settle(app)
+
+    assert shows(shell.window, "Refresh prices")
+    assert not shows(shell.window, "Opening the app")
+    stack = next(item for item in _items(shell.window) if item.objectName() == "pages")
+    assert stack.property("depth") == 1
+
+
 def test_the_chapters_stay_in_place_mark_the_one_being_read_and_scroll_to_theirs(app, tmp_path: Path) -> None:
     # Spec G1.
     from PySide6.QtCore import QPointF

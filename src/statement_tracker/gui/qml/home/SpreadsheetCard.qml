@@ -11,7 +11,8 @@ Card {
     padding: 20
     spacing: 16
 
-    // With a spreadsheet: its name and folder, when it last changed, and the update (mockup: Cards-A-Menu).
+    // With a spreadsheet: its name, its folder and when it last changed on one line, and the update
+    // (mockup: Space-Joined).
     RowLayout {
         visible: card.home.hasSpreadsheet
         spacing: 16
@@ -48,7 +49,7 @@ Card {
                 Layout.topMargin: 4
             }
             Text {
-                text: card.home.sheetFolder
+                text: card.home.sheetPlace
                 color: Theme.muted
                 font.pixelSize: 13
                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere  // the whole path, however long
@@ -61,15 +62,6 @@ Card {
                 font.pixelSize: 13
                 wrapMode: Text.Wrap
                 Layout.fillWidth: true
-            }
-            Text {
-                visible: text !== ""
-                text: card.home.sheetLine
-                color: Theme.muted
-                font.pixelSize: 13
-                wrapMode: Text.Wrap
-                Layout.fillWidth: true
-                Layout.topMargin: 4
             }
         }
     }
@@ -110,6 +102,42 @@ Card {
             enabled: !card.home.writing
             onClicked: card.home.openFolder()
         }
+        // Another spreadsheet: one the user has, or a new one; or one dropped on the window (Spec F7).
+        TextButton {
+            id: another
+            text: "Use another…"
+            iconName: "swap"
+            opensMenu: true
+            implicitHeight: 44
+            enabled: !card.home.writing
+            onClicked: anotherMenu.popup(another, another.width - anotherMenu.width, another.height + 4)
+
+            // Each asks for a file once the menu has closed: the file chooser waits for its answer, and the
+            // menu would stay open behind it.
+            AppMenu {
+                id: anotherMenu
+                AppMenuItem {
+                    text: "Use an existing spreadsheet…"
+                    iconName: "folder"
+                    onTriggered: Qt.callLater(card.home.chooseSpreadsheet)
+                }
+                AppMenuItem {
+                    text: "Create a new one…"
+                    iconName: "plusFile"
+                    onTriggered: Qt.callLater(card.home.createSpreadsheet)
+                }
+                AppMenuSeparator {}
+                Text {
+                    text: "Or drop an Excel file on this window."
+                    color: Theme.muted
+                    font.pixelSize: 12
+                    leftPadding: 12
+                    rightPadding: 12
+                    topPadding: 2
+                    bottomPadding: 4
+                }
+            }
+        }
     }
 
     Text {
@@ -132,54 +160,6 @@ Card {
             text: "Copy details"
             iconName: "copy"
             onClicked: card.home.copyDetails()
-        }
-    }
-
-    // Another spreadsheet: one the user has, or a new one; or one dropped on the window (Spec F7).
-    Rectangle {
-        visible: card.home.hasSpreadsheet
-        color: Theme.border
-        implicitHeight: 1
-        Layout.fillWidth: true
-        Layout.topMargin: -4
-    }
-    Flow {
-        visible: card.home.hasSpreadsheet
-        spacing: 10
-        Layout.fillWidth: true
-        Layout.topMargin: -8
-        Layout.leftMargin: -10  // the button's text lines up with the card's other texts
-        TextButton {
-            id: another
-            text: "Use another spreadsheet…"
-            iconName: "swap"
-            opensMenu: true
-            implicitHeight: 32
-            enabled: !card.home.writing
-            onClicked: anotherMenu.popup(another, 0, another.height + 4)
-
-            // Each asks for a file once the menu has closed: the file chooser waits for its answer, and the
-            // menu would stay open behind it.
-            AppMenu {
-                id: anotherMenu
-                AppMenuItem {
-                    text: "Choose a spreadsheet I have…"
-                    iconName: "folder"
-                    onTriggered: Qt.callLater(card.home.chooseSpreadsheet)
-                }
-                AppMenuItem {
-                    text: "Create a new one…"
-                    iconName: "plusFile"
-                    onTriggered: Qt.callLater(card.home.createSpreadsheet)
-                }
-            }
-        }
-        Text {
-            height: 32
-            verticalAlignment: Text.AlignVCenter
-            text: "or drop one on this window"
-            color: Theme.muted
-            font.pixelSize: 13
         }
     }
 

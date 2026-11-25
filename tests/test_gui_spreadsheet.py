@@ -15,6 +15,7 @@ from quick_driver import (  # noqa: F401
     drag_over,
     drop,
     find,
+    find_starting,
     item_named,
     leave_and_come_back,
     open_app,
@@ -29,7 +30,7 @@ from statement_tracker.settings import Settings
 
 SHEETS = ["Current Holdings", "Portfolio History"]
 SHEET_GONE = (
-    "This file has been moved or deleted since. If you moved it, choose it where it is now with Use another spreadsheet. "
+    "This file has been moved or deleted since. If you moved it, choose it where it is now from Use another… below. "
     "Updating creates a new one here."
 )
 
@@ -67,12 +68,27 @@ def test_update_writes_the_values_shown_and_says_what_it_did(app, tmp_path: Path
 
 
 def test_the_card_names_the_spreadsheet_and_its_folder(app, tmp_path: Path) -> None:
-    # Spec F7: like the statement card, with the way to another spreadsheet under the buttons.
+    # Spec F7: like the statement card, its folder and when it changed on one line; the way to another
+    # spreadsheet beside the buttons, and in its menu, that one can be dropped.
     Workbook().save(tmp_path / "mine.xlsx")
     shell = home_with_spreadsheet(app, tmp_path)
 
-    assert shows(shell.window, "Your spreadsheet", "mine.xlsx", f"In {tmp_path}", "Last changed")
-    assert shows(shell.window, "Use another spreadsheet…", "or drop one on this window")
+    assert shows(shell.window, "Your spreadsheet", "mine.xlsx")
+    assert find_starting(shell.window, f"In {tmp_path} · Last changed")
+    assert not shows(shell.window, "or drop one on this window")
+
+    click(find(shell.window, "Use another…"))
+
+    assert shows(shell.window, "Use an existing spreadsheet…", "Create a new one…", "Or drop an Excel file on this window.")
+
+
+def test_after_an_update_the_folder_and_the_time_share_a_line(app, tmp_path: Path) -> None:
+    # Spec F7: no line of its own for when it was updated, so the card is no taller than it needs to be.
+    shell = home_with_spreadsheet(app, tmp_path)
+
+    update(shell)
+
+    assert find_starting(shell.window, f"In {tmp_path} · Updated today at")
 
 
 def test_another_spreadsheet_can_be_chosen_from_home(app, tmp_path: Path) -> None:
@@ -81,8 +97,8 @@ def test_another_spreadsheet_can_be_chosen_from_home(app, tmp_path: Path) -> Non
     Workbook().save(tmp_path / "other.xlsx")
     shell.session.ask_open_file = lambda title, filters, start: tmp_path / "other.xlsx"
 
-    click(find(shell.window, "Use another spreadsheet…"))
-    click(find(shell.window, "Choose a spreadsheet I have…"))
+    click(find(shell.window, "Use another…"))
+    click(find(shell.window, "Use an existing spreadsheet…"))
 
     assert Settings.load(tmp_path / "settings.json").spreadsheet_path == tmp_path / "other.xlsx"
     assert shows(shell.window, "other.xlsx", "Last changed")
@@ -99,9 +115,9 @@ def test_the_menu_closes_before_the_file_chooser_opens(app, tmp_path: Path) -> N
         menu_shown.append(shows(shell.window, "Create a new one…"))
         shell.session.dialogs.cancel()
 
-    click(find(shell.window, "Use another spreadsheet…"))
+    click(find(shell.window, "Use another…"))
     when_a_dialog_opens(shell, look_and_cancel)
-    click(find(shell.window, "Choose a spreadsheet I have…"))
+    click(find(shell.window, "Use an existing spreadsheet…"))
 
     assert menu_shown == [False]
 
@@ -111,7 +127,7 @@ def test_a_new_spreadsheet_can_be_created_from_home(app, tmp_path: Path) -> None
     shell = home_with_spreadsheet(app, tmp_path)
     shell.session.ask_save_file = lambda title, start: tmp_path / "fresh"
 
-    click(find(shell.window, "Use another spreadsheet…"))
+    click(find(shell.window, "Use another…"))
     click(find(shell.window, "Create a new one…"))
 
     wait_until(app, lambda: shows(shell.window, "Your spreadsheet was created"))
@@ -210,7 +226,7 @@ def test_one_created_again_where_one_was_deleted_waits_for_the_prices(app, tmp_p
     wait_until(app, lambda: shell.session.home.property("busy"))
     shell.session.ask_save_file = lambda title, start: tmp_path / "mine.xlsx"
 
-    click(find(shell.window, "Use another spreadsheet…"), wait=False)
+    click(find(shell.window, "Use another…"), wait=False)
     click(find(shell.window, "Create a new one…"), wait=False)
 
     assert shows(shell.window, "It will be created as soon as today's prices are in.")
@@ -347,11 +363,11 @@ def test_updating_the_spreadsheet_does_not_freeze_the_window(app, tmp_path: Path
     assert time.monotonic() - started < 2  # the window answered at once
     assert shows(shell.window, "Updating your spreadsheet…")
     assert not find(shell.window, "Settings").isEnabled()
-    assert not find(shell.window, "Use another spreadsheet…").isEnabled()
+    assert not find(shell.window, "Use another…").isEnabled()
     let_go.set()
     wait_until(app, lambda: shows(shell.window, "Your spreadsheet was created"))
     assert find(shell.window, "Settings").isEnabled()
-    assert find(shell.window, "Use another spreadsheet…").isEnabled()
+    assert find(shell.window, "Use another…").isEnabled()
 
 
 def empty_space_in_the_cards(shell) -> list[float]:
@@ -538,7 +554,7 @@ def test_a_new_spreadsheet_and_the_switch_write_once(app, tmp_path: Path, monkey
     wait_until(app, lambda: shell.session.home.property("busy"))
     shell.session.ask_save_file = lambda title, start: tmp_path / "fresh"
 
-    click(find(shell.window, "Use another spreadsheet…"), wait=False)
+    click(find(shell.window, "Use another…"), wait=False)
     click(find(shell.window, "Create a new one…"), wait=False)
     let_go.set()
 

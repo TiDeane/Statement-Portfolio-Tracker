@@ -89,7 +89,7 @@ def listed(names: list[str]) -> str:
 
 STATEMENT_GONE = "This file has been moved or deleted since. The app uses the copy it kept."
 SHEET_GONE = (
-    "This file has been moved or deleted since. If you moved it, choose it where it is now with Use another spreadsheet. "
+    "This file has been moved or deleted since. If you moved it, choose it where it is now from Use another… below. "
     "Updating creates a new one here."
 )
 
@@ -412,8 +412,16 @@ class Home(QObject):
 
     dropSheetLine = Property(str, _get_drop_sheet_line, notify=changed)
     sheetName = Property(str, lambda self: self._sheet().name if self._sheet() else "", notify=changed)
-    sheetFolder = Property(str, lambda self: f"In {self._sheet().absolute().parent}" if self._sheet() else "", notify=changed)
-    sheetLine = Property(str, _get_sheet_line, notify=changed)
+
+    def _get_sheet_place(self) -> str:
+        """Its folder and, on the same line, when it last changed or what is happening to it."""
+        sheet = self._sheet()
+        if sheet is None:
+            return ""
+        line = self._get_sheet_line()
+        return f"In {sheet.absolute().parent} · {line}" if line else f"In {sheet.absolute().parent}"
+
+    sheetPlace = Property(str, _get_sheet_place, notify=changed)
     sheetButton = Property(str, lambda self: "Try again" if self._sheet_result == "error" else "Update my spreadsheet", notify=changed)
     canUpdate = Property(
         bool, lambda self: not self._session.busy and self._writing is None and self._session.report is not None, notify=changed

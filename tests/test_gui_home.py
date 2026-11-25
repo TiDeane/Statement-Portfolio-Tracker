@@ -369,18 +369,23 @@ def test_opening_the_app_again_shows_the_window_that_is_open(app, tmp_path: Path
 
 @pytest.mark.skipif(sys.platform == "win32", reason="on Windows, what the app listens on goes with it")
 def test_a_copy_that_crashed_does_not_keep_the_app_from_opening(app, tmp_path: Path) -> None:
-    # Spec F12: a copy that did not close properly leaves the file it listened on (in the temporary folder;
-    # here, in the test's own, by giving the whole path).
-    from statement_tracker.gui.one_window import OneWindow
+    # Spec F12: a copy that did not close properly leaves the file it listened on, in the computer's temporary
+    # folder, where the app's always is (a test's own folder can be too deep: a socket's whole path must stay
+    # under about 100 characters on a Mac).
+    from PySide6.QtCore import QDir
 
-    left = tmp_path / "StatementPortfolioTracker-0123456789ab"
+    from statement_tracker.gui.one_window import OneWindow, window_name
+
+    name = window_name(tmp_path / "settings.json")  # this test's own
+    left = Path(QDir.tempPath(), name)
     left.write_text("", encoding="utf-8")
-    one = OneWindow(str(left))
+    one = OneWindow(name)
     try:
         assert one.claim()
-        assert not OneWindow(str(left)).claim()  # and the next start finds it
+        assert not OneWindow(name).claim()  # and the next start finds it
     finally:
         one.release()
+        left.unlink(missing_ok=True)
 
 
 def test_a_copy_kept_without_its_origin_names_no_file(app, tmp_path: Path) -> None:

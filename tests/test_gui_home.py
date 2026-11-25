@@ -309,6 +309,25 @@ def test_home_looks_again_when_the_window_comes_back(app, tmp_path: Path) -> Non
     assert shows(again.window, "newer.csv", "This file has been moved or deleted since. The app uses the copy it kept.")
 
 
+def test_refresh_uses_the_copy_once_a_dropped_statement_is_deleted(app, tmp_path: Path) -> None:
+    # Spec F6, F1: the download dropped this session is cleared away; the app kept a copy of it.
+    shell = open_app(tmp_path, provider_with("EQQB.DE"), kept=SAMPLE)
+    settled(app, shell)
+    newer = newer_statement(tmp_path)
+    drop(shell.window, newer)
+    settled(app, shell)
+
+    newer.unlink()
+    leave_and_come_back(shell)
+    assert shows(shell.window, "newer.csv", "This file has been moved or deleted since. The app uses the copy it kept.")
+
+    click(find(shell.window, "Refresh prices"))
+    settled(app, shell)
+
+    assert shell.errors == []
+    assert shows(shell.window, "629.31")
+
+
 def test_a_copy_kept_without_its_origin_names_no_file(app, tmp_path: Path) -> None:
     # Spec F6: kept by an earlier version, which did not record where the statement came from. The app's
     # own copy, in its own folder, would tell the user nothing.

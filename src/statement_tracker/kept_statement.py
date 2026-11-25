@@ -35,6 +35,10 @@ class KeptStatement:
     source: Path | None = None
     """The file it was copied from, or None if that was not recorded (a copy kept by an earlier version)."""
 
+    def is_copy_of(self, statement: Path) -> bool:
+        """True if this is the copy of ``statement``: the statement was read from there."""
+        return self.source is not None and self.source.resolve() == statement.resolve()
+
 
 def kept_statement_path(settings_path: Path) -> Path:
     """Where the statement is kept for the settings file at ``settings_path``."""

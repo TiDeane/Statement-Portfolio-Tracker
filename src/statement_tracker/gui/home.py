@@ -98,8 +98,9 @@ def statement_place(statement: Path | None, kept: KeptStatement | None, settings
     """Which statement file the values come from: its name, "In <folder>", and a note (or "").
 
     For the copy kept from last time, that is the file it was copied from, with a note if that file is no
-    longer there. Empty without a statement, or for a copy whose origin was not recorded: the app's own
-    copy, in its own folder, would tell the user nothing.
+    longer there; the same for a statement chosen this session once it is gone, if the copy is of it.
+    Empty without a statement, or for a copy whose origin was not recorded: the app's own copy, in its own
+    folder, would tell the user nothing.
     """
     if statement is None:
         return "", "", ""
@@ -107,7 +108,8 @@ def statement_place(statement: Path | None, kept: KeptStatement | None, settings
         if kept.source is None:
             return "", "", ""
         return kept.source.name, f"In {kept.source.parent}", "" if kept.source.exists() else STATEMENT_GONE
-    return statement.name, f"In {statement.resolve().parent}", ""
+    gone = not statement.exists() and kept is not None and kept.is_copy_of(statement)
+    return statement.name, f"In {statement.resolve().parent}", STATEMENT_GONE if gone else ""
 
 
 def result_lines(report: Report, exported: ExportResult) -> list[str]:

@@ -240,9 +240,14 @@ class Session(QObject):
     busy = Property(bool, _get_busy, notify=busyChanged)
 
     def refresh(self) -> None:
-        """Fetch today's prices for the statement, again if they were fetched before."""
-        if self.statement is not None:
-            self.start_run(self.statement)
+        """Fetch today's prices for the statement, again if they were fetched before. A statement chosen this
+        session that has been moved or deleted since is read from the copy the app kept of it."""
+        statement = self.statement
+        if statement is None:
+            return
+        if not statement.exists() and self.kept is not None and self.kept.is_copy_of(statement):
+            statement = self.kept.path
+        self.start_run(statement)
 
     def use_statement(self, statement: Path) -> None:
         """A newer statement, chosen or dropped on Home: fetch its prices; it becomes the one shown and

@@ -98,8 +98,14 @@ def test_a_rename_before_any_update_leaves_the_spreadsheet_alone(app, tmp_path: 
     assert not sheet.exists()
 
 
-def test_a_rename_after_an_update_is_written_at_once(app, tmp_path: Path) -> None:
-    # Spec F10.
+def test_a_rename_after_an_update_is_written_at_once(app, tmp_path: Path, monkeypatch) -> None:
+    # Spec F10. Writing takes a while, as on a slow computer: the name is written once it is done.
+    import time
+
+    import statement_tracker.gui.home as home_module
+
+    real = home_module.update_spreadsheet
+    monkeypatch.setattr(home_module, "update_spreadsheet", lambda *args, **kwargs: time.sleep(0.3) or real(*args, **kwargs))
     sheet = tmp_path / "mine.xlsx"
     shell = home(app, tmp_path, spreadsheet=sheet)
     click(find(shell.window, "Update my spreadsheet"))

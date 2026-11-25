@@ -425,9 +425,13 @@ def double_click(item: QQuickItem) -> None:
     settle(QGuiApplication.instance())
 
 
-def press(window: QQuickWindow, key: Qt.Key, modifiers=Qt.KeyboardModifier.NoModifier) -> None:
+def press(window: QQuickWindow, key: Qt.Key, modifiers=Qt.KeyboardModifier.NoModifier, wait: bool = True) -> None:
+    """Press ``key``; unless ``wait`` is False, wait for what it started in the background, as ``click`` does
+    (Enter saving a new name writes the spreadsheet, say)."""
     QTest.keyClick(window, key, modifiers)
     settle(QGuiApplication.instance())
+    if wait:
+        _finish_quick_work(window)
 
 
 def type_text(window: QQuickWindow, text: str) -> None:

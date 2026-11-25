@@ -1,6 +1,6 @@
 """Statement Portfolio Tracker: unofficial portfolio tracker for Revolut stock statements."""
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 APP_NAME = "Statement Portfolio Tracker"
 BUNDLE_ID = "io.github.tideane.statementportfoliotracker"
